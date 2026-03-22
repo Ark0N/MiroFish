@@ -2008,38 +2008,41 @@ def get_simulation_posts(simulation_id: str):
             })
         
         import sqlite3
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
+        conn = None
         try:
-            cursor.execute("""
-                SELECT * FROM post 
-                ORDER BY created_at DESC 
-                LIMIT ? OFFSET ?
-            """, (limit, offset))
-            
-            posts = [dict(row) for row in cursor.fetchall()]
-            
-            cursor.execute("SELECT COUNT(*) FROM post")
-            total = cursor.fetchone()[0]
-            
-        except sqlite3.OperationalError:
-            posts = []
-            total = 0
-        
-        conn.close()
-        
-        return jsonify({
-            "success": True,
-            "data": {
-                "platform": platform,
-                "total": total,
-                "count": len(posts),
-                "posts": posts
-            }
-        })
-        
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            try:
+                cursor.execute("""
+                    SELECT * FROM post
+                    ORDER BY created_at DESC
+                    LIMIT ? OFFSET ?
+                """, (limit, offset))
+
+                posts = [dict(row) for row in cursor.fetchall()]
+
+                cursor.execute("SELECT COUNT(*) FROM post")
+                total = cursor.fetchone()[0]
+
+            except sqlite3.OperationalError:
+                posts = []
+                total = 0
+
+            return jsonify({
+                "success": True,
+                "data": {
+                    "platform": platform,
+                    "total": total,
+                    "count": len(posts),
+                    "posts": posts
+                }
+            })
+        finally:
+            if conn is not None:
+                conn.close()
+
     except Exception as e:
         logger.error(f"获取帖子失败: {str(e)}")
         return jsonify({
@@ -2080,40 +2083,43 @@ def get_simulation_comments(simulation_id: str):
             })
         
         import sqlite3
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
+        conn = None
         try:
-            if post_id:
-                cursor.execute("""
-                    SELECT * FROM comment 
-                    WHERE post_id = ?
-                    ORDER BY created_at DESC 
-                    LIMIT ? OFFSET ?
-                """, (post_id, limit, offset))
-            else:
-                cursor.execute("""
-                    SELECT * FROM comment 
-                    ORDER BY created_at DESC 
-                    LIMIT ? OFFSET ?
-                """, (limit, offset))
-            
-            comments = [dict(row) for row in cursor.fetchall()]
-            
-        except sqlite3.OperationalError:
-            comments = []
-        
-        conn.close()
-        
-        return jsonify({
-            "success": True,
-            "data": {
-                "count": len(comments),
-                "comments": comments
-            }
-        })
-        
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            try:
+                if post_id:
+                    cursor.execute("""
+                        SELECT * FROM comment
+                        WHERE post_id = ?
+                        ORDER BY created_at DESC
+                        LIMIT ? OFFSET ?
+                    """, (post_id, limit, offset))
+                else:
+                    cursor.execute("""
+                        SELECT * FROM comment
+                        ORDER BY created_at DESC
+                        LIMIT ? OFFSET ?
+                    """, (limit, offset))
+
+                comments = [dict(row) for row in cursor.fetchall()]
+
+            except sqlite3.OperationalError:
+                comments = []
+
+            return jsonify({
+                "success": True,
+                "data": {
+                    "count": len(comments),
+                    "comments": comments
+                }
+            })
+        finally:
+            if conn is not None:
+                conn.close()
+
     except Exception as e:
         logger.error(f"获取评论失败: {str(e)}")
         return jsonify({
