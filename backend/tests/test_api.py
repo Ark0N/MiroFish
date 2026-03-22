@@ -283,9 +283,72 @@ class TestPathTraversalRejection:
         assert response.status_code == 400
         assert response.get_json()['success'] is False
 
-    def test_graph_project_rejects_traversal_id(self, client):
-        response = client.get('/api/graph/project/../../etc')
-        assert response.status_code in (400, 404)  # May raise ValueError caught differently
+    def test_graph_project_rejects_special_chars(self, client):
+        response = client.get('/api/graph/project/proj_<script>')
+        assert response.status_code == 400
+        assert response.get_json()['success'] is False
+
+    def test_graph_project_delete_rejects_special_chars(self, client):
+        response = client.delete('/api/graph/project/proj_<bad>')
+        assert response.status_code == 400
+        assert response.get_json()['success'] is False
+
+    def test_graph_project_reset_rejects_special_chars(self, client):
+        response = client.post('/api/graph/project/proj_<bad>/reset')
+        assert response.status_code == 400
+        assert response.get_json()['success'] is False
+
+    def test_graph_build_rejects_traversal_project_id(self, client):
+        response = client.post('/api/graph/build', json={
+            'project_id': '../../etc/passwd'
+        })
+        assert response.status_code == 400
+        assert response.get_json()['success'] is False
+
+    def test_graph_task_rejects_special_chars(self, client):
+        response = client.get('/api/graph/task/task_<script>')
+        assert response.status_code == 400
+        assert response.get_json()['success'] is False
+
+    def test_graph_data_rejects_special_chars(self, client):
+        response = client.get('/api/graph/data/graph_<bad>')
+        assert response.status_code == 400
+        assert response.get_json()['success'] is False
+
+    def test_graph_delete_rejects_special_chars(self, client):
+        response = client.delete('/api/graph/delete/graph_<bad>')
+        assert response.status_code == 400
+        assert response.get_json()['success'] is False
+
+    def test_report_get_rejects_special_chars(self, client):
+        response = client.get('/api/report/report_<script>')
+        assert response.status_code == 400
+        assert response.get_json()['success'] is False
+
+    def test_report_delete_rejects_special_chars(self, client):
+        response = client.delete('/api/report/report_<bad>')
+        assert response.status_code == 400
+        assert response.get_json()['success'] is False
+
+    def test_report_download_rejects_special_chars(self, client):
+        response = client.get('/api/report/report_<bad>/download')
+        assert response.status_code == 400
+        assert response.get_json()['success'] is False
+
+    def test_report_by_simulation_rejects_traversal_id(self, client):
+        response = client.get('/api/report/by-simulation/sim_..attack')
+        assert response.status_code == 400
+        assert response.get_json()['success'] is False
+
+    def test_report_check_rejects_traversal_id(self, client):
+        response = client.get('/api/report/check/sim_..attack')
+        assert response.status_code == 400
+        assert response.get_json()['success'] is False
+
+    def test_report_progress_rejects_special_chars(self, client):
+        response = client.get('/api/report/report_<bad>/progress')
+        assert response.status_code == 400
+        assert response.get_json()['success'] is False
 
     def test_env_status_rejects_traversal(self, client):
         response = client.post('/api/simulation/env-status', json={
