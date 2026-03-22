@@ -77,6 +77,80 @@ def wait_for_server(base_url, timeout=30):
     return False
 
 
+def check_api_credits():
+    """Pre-flight check that the LLM API key has available credits.
+
+    Uses the backend venv (which has the correct anthropic SDK version) via subprocess.
+    """
+    import subprocess
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    backend_dir = os.path.join(script_dir, "backend")
+
+    check_script = """
+import os, sys
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath('.')), '.env'))
+
+api_key = os.environ.get('LLM_API_KEY', '')
+if not api_key:
+    print('NO_KEY')
+    sys.exit(1)
+
+model = os.environ.get('LLM_MODEL_NAME', 'claude-haiku-4-5-20251001')
+
+if api_key.startswith('sk-ant-'):
+    import anthropic
+    client = anthropic.Anthropic(api_key=api_key)
+    try:
+        client.messages.create(model=model, max_tokens=5, messages=[{'role':'user','content':'hi'}])
+        print('OK')
+    except Exception as e:
+        err = str(e).lower()
+        if 'credit balance' in err:
+            print('NO_CREDITS')
+        elif 'authentication' in err:
+            print('AUTH_FAIL')
+        else:
+            print(f'ERROR:{str(e)[:200]}')
+        sys.exit(1)
+else:
+    from openai import OpenAI
+    base_url = os.environ.get('LLM_BASE_URL', 'https://api.openai.com/v1')
+    client = OpenAI(api_key=api_key, base_url=base_url)
+    try:
+        client.chat.completions.create(model=model, max_tokens=5, messages=[{'role':'user','content':'hi'}])
+        print('OK')
+    except Exception as e:
+        print(f'ERROR:{str(e)[:200]}')
+        sys.exit(1)
+"""
+
+    result = subprocess.run(
+        ["uv", "run", "python", "-c", check_script],
+        capture_output=True, text=True, cwd=backend_dir, timeout=30,
+    )
+    output = result.stdout.strip()
+
+    if output == "OK":
+        print("  LLM API: OK (credits available)")
+        return True
+    elif output == "NO_KEY":
+        print("ERROR: LLM_API_KEY not set in .env")
+    elif output == "NO_CREDITS":
+        print("ERROR: Anthropic API key has no credits.")
+        print("  -> Go to https://console.anthropic.com/settings/billing to add credits")
+        print("  -> Or set LLM_API_KEY / LLM_BASE_URL to an OpenAI-compatible provider")
+    elif output == "AUTH_FAIL":
+        print("ERROR: Anthropic API key is invalid")
+    elif output.startswith("ERROR:"):
+        print(f"ERROR: LLM API check failed: {output[6:]}")
+    else:
+        stderr = result.stderr.strip()
+        print(f"ERROR: LLM API check failed: {stderr[:300]}")
+    return False
+
+
 def poll_task(base_url, task_id, label="Task", timeout=600):
     """Poll a task until completion."""
     print(f"  Polling {label} (task_id={task_id})...")
@@ -452,6 +526,16 @@ def main():
     print(f"  Server:     {args.base_url}")
     print(f"  Max rounds: {args.max_rounds}")
     print(f"  Seed docs:  {SEED_DIR}")
+    print()
+
+    # Pre-flight: check API credits before starting
+    print("Pre-flight: checking LLM API credits...")
+    if not check_api_credits():
+        print("\nPipeline cannot run without a working LLM API key.")
+        print("Options:")
+        print("  1. Add credits at https://console.anthropic.com/settings/billing")
+        print("  2. Use an OpenAI-compatible provider: set LLM_API_KEY, LLM_BASE_URL, LLM_MODEL_NAME in .env")
+        sys.exit(1)
     print()
 
     if not args.skip_server_check:
