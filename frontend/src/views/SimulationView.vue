@@ -1,7 +1,7 @@
 <template>
   <WorkflowLayout
     :stepNum="2"
-    stepName="环境搭建"
+    stepName="Environment Setup"
     :statusClass="statusClass"
     :statusText="statusText"
     :graphData="graphData"
@@ -76,12 +76,12 @@ const handleGoBack = () => {
 }
 
 const handleNextStep = (params = {}) => {
-  addLog('进入 Step 3: 开始模拟')
+  addLog('Entering Step 3: Start Simulation')
 
   if (params.maxRounds) {
-    addLog(`自定义模拟轮数: ${params.maxRounds} 轮`)
+    addLog(`Custom simulation rounds: ${params.maxRounds}`)
   } else {
-    addLog('使用自动配置的模拟轮数')
+    addLog('Using auto-configured simulation rounds')
   }
 
   const routeParams = {
@@ -105,7 +105,7 @@ const checkAndStopRunningSimulation = async () => {
     const envStatusRes = await getEnvStatus({ simulation_id: currentSimulationId.value })
 
     if (envStatusRes.success && envStatusRes.data?.env_alive) {
-      addLog('检测到模拟环境正在运行，正在关闭...')
+      addLog('Detected running simulation environment, shutting down...')
 
       try {
         const closeRes = await closeSimulationEnv({
@@ -114,24 +114,24 @@ const checkAndStopRunningSimulation = async () => {
         })
 
         if (closeRes.success) {
-          addLog('模拟环境已关闭')
+          addLog('Simulation environment closed')
         } else {
-          addLog(`关闭模拟环境失败: ${closeRes.error || '未知错误'}`)
+          addLog(`Failed to close simulation environment: ${closeRes.error || 'Unknown error'}`)
           await forceStopSimulation()
         }
       } catch (closeErr) {
-        addLog(`关闭模拟环境异常: ${closeErr.message}`)
+        addLog(`Error closing simulation environment: ${closeErr.message}`)
         await forceStopSimulation()
       }
     } else {
       const simRes = await getSimulation(currentSimulationId.value)
       if (simRes.success && simRes.data?.status === 'running') {
-        addLog('检测到模拟状态为运行中，正在停止...')
+        addLog('Detected simulation is running, stopping...')
         await forceStopSimulation()
       }
     }
   } catch (err) {
-    console.warn('检查模拟状态失败:', err)
+    console.warn('Failed to check simulation status:', err)
   }
 }
 
@@ -139,18 +139,18 @@ const forceStopSimulation = async () => {
   try {
     const stopRes = await stopSimulation({ simulation_id: currentSimulationId.value })
     if (stopRes.success) {
-      addLog('模拟已强制停止')
+      addLog('Simulation force stopped')
     } else {
-      addLog(`强制停止模拟失败: ${stopRes.error || '未知错误'}`)
+      addLog(`Failed to force stop simulation: ${stopRes.error || 'Unknown error'}`)
     }
   } catch (err) {
-    addLog(`强制停止模拟异常: ${err.message}`)
+    addLog(`Error force stopping simulation: ${err.message}`)
   }
 }
 
 const loadSimulationData = async () => {
   try {
-    addLog(`加载模拟数据: ${currentSimulationId.value}`)
+    addLog(`Loading simulation data: ${currentSimulationId.value}`)
 
     const simRes = await getSimulation(currentSimulationId.value)
     if (simRes.success && simRes.data) {
@@ -160,7 +160,7 @@ const loadSimulationData = async () => {
         const projRes = await getProject(simData.project_id)
         if (projRes.success && projRes.data) {
           projectData.value = projRes.data
-          addLog(`项目加载成功: ${projRes.data.project_id}`)
+          addLog(`Project loaded successfully: ${projRes.data.project_id}`)
 
           if (projRes.data.graph_id) {
             await loadGraph(projRes.data.graph_id)
@@ -168,10 +168,10 @@ const loadSimulationData = async () => {
         }
       }
     } else {
-      addLog(`加载模拟数据失败: ${simRes.error || '未知错误'}`)
+      addLog(`Failed to load simulation data: ${simRes.error || 'Unknown error'}`)
     }
   } catch (err) {
-    addLog(`加载异常: ${err.message}`)
+    addLog(`Loading error: ${err.message}`)
   }
 }
 
@@ -181,10 +181,10 @@ const loadGraph = async (graphId) => {
     const res = await getGraphData(graphId)
     if (res.success) {
       graphData.value = res.data
-      addLog('图谱数据加载成功')
+      addLog('Graph data loaded successfully')
     }
   } catch (err) {
-    addLog(`图谱加载失败: ${err.message}`)
+    addLog(`Failed to load graph: ${err.message}`)
   } finally {
     graphLoading.value = false
   }
@@ -197,7 +197,7 @@ const refreshGraph = () => {
 }
 
 onMounted(async () => {
-  addLog('SimulationView 初始化')
+  addLog('SimulationView initialized')
   await checkAndStopRunningSimulation()
   loadSimulationData()
 })

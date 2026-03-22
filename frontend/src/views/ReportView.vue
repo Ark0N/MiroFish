@@ -1,7 +1,7 @@
 <template>
   <WorkflowLayout
     :stepNum="4"
-    stepName="报告生成"
+    stepName="Report Generation"
     :statusClass="statusClass"
     :statusText="statusText"
     :graphData="graphData"
@@ -69,7 +69,7 @@ const updateStatus = (status) => {
 // --- Data Logic ---
 const loadReportData = async () => {
   try {
-    addLog(`加载报告数据: ${currentReportId.value}`)
+    addLog(`Loading report data: ${currentReportId.value}`)
 
     const reportRes = await getReport(currentReportId.value)
     if (reportRes.success && reportRes.data) {
@@ -85,7 +85,7 @@ const loadReportData = async () => {
             const projRes = await getProject(simData.project_id)
             if (projRes.success && projRes.data) {
               projectData.value = projRes.data
-              addLog(`项目加载成功: ${projRes.data.project_id}`)
+              addLog(`Project loaded successfully: ${projRes.data.project_id}`)
 
               if (projRes.data.graph_id) {
                 await loadGraph(projRes.data.graph_id)
@@ -95,10 +95,10 @@ const loadReportData = async () => {
         }
       }
     } else {
-      addLog(`获取报告信息失败: ${reportRes.error || '未知错误'}`)
+      addLog(`Failed to get report info: ${reportRes.error || 'Unknown error'}`)
     }
   } catch (err) {
-    addLog(`加载异常: ${err.message}`)
+    addLog(`Loading error: ${err.message}`)
   }
 }
 
@@ -108,10 +108,10 @@ const loadGraph = async (graphId) => {
     const res = await getGraphData(graphId)
     if (res.success) {
       graphData.value = res.data
-      addLog('图谱数据加载成功')
+      addLog('Graph data loaded successfully')
     }
   } catch (err) {
-    addLog(`图谱加载失败: ${err.message}`)
+    addLog(`Graph loading failed: ${err.message}`)
   } finally {
     graphLoading.value = false
   }
@@ -131,6 +131,6 @@ watch(() => route.params.reportId, (newId) => {
 }, { immediate: true })
 
 onMounted(() => {
-  addLog('ReportView 初始化')
+  addLog('ReportView initialized')
 })
 </script>
