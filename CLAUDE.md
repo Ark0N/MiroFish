@@ -38,7 +38,7 @@ cd backend && uv run pytest tests/test_llm_client.py::TestThinkTagStripping::tes
 # Backend Python dependencies only
 cd backend && uv sync
 
-# Docker (production with gunicorn)
+# Docker (production with gunicorn, multi-stage build, non-root user)
 docker compose up --build
 ```
 
@@ -54,8 +54,8 @@ docker compose up --build
 
 ### Backend (`backend/app/`)
 
-- `api/` — Flask blueprints: `graph.py` (~620 lines, handles ontology + graph building + project CRUD), `simulation.py`, `report.py` (all under `/api/`)
-- `services/` — Core business logic. Key services: `ontology_generator.py`, `graph_builder.py` (Zep SDK wrapper), `oasis_profile_generator.py` (entities → OASIS agent profiles as CSV/JSON), `simulation_runner.py` (subprocess-based OASIS execution with IPC), `report_agent.py` (ReACT tool loop)
+- `api/` — Flask blueprints: `graph.py` (ontology + graph building + project CRUD), `simulation.py` (largest API file), `report.py` — all under `/api/`
+- `services/` — Core business logic. Key services: `ontology_generator.py`, `graph_builder.py` (Zep SDK wrapper), `oasis_profile_generator.py` (entities → OASIS agent profiles as CSV/JSON), `simulation_runner.py` (subprocess-based OASIS execution with IPC), `report_agent.py` (ReACT tool loop, largest service file)
 - `utils/llm_client.py` — Unified LLM client with `chat()` and `chat_json()` methods. Auto-detects Anthropic keys (`sk-ant-*`) vs OpenAI-compatible. Strips `<think>` tags (closed and unclosed) from reasoning models. For JSON mode with Claude, appends system prompt instruction instead of `response_format`.
 - `utils/validation.py` — `validate_safe_id()` for path traversal prevention on project_id/simulation_id parameters
 - `models/` — File-based persistence (JSON on disk under `backend/uploads/projects/`). Atomic writes (temp file + `os.replace()`). No database. Project states: `CREATED` → `ONTOLOGY_GENERATED` → `GRAPH_BUILDING` → `GRAPH_COMPLETED`
@@ -65,9 +65,9 @@ docker compose up --build
 ### Frontend (`frontend/src/`)
 
 - Vue 3 Composition API (`<script setup>`) throughout, no state management library (just a simple reactive store in `store/pendingUpload.js` with localStorage persistence)
-- `views/` — Page-level: `Home.vue` (landing + file upload), `MainView.vue` (layout wrapper + multi-step wizard orchestrator), `SimulationRunView.vue`, `ReportView.vue`, `InteractionView.vue`, `NotFound.vue` (404)
+- `views/` — Page-level components: `Home.vue` (landing + file upload), `MainView.vue` (layout wrapper + multi-step wizard orchestrator), `SimulationRunView.vue`, `ReportView.vue`, `InteractionView.vue`, `NotFound.vue` (404)
 - Router has `beforeEach` navigation guards validating required route params; routes use lazy loading via dynamic imports
-- `components/Step{1-5}*.vue` — Workflow steps matching the 5-step pipeline. Step4Report.vue is the largest (~5150 lines)
+- `components/Step{1-5}*.vue` — Workflow steps matching the 5-step pipeline. `Step4Report.vue` is the largest (~5150 lines)
 - `components/GraphPanel.vue` — D3.js force-directed graph visualization with interactive node/edge selection
 - `api/` — Axios clients with 5-minute timeout, `requestWithRetry()` exponential backoff, proxied to `:5001` via Vite config
 - No linting or formatting tools configured
@@ -81,8 +81,7 @@ docker compose up --build
 - **Atomic persistence**: All JSON file writes use temp file + `os.replace()` to prevent corruption
 - **Input validation**: `validate_safe_id()` prevents path traversal; API params have bounds checking
 - **XSS prevention**: All `v-html` rendered content is sanitized via DOMPurify in shared `utils/markdown.js`
-- **Bilingual UI**: Chinese primary with English support
-- **Simulation actions**: Twitter (CREATE_POST, LIKE_POST, REPOST, FOLLOW, QUOTE_POST, DO_NOTHING), Reddit (LIKE_POST, DISLIKE_POST, CREATE_POST, CREATE_COMMENT, etc.)
+- **UI language**: English (translated from original Chinese)
 
 ## Claude API Integration (Fork-Specific)
 
@@ -143,19 +142,3 @@ Full permissions granted. Act decisively without asking.
 
 ### Planning Mode (Automatic)
 Enter planning mode automatically for multi-file changes (3+), architectural decisions, unclear requirements, or new features. Skip only for single-file fixes, typos, and simple config changes.
-
-## Docker (Production)
-
-Multi-stage Dockerfile: Node.js builds frontend → Python 3.11-slim with gunicorn serves backend. Non-root user, HEALTHCHECK included. `docker-compose.yml` has resource limits (4G RAM, 4 CPUs) and log rotation.
-
-```bash
-docker compose up --build    # Build and run
-```
-
-## Session Log
-
-| Date | Tasks Completed | Files Changed | Notes |
-|------|-----------------|---------------|-------|
-| 2026-03-22 | Project created | CLAUDE.md | Initial setup |
-| 2026-03-22 | Claude API integration | llm_client.py, oasis_profile_generator.py, simulation_config_generator.py, run_*.py, .env | Adapted all LLM calls for Anthropic native SDK |
-| 2026-03-22 | Security + quality overhaul | 30+ files | XSS fix, path traversal prevention, stack trace removal, atomic writes, thread safety, input validation, SQLite leak fixes, 126 tests, production Docker, navigation guards, lazy loading |
