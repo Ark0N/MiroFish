@@ -190,10 +190,13 @@ class ProjectManager:
         
         if not os.path.exists(meta_path):
             return None
-        
-        with open(meta_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
+
+        try:
+            with open(meta_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, ValueError):
+            return None
+
         return Project.from_dict(data)
     
     @classmethod

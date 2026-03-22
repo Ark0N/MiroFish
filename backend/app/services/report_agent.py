@@ -2231,9 +2231,12 @@ class ReportManager:
         
         if not os.path.exists(path):
             return None
-        
-        with open(path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, ValueError):
+            return None
     
     @classmethod
     def get_generated_sections(cls, report_id: str) -> List[Dict[str, Any]]:
@@ -2454,10 +2457,13 @@ class ReportManager:
                 path = old_path
             else:
                 return None
-        
-        with open(path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
+
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, ValueError):
+            return None
+
         # 重建Report对象
         outline = None
         if data.get('outline'):

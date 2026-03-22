@@ -164,10 +164,13 @@ class SimulationManager:
         
         if not os.path.exists(state_file):
             return None
-        
-        with open(state_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
+
+        try:
+            with open(state_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, ValueError):
+            return None
+
         state = SimulationState(
             simulation_id=simulation_id,
             project_id=data.get("project_id", ""),
@@ -489,9 +492,12 @@ class SimulationManager:
         
         if not os.path.exists(profile_path):
             return []
-        
-        with open(profile_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+
+        try:
+            with open(profile_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, ValueError):
+            return []
     
     def get_simulation_config(self, simulation_id: str) -> Optional[Dict[str, Any]]:
         """获取模拟配置"""
@@ -500,9 +506,12 @@ class SimulationManager:
         
         if not os.path.exists(config_path):
             return None
-        
-        with open(config_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, ValueError):
+            return None
     
     def get_run_instructions(self, simulation_id: str) -> Dict[str, str]:
         """获取运行说明"""
