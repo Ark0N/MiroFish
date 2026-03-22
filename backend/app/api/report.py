@@ -20,6 +20,15 @@ from ..utils.validation import validate_safe_id
 logger = get_logger('mirofish.api.report')
 
 
+def _validate_path_id(value, param_name):
+    """Validate a URL path parameter. Returns a 400 response tuple or None."""
+    try:
+        validate_safe_id(value, param_name)
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    return None
+
+
 # ============== 报告生成接口 ==============
 
 @report_bp.route('/generate', methods=['POST'])
@@ -304,25 +313,29 @@ def get_report(report_id: str):
             }
         }
     """
+    err = _validate_path_id(report_id, "report_id")
+    if err:
+        return err
+
     try:
         report = ReportManager.get_report(report_id)
-        
+
         if not report:
             return jsonify({
                 "success": False,
                 "error": f"报告不存在: {report_id}"
             }), 404
-        
+
         return jsonify({
             "success": True,
             "data": report.to_dict()
         })
-        
+
     except Exception as e:
         logger.error(f"获取报告失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e)
+            "error": "获取报告失败"
         }), 500
 
 
@@ -340,27 +353,31 @@ def get_report_by_simulation(simulation_id: str):
             }
         }
     """
+    err = _validate_path_id(simulation_id, "simulation_id")
+    if err:
+        return err
+
     try:
         report = ReportManager.get_report_by_simulation(simulation_id)
-        
+
         if not report:
             return jsonify({
                 "success": False,
                 "error": f"该模拟暂无报告: {simulation_id}",
                 "has_report": False
             }), 404
-        
+
         return jsonify({
             "success": True,
             "data": report.to_dict(),
             "has_report": True
         })
-        
+
     except Exception as e:
         logger.error(f"获取报告失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e)
+            "error": "获取报告失败"
         }), 500
 
 
@@ -407,9 +424,13 @@ def list_reports():
 def download_report(report_id: str):
     """
     下载报告（Markdown格式）
-    
+
     返回Markdown文件
     """
+    err = _validate_path_id(report_id, "report_id")
+    if err:
+        return err
+
     try:
         report = ReportManager.get_report(report_id)
         
@@ -459,6 +480,10 @@ def download_report(report_id: str):
 @report_bp.route('/<report_id>', methods=['DELETE'])
 def delete_report(report_id: str):
     """删除报告"""
+    err = _validate_path_id(report_id, "report_id")
+    if err:
+        return err
+
     try:
         success = ReportManager.delete_report(report_id)
         
@@ -598,9 +623,13 @@ def get_report_progress(report_id: str):
             }
         }
     """
+    err = _validate_path_id(report_id, "report_id")
+    if err:
+        return err
+
     try:
         progress = ReportManager.get_progress(report_id)
-        
+
         if not progress:
             return jsonify({
                 "success": False,
@@ -645,6 +674,10 @@ def get_report_sections(report_id: str):
             }
         }
     """
+    err = _validate_path_id(report_id, "report_id")
+    if err:
+        return err
+
     try:
         sections = ReportManager.get_generated_sections(report_id)
         
@@ -684,6 +717,10 @@ def get_single_section(report_id: str, section_index: int):
             }
         }
     """
+    err = _validate_path_id(report_id, "report_id")
+    if err:
+        return err
+
     try:
         section_path = ReportManager._get_section_path(report_id, section_index)
         
@@ -734,9 +771,13 @@ def check_report_status(simulation_id: str):
             }
         }
     """
+    err = _validate_path_id(simulation_id, "simulation_id")
+    if err:
+        return err
+
     try:
         report = ReportManager.get_report_by_simulation(simulation_id)
-        
+
         has_report = report is not None
         report_status = report.status.value if report else None
         report_id = report.report_id if report else None
@@ -805,9 +846,13 @@ def get_agent_log(report_id: str):
             }
         }
     """
+    err = _validate_path_id(report_id, "report_id")
+    if err:
+        return err
+
     try:
         from_line = request.args.get('from_line', 0, type=int)
-        
+
         log_data = ReportManager.get_agent_log(report_id, from_line=from_line)
         
         return jsonify({
@@ -837,9 +882,13 @@ def stream_agent_log(report_id: str):
             }
         }
     """
+    err = _validate_path_id(report_id, "report_id")
+    if err:
+        return err
+
     try:
         logs = ReportManager.get_agent_log_stream(report_id)
-        
+
         return jsonify({
             "success": True,
             "data": {
@@ -885,21 +934,25 @@ def get_console_log(report_id: str):
             }
         }
     """
+    err = _validate_path_id(report_id, "report_id")
+    if err:
+        return err
+
     try:
         from_line = request.args.get('from_line', 0, type=int)
-        
+
         log_data = ReportManager.get_console_log(report_id, from_line=from_line)
-        
+
         return jsonify({
             "success": True,
             "data": log_data
         })
-        
+
     except Exception as e:
         logger.error(f"获取控制台日志失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e)
+            "error": "获取控制台日志失败"
         }), 500
 
 
@@ -917,9 +970,13 @@ def stream_console_log(report_id: str):
             }
         }
     """
+    err = _validate_path_id(report_id, "report_id")
+    if err:
+        return err
+
     try:
         logs = ReportManager.get_console_log_stream(report_id)
-        
+
         return jsonify({
             "success": True,
             "data": {
