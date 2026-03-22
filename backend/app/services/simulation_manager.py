@@ -145,25 +145,13 @@ class SimulationManager:
         return sim_dir
     
     def _save_simulation_state(self, state: SimulationState):
-        """保存模拟状态到文件（atomic write via temp file + os.replace）"""
+        """保存模拟状态到文件（atomic write with file locking）"""
+        from ..utils.file_utils import atomic_write_json
         sim_dir = self._get_simulation_dir(state.simulation_id)
         state_file = os.path.join(sim_dir, "state.json")
 
         state.updated_at = datetime.now().isoformat()
-
-        temp_fd, temp_path = tempfile.mkstemp(
-            dir=os.path.dirname(state_file), suffix='.tmp'
-        )
-        try:
-            with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
-                json.dump(state.to_dict(), f, ensure_ascii=False, indent=2)
-            os.replace(temp_path, state_file)
-        except:
-            try:
-                os.unlink(temp_path)
-            except OSError:
-                pass
-            raise
+        atomic_write_json(state_file, state.to_dict())
 
         self._simulations[state.simulation_id] = state
     

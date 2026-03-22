@@ -169,23 +169,11 @@ class ProjectManager:
     
     @classmethod
     def save_project(cls, project: Project) -> None:
-        """保存项目元数据（atomic write via temp file + os.replace）"""
+        """保存项目元数据（atomic write with file locking）"""
+        from ..utils.file_utils import atomic_write_json
         project.updated_at = datetime.now().isoformat()
         meta_path = cls._get_project_meta_path(project.project_id)
-
-        temp_fd, temp_path = tempfile.mkstemp(
-            dir=os.path.dirname(meta_path), suffix='.tmp'
-        )
-        try:
-            with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
-                json.dump(project.to_dict(), f, ensure_ascii=False, indent=2)
-            os.replace(temp_path, meta_path)
-        except:
-            try:
-                os.unlink(temp_path)
-            except OSError:
-                pass
-            raise
+        atomic_write_json(meta_path, project.to_dict())
     
     @classmethod
     def get_project(cls, project_id: str) -> Optional[Project]:

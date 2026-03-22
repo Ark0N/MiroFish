@@ -302,26 +302,13 @@ class SimulationRunner:
     
     @classmethod
     def _save_run_state(cls, state: SimulationRunState):
-        """保存运行状态到文件（atomic write via temp file + os.replace）"""
+        """保存运行状态到文件（atomic write with file locking）"""
+        from ..utils.file_utils import atomic_write_json
         sim_dir = os.path.join(cls.RUN_STATE_DIR, state.simulation_id)
         os.makedirs(sim_dir, exist_ok=True)
         state_file = os.path.join(sim_dir, "run_state.json")
 
-        data = state.to_detail_dict()
-
-        temp_fd, temp_path = tempfile.mkstemp(
-            dir=os.path.dirname(state_file), suffix='.tmp'
-        )
-        try:
-            with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            os.replace(temp_path, state_file)
-        except:
-            try:
-                os.unlink(temp_path)
-            except OSError:
-                pass
-            raise
+        atomic_write_json(state_file, state.to_detail_dict())
 
         with cls._lock:
             cls._run_states[state.simulation_id] = state
