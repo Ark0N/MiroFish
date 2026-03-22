@@ -917,8 +917,8 @@ async def run_twitter_simulation(
     
     log_info("初始化...")
     
-    # Twitter 使用通用 LLM 配置
-    model = create_model(config, use_boost=False)
+    # Twitter uses boost LLM when available (local model for simulation)
+    model = create_model(config, use_boost=True)
     
     # OASIS Twitter使用CSV格式
     profile_path = os.path.join(simulation_dir, "twitter_profiles.csv")
