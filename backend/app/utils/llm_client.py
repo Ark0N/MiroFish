@@ -5,6 +5,7 @@ LLM客户端封装
 
 import json
 import re
+import time
 from typing import Optional, Dict, Any, List
 from openai import OpenAI
 
@@ -67,10 +68,20 @@ class LLMClient:
         Returns:
             模型响应文本
         """
-        if self._use_anthropic:
-            content = self._chat_anthropic(messages, temperature, max_tokens, response_format)
-        else:
-            content = self._chat_openai(messages, temperature, max_tokens, response_format)
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                if self._use_anthropic:
+                    content = self._chat_anthropic(messages, temperature, max_tokens, response_format)
+                else:
+                    content = self._chat_openai(messages, temperature, max_tokens, response_format)
+                break
+            except RuntimeError as e:
+                if "rate limit" in str(e).lower() and attempt < max_retries - 1:
+                    wait = 2 ** attempt * 5  # 5s, 10s, 20s
+                    time.sleep(wait)
+                    continue
+                raise
 
         # 部分模型会在content中包含<think>思考内容，需要移除
         # Strip closed think tags
@@ -130,7 +141,27 @@ class LLMClient:
         if system_text.strip():
             kwargs["system"] = system_text.strip()
 
-        response = self.anthropic_client.messages.create(**kwargs)
+        import anthropic
+
+        try:
+            response = self.anthropic_client.messages.create(**kwargs)
+        except anthropic.AuthenticationError as e:
+            raise ValueError(f"Anthropic authentication failed: {e}") from e
+        except anthropic.RateLimitError as e:
+            retry_after = getattr(e, 'response', None)
+            if retry_after:
+                retry_after = retry_after.headers.get('retry-after', 60)
+            raise RuntimeError(f"Anthropic rate limit exceeded. Retry after {retry_after}s") from e
+        except anthropic.BadRequestError as e:
+            raise ValueError(f"Anthropic bad request: {e}") from e
+        except anthropic.APIStatusError as e:
+            raise RuntimeError(f"Anthropic API error (status {e.status_code}): {e.message}") from e
+        except anthropic.APIConnectionError as e:
+            raise RuntimeError(f"Anthropic connection error: {e}") from e
+
+        if not response.content:
+            raise ValueError("Empty response from Anthropic API")
+
         return response.content[0].text
 
     def chat_json(
