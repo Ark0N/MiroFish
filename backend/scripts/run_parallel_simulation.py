@@ -70,16 +70,14 @@ import json
 import logging
 import multiprocessing
 import random
-import signal
 import sqlite3
-import warnings
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 
 
 # 全局变量：用于信号处理
 _shutdown_event = None
-_cleanup_done = False
+_cleanup_done = [False]
 
 # 添加 backend 目录到路径
 # 脚本固定位于 backend/scripts/ 目录
@@ -103,18 +101,16 @@ else:
         print(f"已加载环境配置: {_backend_env}")
 
 
-class MaxTokensWarningFilter(logging.Filter):
-    """过滤掉 camel-ai 关于 max_tokens 的警告（我们故意不设置 max_tokens，让模型自行决定）"""
-    
-    def filter(self, record):
-        # 过滤掉包含 max_tokens 警告的日志
-        if "max_tokens" in record.getMessage() and "Invalid or missing" in record.getMessage():
-            return False
-        return True
-
+from simulation_utils import (
+    install_max_tokens_filter,
+    create_model,
+    setup_signal_handlers,
+    IPCHandlerBase,
+    CommandType,
+)
 
 # 在模块加载时立即添加过滤器，确保在 camel 代码执行前生效
-logging.getLogger().addFilter(MaxTokensWarningFilter())
+install_max_tokens_filter()
 
 
 def disable_oasis_logging():
@@ -158,8 +154,6 @@ def init_logging_for_simulation(simulation_dir: str):
 from action_logger import SimulationLogManager, PlatformActionLogger
 
 try:
-    from camel.models import ModelFactory
-    from camel.types import ModelPlatformType
     import oasis
     from oasis import (
         ActionType,
@@ -202,19 +196,7 @@ REDDIT_ACTIONS = [
 ]
 
 
-# IPC相关常量
-IPC_COMMANDS_DIR = "ipc_commands"
-IPC_RESPONSES_DIR = "ipc_responses"
-ENV_STATUS_FILE = "env_status.json"
-
-class CommandType:
-    """命令类型常量"""
-    INTERVIEW = "interview"
-    BATCH_INTERVIEW = "batch_interview"
-    CLOSE_ENV = "close_env"
-
-
-class ParallelIPCHandler:
+class ParallelIPCHandler(IPCHandlerBase):
     """
     双平台IPC命令处理器
     
@@ -229,22 +211,14 @@ class ParallelIPCHandler:
         reddit_env=None,
         reddit_agent_graph=None
     ):
-        self.simulation_dir = simulation_dir
+        super().__init__(simulation_dir)
         self.twitter_env = twitter_env
         self.twitter_agent_graph = twitter_agent_graph
         self.reddit_env = reddit_env
         self.reddit_agent_graph = reddit_agent_graph
-        
-        self.commands_dir = os.path.join(simulation_dir, IPC_COMMANDS_DIR)
-        self.responses_dir = os.path.join(simulation_dir, IPC_RESPONSES_DIR)
-        self.status_file = os.path.join(simulation_dir, ENV_STATUS_FILE)
-        
-        # 确保目录存在
-        os.makedirs(self.commands_dir, exist_ok=True)
-        os.makedirs(self.responses_dir, exist_ok=True)
-    
+
     def update_status(self, status: str):
-        """更新环境状态"""
+        """更新环境状态（扩展基类，增加平台可用性信息）"""
         with open(self.status_file, 'w', encoding='utf-8') as f:
             json.dump({
                 "status": status,
@@ -252,51 +226,7 @@ class ParallelIPCHandler:
                 "reddit_available": self.reddit_env is not None,
                 "timestamp": datetime.now().isoformat()
             }, f, ensure_ascii=False, indent=2)
-    
-    def poll_command(self) -> Optional[Dict[str, Any]]:
-        """轮询获取待处理命令"""
-        if not os.path.exists(self.commands_dir):
-            return None
-        
-        # 获取命令文件（按时间排序）
-        command_files = []
-        for filename in os.listdir(self.commands_dir):
-            if filename.endswith('.json'):
-                filepath = os.path.join(self.commands_dir, filename)
-                command_files.append((filepath, os.path.getmtime(filepath)))
-        
-        command_files.sort(key=lambda x: x[1])
-        
-        for filepath, _ in command_files:
-            try:
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except (json.JSONDecodeError, OSError):
-                continue
-        
-        return None
-    
-    def send_response(self, command_id: str, status: str, result: Dict = None, error: str = None):
-        """发送响应"""
-        response = {
-            "command_id": command_id,
-            "status": status,
-            "result": result,
-            "error": error,
-            "timestamp": datetime.now().isoformat()
-        }
-        
-        response_file = os.path.join(self.responses_dir, f"{command_id}.json")
-        with open(response_file, 'w', encoding='utf-8') as f:
-            json.dump(response, f, ensure_ascii=False, indent=2)
-        
-        # 删除命令文件
-        command_file = os.path.join(self.commands_dir, f"{command_id}.json")
-        try:
-            os.remove(command_file)
-        except OSError:
-            pass
-    
+
     def _get_env_and_graph(self, platform: str):
         """
         获取指定平台的环境和agent_graph
@@ -335,29 +265,27 @@ class ParallelIPCHandler:
             actions = {agent: interview_action}
             await env.step(actions)
             
-            result = self._get_interview_result(agent_id, actual_platform)
+            result = self._get_interview_result(agent_id, f"{actual_platform}_simulation.db")
             result["platform"] = actual_platform
             return result
             
         except Exception as e:
             return {"platform": platform, "error": str(e)}
     
-    async def handle_interview(self, command_id: str, agent_id: int, prompt: str, platform: str = None) -> bool:
+    async def handle_interview(self, command_id: str, args: Dict[str, Any]) -> bool:
         """
         处理单个Agent采访命令
-        
+
         Args:
             command_id: 命令ID
-            agent_id: Agent ID
-            prompt: 采访问题
-            platform: 指定平台（可选）
-                - "twitter": 只采访Twitter平台
-                - "reddit": 只采访Reddit平台
-                - None/不指定: 同时采访两个平台，返回整合结果
-            
+            args: {"agent_id": int, "prompt": str, "platform": str(optional)}
+
         Returns:
             True 表示成功，False 表示失败
         """
+        agent_id = args.get("agent_id", 0)
+        prompt = args.get("prompt", "")
+        platform = args.get("platform")
         # 如果指定了平台，只采访该平台
         if platform in ("twitter", "reddit"):
             result = await self._interview_single_platform(agent_id, prompt, platform)
@@ -413,18 +341,17 @@ class ParallelIPCHandler:
             print(f"  Interview失败: agent_id={agent_id}, 所有平台都失败")
             return False
     
-    async def handle_batch_interview(self, command_id: str, interviews: List[Dict], platform: str = None) -> bool:
+    async def handle_batch_interview(self, command_id: str, args: Dict[str, Any]) -> bool:
         """
         处理批量采访命令
-        
+
         Args:
             command_id: 命令ID
-            interviews: [{"agent_id": int, "prompt": str, "platform": str(optional)}, ...]
-            platform: 默认平台（可被每个interview项覆盖）
-                - "twitter": 只采访Twitter平台
-                - "reddit": 只采访Reddit平台
-                - None/不指定: 每个Agent同时采访两个平台
+            args: {"interviews": [...], "platform": str(optional)}
         """
+        interviews = args.get("interviews", [])
+        platform = args.get("platform")
+
         # 按平台分组
         twitter_interviews = []
         reddit_interviews = []
@@ -470,7 +397,7 @@ class ParallelIPCHandler:
                     
                     for interview in twitter_interviews:
                         agent_id = interview.get("agent_id")
-                        result = self._get_interview_result(agent_id, "twitter")
+                        result = self._get_interview_result(agent_id, "twitter_simulation.db")
                         result["platform"] = "twitter"
                         results[f"twitter_{agent_id}"] = result
             except Exception as e:
@@ -497,7 +424,7 @@ class ParallelIPCHandler:
                     
                     for interview in reddit_interviews:
                         agent_id = interview.get("agent_id")
-                        result = self._get_interview_result(agent_id, "reddit")
+                        result = self._get_interview_result(agent_id, "reddit_simulation.db")
                         result["platform"] = "reddit"
                         results[f"reddit_{agent_id}"] = result
             except Exception as e:
@@ -514,93 +441,8 @@ class ParallelIPCHandler:
             self.send_response(command_id, "failed", error="没有成功的采访")
             return False
     
-    def _get_interview_result(self, agent_id: int, platform: str) -> Dict[str, Any]:
-        """从数据库获取最新的Interview结果"""
-        db_path = os.path.join(self.simulation_dir, f"{platform}_simulation.db")
-        
-        result = {
-            "agent_id": agent_id,
-            "response": None,
-            "timestamp": None
-        }
-        
-        if not os.path.exists(db_path):
-            return result
-        
-        conn = None
-        try:
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-
-            # 查询最新的Interview记录
-            cursor.execute("""
-                SELECT user_id, info, created_at
-                FROM trace
-                WHERE action = ? AND user_id = ?
-                ORDER BY created_at DESC
-                LIMIT 1
-            """, (ActionType.INTERVIEW.value, agent_id))
-
-            row = cursor.fetchone()
-            if row:
-                user_id, info_json, created_at = row
-                try:
-                    info = json.loads(info_json) if info_json else {}
-                    result["response"] = info.get("response", info)
-                    result["timestamp"] = created_at
-                except json.JSONDecodeError:
-                    result["response"] = info_json
-
-        except Exception as e:
-            print(f"  读取Interview结果失败: {e}")
-        finally:
-            if conn is not None:
-                conn.close()
-        
-        return result
-    
-    async def process_commands(self) -> bool:
-        """
-        处理所有待处理命令
-        
-        Returns:
-            True 表示继续运行，False 表示应该退出
-        """
-        command = self.poll_command()
-        if not command:
-            return True
-        
-        command_id = command.get("command_id")
-        command_type = command.get("command_type")
-        args = command.get("args", {})
-        
-        print(f"\n收到IPC命令: {command_type}, id={command_id}")
-        
-        if command_type == CommandType.INTERVIEW:
-            await self.handle_interview(
-                command_id,
-                args.get("agent_id", 0),
-                args.get("prompt", ""),
-                args.get("platform")
-            )
-            return True
-            
-        elif command_type == CommandType.BATCH_INTERVIEW:
-            await self.handle_batch_interview(
-                command_id,
-                args.get("interviews", []),
-                args.get("platform")
-            )
-            return True
-            
-        elif command_type == CommandType.CLOSE_ENV:
-            print("收到关闭环境命令")
-            self.send_response(command_id, "completed", result={"message": "环境即将关闭"})
-            return False
-        
-        else:
-            self.send_response(command_id, "failed", error=f"未知命令类型: {command_type}")
-            return True
+    # process_commands is inherited from IPCHandlerBase
+    # _get_interview_result is inherited from IPCHandlerBase
 
 
 def load_config(config_path: str) -> Dict[str, Any]:
@@ -984,73 +826,6 @@ def _get_comment_info(
     except Exception:
         pass
     return None
-
-
-def create_model(config: Dict[str, Any], use_boost: bool = False):
-    """
-    创建LLM模型
-    
-    支持双 LLM 配置，用于并行模拟时提速：
-    - 通用配置：LLM_API_KEY, LLM_BASE_URL, LLM_MODEL_NAME
-    - 加速配置（可选）：LLM_BOOST_API_KEY, LLM_BOOST_BASE_URL, LLM_BOOST_MODEL_NAME
-    
-    如果配置了加速 LLM，并行模拟时可以让不同平台使用不同的 API 服务商，提高并发能力。
-    
-    Args:
-        config: 模拟配置字典
-        use_boost: 是否使用加速 LLM 配置（如果可用）
-    """
-    # 检查是否有加速配置
-    boost_api_key = os.environ.get("LLM_BOOST_API_KEY", "")
-    boost_base_url = os.environ.get("LLM_BOOST_BASE_URL", "")
-    boost_model = os.environ.get("LLM_BOOST_MODEL_NAME", "")
-    has_boost_config = bool(boost_api_key)
-    
-    # 根据参数和配置情况选择使用哪个 LLM
-    if use_boost and has_boost_config:
-        # 使用加速配置
-        llm_api_key = boost_api_key
-        llm_base_url = boost_base_url
-        llm_model = boost_model or os.environ.get("LLM_MODEL_NAME", "")
-        config_label = "[加速LLM]"
-    else:
-        # 使用通用配置
-        llm_api_key = os.environ.get("LLM_API_KEY", "")
-        llm_base_url = os.environ.get("LLM_BASE_URL", "")
-        llm_model = os.environ.get("LLM_MODEL_NAME", "")
-        config_label = "[通用LLM]"
-    
-    # 如果 .env 中没有模型名，则使用 config 作为备用
-    if not llm_model:
-        llm_model = config.get("llm_model", "gpt-4o-mini")
-    
-    # Detect Anthropic API keys (sk-ant-) and use native ANTHROPIC platform
-    is_anthropic = llm_api_key.startswith("sk-ant-") or "anthropic" in (llm_base_url or "").lower()
-
-    if is_anthropic:
-        os.environ["ANTHROPIC_API_KEY"] = llm_api_key
-        print(f"{config_label} [Anthropic] model={llm_model}...")
-        return ModelFactory.create(
-            model_platform=ModelPlatformType.ANTHROPIC,
-            model_type=llm_model,
-        )
-
-    # 设置 camel-ai 所需的环境变量 (OpenAI-compatible)
-    if llm_api_key:
-        os.environ["OPENAI_API_KEY"] = llm_api_key
-
-    if not os.environ.get("OPENAI_API_KEY"):
-        raise ValueError("缺少 API Key 配置，请在项目根目录 .env 文件中设置 LLM_API_KEY")
-
-    if llm_base_url:
-        os.environ["OPENAI_API_BASE_URL"] = llm_base_url
-
-    print(f"{config_label} model={llm_model}, base_url={llm_base_url[:40] if llm_base_url else '默认'}...")
-
-    return ModelFactory.create(
-        model_platform=ModelPlatformType.OPENAI,
-        model_type=llm_model,
-    )
 
 
 def get_active_agents_for_round(
@@ -1668,39 +1443,8 @@ async def main():
     log_manager.info("=" * 60)
 
 
-def setup_signal_handlers(loop=None):
-    """
-    设置信号处理器，确保收到 SIGTERM/SIGINT 时能够正确退出
-    
-    持久化模拟场景：模拟完成后不退出，等待 interview 命令
-    当收到终止信号时，需要：
-    1. 通知 asyncio 循环退出等待
-    2. 让程序有机会正常清理资源（关闭数据库、环境等）
-    3. 然后才退出
-    """
-    def signal_handler(signum, frame):
-        global _cleanup_done
-        sig_name = "SIGTERM" if signum == signal.SIGTERM else "SIGINT"
-        print(f"\n收到 {sig_name} 信号，正在退出...")
-        
-        if not _cleanup_done:
-            _cleanup_done = True
-            # 设置事件通知 asyncio 循环退出（让循环有机会清理资源）
-            if _shutdown_event:
-                _shutdown_event.set()
-        
-        # 不要直接 sys.exit()，让 asyncio 循环正常退出并清理资源
-        # 如果是重复收到信号，才强制退出
-        else:
-            print("强制退出...")
-            sys.exit(1)
-    
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
-
-
 if __name__ == "__main__":
-    setup_signal_handlers()
+    setup_signal_handlers(lambda: _shutdown_event, _cleanup_done)
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
