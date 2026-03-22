@@ -462,7 +462,21 @@ def prepare_simulation():
         entity_types_list = data.get('entity_types')
         use_llm_for_profiles = data.get('use_llm_for_profiles', True)
         parallel_profile_count = data.get('parallel_profile_count', 5)
-        
+
+        # 验证 parallel_profile_count 参数
+        try:
+            parallel_profile_count = int(parallel_profile_count)
+            if parallel_profile_count < 1 or parallel_profile_count > 50:
+                return jsonify({
+                    "success": False,
+                    "error": "parallel_profile_count 必须在 1 到 50 之间"
+                }), 400
+        except (ValueError, TypeError):
+            return jsonify({
+                "success": False,
+                "error": "parallel_profile_count 必须是有效的整数"
+            }), 400
+
         # ========== 同步获取实体数量（在后台任务启动前） ==========
         # 这样前端在调用prepare后立即就能获取到预期Agent总数
         try:
@@ -1488,10 +1502,10 @@ def start_simulation():
         if max_rounds is not None:
             try:
                 max_rounds = int(max_rounds)
-                if max_rounds <= 0:
+                if max_rounds < 1 or max_rounds > 1000:
                     return jsonify({
                         "success": False,
-                        "error": "max_rounds 必须是正整数"
+                        "error": "max_rounds 必须在 1 到 1000 之间"
                     }), 400
             except (ValueError, TypeError):
                 return jsonify({

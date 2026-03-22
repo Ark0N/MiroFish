@@ -6,7 +6,7 @@ Report API路由
 import os
 import traceback
 import threading
-from flask import request, jsonify, send_file
+from flask import request, jsonify, send_file, after_this_request
 
 from . import report_bp
 from ..config import Config
@@ -414,12 +414,20 @@ def download_report(report_id: str):
         if not os.path.exists(md_path):
             # 如果MD文件不存在，生成一个临时文件
             import tempfile
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
-                f.write(report.markdown_content)
-                temp_path = f.name
-            
+            temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False)
+            temp_file.write(report.markdown_content)
+            temp_file.close()
+
+            @after_this_request
+            def cleanup(response):
+                try:
+                    os.unlink(temp_file.name)
+                except OSError:
+                    pass
+                return response
+
             return send_file(
-                temp_path,
+                temp_file.name,
                 as_attachment=True,
                 download_name=f"{report_id}.md"
             )
