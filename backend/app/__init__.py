@@ -58,6 +58,13 @@ def create_app(config_class=Config):
     SimulationRunner.register_cleanup()
     if should_log_startup:
         logger.info("已注册模拟进程清理函数")
+
+    # Register Graphiti cleanup on shutdown
+    import atexit
+    from .utils.graphiti_manager import GraphitiManager
+    atexit.register(GraphitiManager.close)
+    if should_log_startup:
+        logger.info(f"Graphiti ready (Neo4j: {Config.NEO4J_URI})")
     
     # 请求日志中间件
     @app.before_request

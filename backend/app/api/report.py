@@ -1013,9 +1013,9 @@ def search_graph_tool():
                 "error": "请提供 graph_id 和 query"
             }), 400
         
-        from ..services.zep_tools import ZepToolsService
+        from ..services.graph_tools import GraphToolsService
         
-        tools = ZepToolsService()
+        tools = GraphToolsService()
         result = tools.search_graph(
             graph_id=graph_id,
             query=query,
@@ -1057,9 +1057,9 @@ def get_graph_statistics_tool():
                 "error": "请提供 graph_id"
             }), 400
         
-        from ..services.zep_tools import ZepToolsService
+        from ..services.graph_tools import GraphToolsService
         
-        tools = ZepToolsService()
+        tools = GraphToolsService()
         result = tools.get_graph_statistics(graph_id)
         
         return jsonify({

@@ -16,7 +16,7 @@ from enum import Enum
 from ..config import Config
 from ..utils.logger import get_logger
 from ..utils.validation import validate_safe_id
-from .zep_entity_reader import ZepEntityReader
+from .graph_entity_reader import GraphEntityReader
 from .oasis_profile_generator import OasisProfileGenerator
 from .simulation_config_generator import SimulationConfigGenerator, SimulationParameters
 
@@ -292,7 +292,7 @@ class SimulationManager:
             if progress_callback:
                 progress_callback("reading", 0, "正在连接Zep图谱...")
             
-            reader = ZepEntityReader()
+            reader = GraphEntityReader()
             
             if progress_callback:
                 progress_callback("reading", 30, "正在读取节点数据...")
