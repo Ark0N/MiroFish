@@ -134,9 +134,20 @@ class SimulationManager:
     _simulations: Dict[str, SimulationState] = {}
     _cache_lock = threading.Lock()
 
+    # Singleton
+    _instance = None
+    _init_lock = threading.Lock()
+
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._init_lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    os.makedirs(cls.SIMULATION_DATA_DIR, exist_ok=True)
+        return cls._instance
+
     def __init__(self):
-        # 确保目录存在
-        os.makedirs(self.SIMULATION_DATA_DIR, exist_ok=True)
+        pass  # init handled in __new__
     
     def _get_simulation_dir(self, simulation_id: str) -> str:
         """获取模拟数据目录"""
