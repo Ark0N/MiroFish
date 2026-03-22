@@ -121,7 +121,10 @@ This fork adapts all LLM calls for Anthropic's native SDK:
 | `NEO4J_URI` | Yes | Neo4j bolt URI (default: `bolt://localhost:7687`) |
 | `NEO4J_USER` | Yes | Neo4j username (default: `neo4j`) |
 | `NEO4J_PASSWORD` | Yes | Neo4j password |
-| `VOYAGE_API_KEY` | Yes | Voyage AI API key (for Graphiti embeddings) |
+| `VOYAGE_API_KEY` | No | Voyage AI API key (if set, uses Voyage instead of local embeddings) |
+| `EMBEDDER_BASE_URL` | No | Local embedder URL (default: `http://localhost:11434/v1` for Ollama) |
+| `EMBEDDER_MODEL` | No | Local embedding model (default: `nomic-embed-text`) |
+| `EMBEDDER_DIM` | No | Embedding dimensions (default: `768`) |
 | `LLM_BOOST_*` | No | Optional second LLM for parallel simulation speedup |
 | `CORS_ORIGINS` | No | Comma-separated origins (default: `http://localhost:3000,http://127.0.0.1:3000`) |
 | `OASIS_DEFAULT_MAX_ROUNDS` | No | Simulation rounds (default: 10) |

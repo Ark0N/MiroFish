@@ -37,8 +37,13 @@ class Config:
     NEO4J_USER = os.environ.get('NEO4J_USER', 'neo4j')
     NEO4J_PASSWORD = os.environ.get('NEO4J_PASSWORD', 'mirofish_neo4j')
 
-    # Voyage AI embeddings (for Graphiti semantic search)
+    # Embeddings for Graphiti semantic search
+    # Option 1: Voyage AI (set VOYAGE_API_KEY)
+    # Option 2: Local via Ollama or any OpenAI-compatible server (default)
     VOYAGE_API_KEY = os.environ.get('VOYAGE_API_KEY', '')
+    EMBEDDER_BASE_URL = os.environ.get('EMBEDDER_BASE_URL', 'http://localhost:11434/v1')
+    EMBEDDER_MODEL = os.environ.get('EMBEDDER_MODEL', 'nomic-embed-text')
+    EMBEDDER_DIM = int(os.environ.get('EMBEDDER_DIM', '768'))
 
     # 文件上传配置
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50MB
@@ -79,6 +84,6 @@ class Config:
             errors.append("LLM_API_KEY 未配置")
         if not cls.NEO4J_URI:
             errors.append("NEO4J_URI 未配置")
-        if not cls.VOYAGE_API_KEY:
-            errors.append("VOYAGE_API_KEY 未配置 (required for Graphiti embeddings)")
+        if not cls.VOYAGE_API_KEY and not cls.EMBEDDER_BASE_URL:
+            errors.append("Either VOYAGE_API_KEY or EMBEDDER_BASE_URL must be configured for embeddings")
         return errors

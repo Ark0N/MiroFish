@@ -8,7 +8,6 @@ import threading
 import concurrent.futures
 from typing import Optional, Iterable
 
-import voyageai
 from graphiti_core import Graphiti
 from graphiti_core.llm_client.anthropic_client import AnthropicClient
 from graphiti_core.llm_client.config import LLMConfig
@@ -20,10 +19,39 @@ from ..utils.logger import get_logger
 logger = get_logger('mirofish.graphiti')
 
 
+def _create_embedder() -> EmbedderClient:
+    """Create the appropriate embedder based on configuration.
+
+    Uses Voyage AI if VOYAGE_API_KEY is set, otherwise uses an
+    OpenAI-compatible local server (e.g. Ollama) via EMBEDDER_BASE_URL.
+    """
+    if Config.VOYAGE_API_KEY:
+        import voyageai
+        return VoyageAIEmbedder(api_key=Config.VOYAGE_API_KEY)
+
+    # Local embeddings via OpenAI-compatible server (Ollama, TEI, etc.)
+    from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
+
+    base_url = Config.EMBEDDER_BASE_URL
+    model = Config.EMBEDDER_MODEL
+    dim = Config.EMBEDDER_DIM
+
+    logger.info(f"Using local embedder: model={model}, dim={dim}, base_url={base_url}")
+    return OpenAIEmbedder(
+        config=OpenAIEmbedderConfig(
+            embedding_model=model,
+            embedding_dim=dim,
+            api_key="ollama",  # Ollama ignores this but the client requires it
+            base_url=base_url,
+        )
+    )
+
+
 class VoyageAIEmbedder(EmbedderClient):
     """Voyage AI embedder implementing Graphiti's EmbedderClient interface."""
 
     def __init__(self, api_key: Optional[str] = None, model: str = 'voyage-3-lite'):
+        import voyageai
         self.api_key = api_key or Config.VOYAGE_API_KEY
         self.model = model
         self._client = voyageai.AsyncClient(api_key=self.api_key)
@@ -66,7 +94,7 @@ class GraphitiManager:
                         )
                     )
 
-                    embedder = VoyageAIEmbedder(api_key=Config.VOYAGE_API_KEY)
+                    embedder = _create_embedder()
 
                     cls._instance = Graphiti(
                         uri=Config.NEO4J_URI,
