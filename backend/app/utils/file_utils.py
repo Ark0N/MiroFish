@@ -37,3 +37,7 @@ def atomic_write_json(file_path: str, data: Dict[str, Any]) -> None:
     finally:
         fcntl.flock(lock_fd, fcntl.LOCK_UN)
         os.close(lock_fd)
+        try:
+            os.unlink(lock_path)
+        except OSError:
+            pass  # Another process may have already removed it
