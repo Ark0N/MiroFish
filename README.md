@@ -2,202 +2,191 @@
 
 <img src="./static/image/MiroFish_logo_compressed.jpeg" alt="MiroFish Logo" width="75%"/>
 
-<a href="https://trendshift.io/repositories/16144" target="_blank"><img src="https://trendshift.io/api/badge/repositories/16144" alt="666ghj%2FMiroFish | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-
-简洁通用的群体智能引擎，预测万物
-</br>
-<em>A Simple and Universal Swarm Intelligence Engine, Predicting Anything</em>
-
-<a href="https://www.shanda.com/" target="_blank"><img src="./static/image/shanda_logo.png" alt="666ghj%2MiroFish | Shanda" height="40"/></a>
+**A Simple and Universal Swarm Intelligence Engine, Predicting Anything**
 
 [![GitHub Stars](https://img.shields.io/github/stars/666ghj/MiroFish?style=flat-square&color=DAA520)](https://github.com/666ghj/MiroFish/stargazers)
-[![GitHub Watchers](https://img.shields.io/github/watchers/666ghj/MiroFish?style=flat-square)](https://github.com/666ghj/MiroFish/watchers)
 [![GitHub Forks](https://img.shields.io/github/forks/666ghj/MiroFish?style=flat-square)](https://github.com/666ghj/MiroFish/network)
 [![Docker](https://img.shields.io/badge/Docker-Build-2496ED?style=flat-square&logo=docker&logoColor=white)](https://hub.docker.com/)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/666ghj/MiroFish)
-
-[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white)](http://discord.gg/ePf5aPaHnA)
-[![X](https://img.shields.io/badge/X-Follow-000000?style=flat-square&logo=x&logoColor=white)](https://x.com/mirofish_ai)
-[![Instagram](https://img.shields.io/badge/Instagram-Follow-E4405F?style=flat-square&logo=instagram&logoColor=white)](https://www.instagram.com/mirofish_ai/)
-
-[English](./README-EN.md) | [中文文档](./README.md)
+[![License](https://img.shields.io/badge/License-AGPL--3.0-blue?style=flat-square)](LICENSE)
 
 </div>
 
-## ⚡ 项目概述
+---
 
-**MiroFish** 是一款基于多智能体技术的新一代 AI 预测引擎。通过提取现实世界的种子信息（如突发新闻、政策草案、金融信号），自动构建出高保真的平行数字世界。在此空间内，成千上万个具备独立人格、长期记忆与行为逻辑的智能体进行自由交互与社会演化。你可透过「上帝视角」动态注入变量，精准推演未来走向——**让未来在数字沙盘中预演，助决策在百战模拟后胜出**。
+## What is MiroFish?
 
-> 你只需：上传种子材料（数据分析报告或者有趣的小说故事），并用自然语言描述预测需求</br>
-> MiroFish 将返回：一份详尽的预测报告，以及一个可深度交互的高保真数字世界
+MiroFish is an AI-powered swarm intelligence prediction engine. Upload any seed document — a breaking news article, a policy draft, financial data, even a novel — and MiroFish builds a living digital world around it. Thousands of AI agents with unique personalities, memories, and behavioral patterns simulate realistic social interactions on Twitter and Reddit. The emergent collective behavior produces prediction reports that no single model could generate alone.
 
-### 我们的愿景
+> **You provide**: seed documents + a prediction question in plain English.
+> **MiroFish returns**: a detailed prediction report and a fully interactive digital world you can interrogate.
 
-MiroFish 致力于打造映射现实的群体智能镜像，通过捕捉个体互动引发的群体涌现，突破传统预测的局限：
+This is not toy-scale simulation. MiroFish runs thousands of autonomous agents across dual social platforms simultaneously, with real-time knowledge graph updates and a report agent that can interview any simulated person after the fact. The architecture is production-grade: atomic file persistence, subprocess isolation, graceful process cleanup, and a full 157-test suite.
 
-- **于宏观**：我们是决策者的预演实验室，让政策与公关在零风险中试错
-- **于微观**：我们是个人用户的创意沙盘，无论是推演小说结局还是探索脑洞，皆可有趣、好玩、触手可及
+## What This Fork Adds
 
-从严肃预测到趣味仿真，我们让每一个如果都能看见结果，让预测万物成为可能。
+This fork rewrites MiroFish's LLM backbone with a **hybrid architecture** that makes it dramatically more practical to run:
 
-## 🌐 在线体验
+### Claude Integration (Quality Where It Matters)
 
-欢迎访问在线 Demo 演示环境，体验我们为你准备的一次关于热点舆情事件的推演预测：[mirofish-live-demo](https://666ghj.github.io/mirofish-demo/)
+The upstream project targets Chinese LLM providers (Qwen via Alibaba) and requires a Zep Cloud subscription for memory. This fork replaces both with **Anthropic Claude** for all quality-critical phases:
 
-## 📸 系统截图
+- **Ontology extraction** — Claude analyzes your documents and identifies entity types and relationships
+- **Knowledge graph construction** — Graphiti entity extraction powered by Claude
+- **Agent profile generation** — Rich, nuanced personality creation
+- **Report generation** — ReACT-loop report agent with tool use
+- **Configuration generation** — Simulation parameter planning
 
-<div align="center">
-<table>
-<tr>
-<td><img src="./static/image/Screenshot/运行截图1.png" alt="截图1" width="100%"/></td>
-<td><img src="./static/image/Screenshot/运行截图2.png" alt="截图2" width="100%"/></td>
-</tr>
-<tr>
-<td><img src="./static/image/Screenshot/运行截图3.png" alt="截图3" width="100%"/></td>
-<td><img src="./static/image/Screenshot/运行截图4.png" alt="截图4" width="100%"/></td>
-</tr>
-<tr>
-<td><img src="./static/image/Screenshot/运行截图5.png" alt="截图5" width="100%"/></td>
-<td><img src="./static/image/Screenshot/运行截图6.png" alt="截图6" width="100%"/></td>
-</tr>
-</table>
-</div>
+The `LLMClient` auto-detects Anthropic keys (`sk-ant-` prefix) and handles Claude-specific requirements automatically: system message separation, think-tag stripping, and JSON mode via instruction appending rather than `response_format`.
 
-## 🎬 演示视频
+### Local LLM for Simulation ($0 API Cost)
 
-### 1. 武汉大学舆情推演预测 + MiroFish项目讲解
+The expensive part of MiroFish is the simulation — thousands of agent interactions across multiple rounds. This fork routes **all simulation traffic** to a local Ollama instance on your GPU:
 
-<div align="center">
-<a href="https://www.bilibili.com/video/BV1VYBsBHEMY/" target="_blank"><img src="./static/image/武大模拟演示封面.png" alt="MiroFish Demo Video" width="75%"/></a>
+- Both Twitter and Reddit platforms use the local model
+- Zero API cost for simulation rounds (upstream costs $3-4 per run on Haiku alone)
+- Only ontology/graph/reports hit the Claude API (~$0.50-1.50 per full run)
+- Configure once with `LLM_BOOST_*` environment variables
 
-点击图片查看使用微舆BettaFish生成的《武大舆情报告》进行预测的完整演示视频
-</div>
+### Local Embeddings (No External API Needed)
 
-### 2. 《红楼梦》失传结局推演预测
+Upstream MiroFish requires a Voyage AI API key for embeddings. This fork defaults to **local Ollama embeddings** with `nomic-embed-text`:
 
-<div align="center">
-<a href="https://www.bilibili.com/video/BV1cPk3BBExq" target="_blank"><img src="./static/image/红楼梦模拟推演封面.jpg" alt="MiroFish Demo Video" width="75%"/></a>
+- 768-dimension embeddings, entirely local
+- No rate limits, no API keys, no cost
+- Just `ollama pull nomic-embed-text` and you're set
+- Voyage AI still supported as an optional upgrade
 
-点击图片查看基于《红楼梦》前80回数十万字，MiroFish深度预测失传结局
-</div>
+### No Zep Cloud Dependency
 
-> **金融方向推演预测**、**时政要闻推演预测**等示例陆续更新中...
+Upstream requires a Zep Cloud subscription for agent memory. This fork replaces it with **Graphiti + Neo4j** — a self-hosted knowledge graph that you control completely. No external memory service, no subscription, no data leaving your infrastructure.
 
-## 🔄 工作流程
+## How It Works
 
-1. **图谱构建**：现实种子提取 & 个体与群体记忆注入 & GraphRAG构建
-2. **环境搭建**：实体关系抽取 & 人设生成 & 环境配置Agent注入仿真参数
-3. **开始模拟**：双平台并行模拟 & 自动解析预测需求 & 动态更新时序记忆
-4. **报告生成**：ReportAgent拥有丰富的工具集与模拟后环境进行深度交互
-5. **深度互动**：与模拟世界中的任意一位进行对话 & 与ReportAgent进行对话
+MiroFish follows a 5-step pipeline:
 
-## 🚀 快速开始
+| Step | What Happens |
+|------|-------------|
+| **1. Graph Construction** | Upload documents (PDF/MD/TXT). Claude extracts an ontology (entity types + relationships), then builds a Graphiti/Neo4j knowledge graph. |
+| **2. Environment Setup** | Entities become agent personas. Claude generates detailed personality profiles and simulation parameters (time dilation, activity patterns). |
+| **3. Simulation** | OASIS launches Twitter + Reddit simulations concurrently. Thousands of agents interact autonomously. Actions feed back into the knowledge graph in real-time. |
+| **4. Report Generation** | A ReACT-loop report agent uses retrieval tools (InsightForge, PanoramaSearch, QuickSearch) and post-simulation interviews to generate a structured prediction report. |
+| **5. Deep Interaction** | Chat with the report agent or any individual simulated agent for follow-up analysis. |
 
-### 一、源码部署（推荐）
+## Quick Start
 
-#### 前置要求
+### Prerequisites
 
-| 工具 | 版本要求 | 说明 | 安装检查 |
-|------|---------|------|---------|
-| **Node.js** | 18+ | 前端运行环境，包含 npm | `node -v` |
-| **Python** | ≥3.11, ≤3.12 | 后端运行环境 | `python --version` |
-| **uv** | 最新版 | Python 包管理器 | `uv --version` |
+| Tool | Version | Purpose |
+|------|---------|---------|
+| **Node.js** | 18+ | Frontend runtime |
+| **Python** | 3.11 - 3.12 | Backend runtime |
+| **uv** | Latest | Python package manager |
+| **Neo4j** | 5.x | Knowledge graph storage |
+| **Ollama** | Latest | Local embeddings (+ optional simulation LLM) |
 
-#### 1. 配置环境变量
+### 1. Configure Environment
 
 ```bash
-# 复制示例配置文件
 cp .env.example .env
-
-# 编辑 .env 文件，填入必要的 API 密钥
 ```
 
-**必需的环境变量：**
+Edit `.env` with your configuration:
 
 ```env
-# LLM API配置（支持 OpenAI SDK 格式的任意 LLM API）
-# 推荐使用阿里百炼平台qwen-plus模型：https://bailian.console.aliyun.com/
-# 注意消耗较大，可先进行小于40轮的模拟尝试
-LLM_API_KEY=your_api_key
-LLM_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-LLM_MODEL_NAME=qwen-plus
+# Claude API (required)
+LLM_API_KEY=sk-ant-your_key_here
+LLM_BASE_URL=https://api.anthropic.com/v1/
+LLM_MODEL_NAME=claude-haiku-4-5-20251001
 
-# Zep Cloud 配置
-# 每月免费额度即可支撑简单使用：https://app.getzep.com/
-ZEP_API_KEY=your_zep_api_key
+# Neo4j (required)
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=your_password
+
+# Local embeddings via Ollama (default, no API key needed)
+# Just run: ollama pull nomic-embed-text
+EMBEDDER_BASE_URL=http://localhost:11434/v1
+EMBEDDER_MODEL=nomic-embed-text
+EMBEDDER_DIM=768
+
+# Optional: Local simulation LLM for $0 agent costs
+# LLM_BOOST_API_KEY=ollama
+# LLM_BOOST_BASE_URL=http://your-gpu-machine:11434/v1
+# LLM_BOOST_MODEL_NAME=qwen3-sim
 ```
 
-#### 2. 安装依赖
+### 2. Install Dependencies
 
 ```bash
-# 一键安装所有依赖（根目录 + 前端 + 后端）
 npm run setup:all
 ```
 
-或者分步安装：
+### 3. Start Services
 
 ```bash
-# 安装 Node 依赖（根目录 + 前端）
-npm run setup
-
-# 安装 Python 依赖（后端，自动创建虚拟环境）
-npm run setup:backend
-```
-
-#### 3. 启动服务
-
-```bash
-# 同时启动前后端（在项目根目录执行）
+# Start both frontend and backend
 npm run dev
 ```
 
-**服务地址：**
-- 前端：`http://localhost:3000`
-- 后端 API：`http://localhost:5001`
-
-**单独启动：**
+- Frontend: `http://localhost:3000`
+- Backend API: `http://localhost:5001`
 
 ```bash
-npm run backend   # 仅启动后端
-npm run frontend  # 仅启动前端
+# Or start individually
+npm run backend    # Flask on port 5001
+npm run frontend   # Vite on port 3000
 ```
 
-### 二、Docker 部署
+### Docker Deployment
 
 ```bash
-# 1. 配置环境变量（同源码部署）
 cp .env.example .env
-
-# 2. 拉取镜像并启动
 docker compose up -d
 ```
 
-默认会读取根目录下的 `.env`，并映射端口 `3000（前端）/5001（后端）`
+Docker Compose includes Neo4j with health checks. Ports `3000` (frontend) and `5001` (backend) are mapped automatically.
 
-> 在 `docker-compose.yml` 中已通过注释提供加速镜像地址，可按需替换
+## Cost Comparison
 
-## 📬 更多交流
+| Setup | Simulation Cost | Total Cost per Run |
+|-------|----------------|-------------------|
+| **This fork (with local LLM)** | $0 | ~$0.50 - $1.50 (Claude for ontology/graph/reports only) |
+| **This fork (Claude only)** | ~$3-4 on Haiku | ~$4 - $5.50 |
+| **Upstream (Qwen + Zep)** | Variable (Qwen API) | Variable + Zep subscription |
 
-<div align="center">
-<img src="./static/image/QQ群.png" alt="QQ交流群" width="60%"/>
-</div>
+## Tech Stack
 
-&nbsp;
+- **Backend**: Python 3.11+ / Flask / Graphiti + Neo4j / CAMEL-AI OASIS
+- **Frontend**: Vue 3 (Composition API) / Vite / D3.js force-directed graphs / DOMPurify
+- **LLMs**: Anthropic Claude (quality phases) + Ollama (simulation + embeddings)
+- **Testing**: 157 tests across 4 test suites (pytest)
+- **Persistence**: File-based JSON with atomic writes (temp file + `os.replace()`)
 
-MiroFish团队长期招募全职/实习，如果你对多Agent应用感兴趣，欢迎投递简历至：**mirofish@shanda.com**
+## Project Structure
 
-## 📄 致谢
+```
+backend/
+  app/
+    api/          # Flask blueprints (graph, simulation, report)
+    services/     # Core business logic (11 service modules)
+    utils/        # LLM client, Graphiti manager, validation, retry
+    models/       # File-based project persistence
+  scripts/        # OASIS simulation subprocess runners
+  tests/          # 157 unit and integration tests
+frontend/
+  src/
+    views/        # Page-level Vue components
+    components/   # Step 1-5 workflow + graph visualization
+    api/          # Axios clients with retry logic
+    composables/  # Vue composables (toast notifications)
+```
 
-**MiroFish 得到了盛大集团的战略支持和孵化！**
+## Acknowledgments
 
-MiroFish 的仿真引擎由 **[OASIS](https://github.com/camel-ai/oasis)** 驱动，我们衷心感谢 CAMEL-AI 团队的开源贡献！
+MiroFish is built by the [MiroFish team](https://github.com/666ghj/MiroFish) with strategic support from Shanda Group. The simulation engine is powered by **[OASIS](https://github.com/camel-ai/oasis)** from the CAMEL-AI team.
 
-## 📈 项目统计
+This fork focuses on making MiroFish accessible to English-speaking users with best-in-class LLM integration and minimal external dependencies.
 
-<a href="https://www.star-history.com/#666ghj/MiroFish&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=666ghj/MiroFish&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=666ghj/MiroFish&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=666ghj/MiroFish&type=date&legend=top-left" />
- </picture>
-</a>
+## License
+
+[AGPL-3.0](LICENSE)
