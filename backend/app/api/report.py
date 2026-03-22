@@ -5,7 +5,7 @@ Report API路由
 
 import os
 import threading
-from flask import request, jsonify, send_file, after_this_request
+from flask import request, jsonify, send_file
 
 from . import report_bp
 from .. import limiter
@@ -443,24 +443,14 @@ def download_report(report_id: str):
         md_path = ReportManager._get_report_markdown_path(report_id)
         
         if not os.path.exists(md_path):
-            # 如果MD文件不存在，生成一个临时文件
-            import tempfile
-            temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False)
-            temp_file.write(report.markdown_content)
-            temp_file.close()
-
-            @after_this_request
-            def cleanup(response):
-                try:
-                    os.unlink(temp_file.name)
-                except OSError:
-                    pass
-                return response
-
+            # Serve from memory if MD file doesn't exist on disk
+            import io
+            buf = io.BytesIO(report.markdown_content.encode('utf-8'))
             return send_file(
-                temp_file.name,
+                buf,
                 as_attachment=True,
-                download_name=f"{report_id}.md"
+                download_name=f"{report_id}.md",
+                mimetype='text/markdown'
             )
         
         return send_file(
@@ -478,6 +468,7 @@ def download_report(report_id: str):
 
 
 @report_bp.route('/<report_id>', methods=['DELETE'])
+@limiter.limit("30 per minute")
 def delete_report(report_id: str):
     """删除报告"""
     err = _validate_path_id(report_id, "report_id")
@@ -509,6 +500,7 @@ def delete_report(report_id: str):
 # ============== Report Agent对话接口 ==============
 
 @report_bp.route('/chat', methods=['POST'])
+@limiter.limit("20 per minute")
 def chat_with_report_agent():
     """
     与Report Agent对话
@@ -996,6 +988,7 @@ def stream_console_log(report_id: str):
 # ============== 工具调用接口（供调试使用）==============
 
 @report_bp.route('/tools/search', methods=['POST'])
+@limiter.limit("30 per minute")
 def search_graph_tool():
     """
     图谱搜索工具接口（供调试使用）
@@ -1043,6 +1036,7 @@ def search_graph_tool():
 
 
 @report_bp.route('/tools/statistics', methods=['POST'])
+@limiter.limit("30 per minute")
 def get_graph_statistics_tool():
     """
     图谱统计工具接口（供调试使用）

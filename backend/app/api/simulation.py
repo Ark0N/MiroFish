@@ -171,6 +171,7 @@ def get_entities_by_type(graph_id: str, entity_type: str):
 # ============== 模拟管理接口 ==============
 
 @simulation_bp.route('/create', methods=['POST'])
+@limiter.limit("10 per minute")
 def create_simulation():
     """
     创建新的模拟
@@ -1403,6 +1404,7 @@ def download_simulation_script(script_name: str):
 # ============== Profile生成接口（独立使用） ==============
 
 @simulation_bp.route('/generate-profiles', methods=['POST'])
+@limiter.limit("5 per minute")
 def generate_profiles():
     """
     直接从图谱生成OASIS Agent Profile（不创建模拟）
@@ -1667,6 +1669,7 @@ def start_simulation():
 
 
 @simulation_bp.route('/stop', methods=['POST'])
+@limiter.limit("30 per minute")
 def stop_simulation():
     """
     停止模拟
@@ -2173,6 +2176,7 @@ def get_simulation_comments(simulation_id: str):
 # ============== Interview 采访接口 ==============
 
 @simulation_bp.route('/interview', methods=['POST'])
+@limiter.limit("20 per minute")
 def interview_agent():
     """
     采访单个Agent
@@ -2299,6 +2303,7 @@ def interview_agent():
 
 
 @simulation_bp.route('/interview/batch', methods=['POST'])
+@limiter.limit("5 per minute")
 def interview_agents_batch():
     """
     批量采访多个Agent
@@ -2434,6 +2439,7 @@ def interview_agents_batch():
 
 
 @simulation_bp.route('/interview/all', methods=['POST'])
+@limiter.limit("3 per minute")
 def interview_all_agents():
     """
     全局采访 - 使用相同问题采访所有Agent
