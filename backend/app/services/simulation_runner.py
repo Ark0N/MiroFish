@@ -12,7 +12,6 @@ import threading
 import subprocess
 import signal
 import atexit
-import tempfile
 from typing import Dict, Any, List, Optional, Union
 from dataclasses import dataclass, field
 from datetime import datetime
