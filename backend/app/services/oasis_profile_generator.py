@@ -199,7 +199,10 @@ class OasisProfileGenerator:
             import anthropic
             anthropic_kwargs = {"api_key": self.api_key}
             if self.base_url and "openai" not in self.base_url.lower():
-                anthropic_kwargs["base_url"] = self.base_url
+                clean_url = self.base_url.rstrip('/')
+                if clean_url.endswith('/v1'):
+                    clean_url = clean_url[:-3]
+                anthropic_kwargs["base_url"] = clean_url
             self._anthropic_client = anthropic.Anthropic(**anthropic_kwargs)
             self.client = None
         else:
