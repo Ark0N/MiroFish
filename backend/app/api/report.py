@@ -16,6 +16,7 @@ from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager
 from ..models.task import TaskManager, TaskStatus
 from ..utils.logger import get_logger
+from ..utils.validation import validate_safe_id
 
 logger = get_logger('mirofish.api.report')
 
@@ -53,11 +54,12 @@ def generate_report():
         
         simulation_id = data.get('simulation_id')
         if not simulation_id:
-            return jsonify({
-                "success": False,
-                "error": "请提供 simulation_id"
-            }), 400
-        
+            return jsonify({"success": False, "error": "请提供 simulation_id"}), 400
+        try:
+            validate_safe_id(simulation_id, "simulation_id")
+        except ValueError as e:
+            return jsonify({"success": False, "error": str(e)}), 400
+
         force_regenerate = data.get('force_regenerate', False)
         
         # 获取模拟信息
@@ -232,6 +234,12 @@ def get_generate_status():
             task_id = data.get('task_id')
             simulation_id = data.get('simulation_id')
         
+        if simulation_id:
+            try:
+                validate_safe_id(simulation_id, "simulation_id")
+            except ValueError as e:
+                return jsonify({"success": False, "error": str(e)}), 400
+
         # 如果提供了simulation_id，先检查是否已有完成的报告
         if simulation_id:
             existing_report = ReportManager.get_report_by_simulation(simulation_id)
@@ -509,12 +517,13 @@ def chat_with_report_agent():
         simulation_id = data.get('simulation_id')
         message = data.get('message')
         chat_history = data.get('chat_history', [])
-        
+
         if not simulation_id:
-            return jsonify({
-                "success": False,
-                "error": "请提供 simulation_id"
-            }), 400
+            return jsonify({"success": False, "error": "请提供 simulation_id"}), 400
+        try:
+            validate_safe_id(simulation_id, "simulation_id")
+        except ValueError as e:
+            return jsonify({"success": False, "error": str(e)}), 400
         
         if not message:
             return jsonify({
