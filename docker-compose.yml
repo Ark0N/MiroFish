@@ -1,4 +1,21 @@
 services:
+  neo4j:
+    image: neo4j:5.26-community
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/mirofish_neo4j
+    volumes:
+      - neo4j_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "neo4j", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
   mirofish:
     build: .
     ports:
@@ -7,6 +24,9 @@ services:
     volumes:
       - ./backend/uploads:/app/backend/uploads
     restart: unless-stopped
+    depends_on:
+      neo4j:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -23,3 +43,6 @@ services:
       options:
         max-size: "50m"
         max-file: "5"
+
+volumes:
+  neo4j_data:

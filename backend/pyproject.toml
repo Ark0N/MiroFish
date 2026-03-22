@@ -14,8 +14,9 @@ dependencies = [
     "flask-cors>=6.0.0",
     # LLM
     "openai>=1.0.0",
-    # Zep Cloud
-    "zep-cloud==3.13.0",
+    # Graphiti (knowledge graph engine, replaces Zep Cloud)
+    "graphiti-core[voyageai]>=0.5",
+    "neo4j>=5.0.0",
     # OASIS social media simulation
     "camel-oasis==0.2.5",
     "camel-ai==0.2.78",

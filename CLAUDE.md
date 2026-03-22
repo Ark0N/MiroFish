@@ -26,7 +26,7 @@ npm run frontend   # Vite on port 3000
 # Build frontend
 npm run build
 
-# Run all tests (126 tests)
+# Run all tests (157 tests)
 cd backend && uv run pytest
 
 # Run specific test file
@@ -46,42 +46,59 @@ docker compose up --build
 
 ### 5-Step Pipeline
 
-1. **Graph Construction** — Upload docs (PDF/MD/TXT) → `OntologyGenerator` extracts entity/relationship types via LLM → `GraphBuilderService` creates Zep knowledge graph
-2. **Environment Setup** — `ZepEntityReader` extracts entities → `OasisProfileGenerator` creates agent personas → `SimulationConfigGenerator` generates simulation parameters
-3. **Simulation** — `SimulationRunner` launches OASIS as subprocess (Twitter + Reddit in parallel) → agents interact autonomously → `ZepGraphMemoryUpdater` feeds actions back to graph
-4. **Report Generation** — `ReportAgent` (ReACT loop) uses 4 retrieval tools (InsightForge, PanoramaSearch, QuickSearch, interviews) → generates structured Markdown report
-5. **Deep Interaction** — Chat with ReportAgent or individual agents for follow-up analysis
+1. **Graph Construction** — Upload docs (PDF/MD/TXT) → `OntologyGenerator` extracts entity/relationship types via LLM → `GraphBuilderService` creates Zep knowledge graph. Ontology enforces exactly 10 entity types with `Person` and `Organization` as mandatory fallbacks.
+2. **Environment Setup** — `ZepEntityReader` extracts entities → `OasisProfileGenerator` creates agent personas (CSV/JSON) → `SimulationConfigGenerator` generates simulation parameters including time dilation and peak activity hours (19:00-22:00 CST).
+3. **Simulation** — `SimulationRunner` launches OASIS as subprocess → Twitter + Reddit run concurrently via `asyncio.gather` within a single subprocess → agents interact autonomously → `ZepGraphMemoryUpdater` feeds actions back to graph. After rounds complete, simulation enters **Wait Mode** (process stays alive for post-simulation interviews).
+4. **Report Generation** — `ReportAgent` (ReACT loop) uses 4 retrieval tools (InsightForge, PanoramaSearch, QuickSearch, interviews) → generates structured Markdown report.
+5. **Deep Interaction** — Chat with ReportAgent or individual agents for follow-up analysis.
 
 ### Backend (`backend/app/`)
 
 - `api/` — Flask blueprints: `graph.py` (ontology + graph building + project CRUD), `simulation.py` (largest API file), `report.py` — all under `/api/`
-- `services/` — Core business logic. Key services: `ontology_generator.py`, `graph_builder.py` (Zep SDK wrapper), `oasis_profile_generator.py` (entities → OASIS agent profiles as CSV/JSON), `simulation_runner.py` (subprocess-based OASIS execution with IPC), `report_agent.py` (ReACT tool loop, largest service file)
-- `utils/llm_client.py` — Unified LLM client with `chat()` and `chat_json()` methods. Auto-detects Anthropic keys (`sk-ant-*`) vs OpenAI-compatible. Strips `<think>` tags (closed and unclosed) from reasoning models. For JSON mode with Claude, appends system prompt instruction instead of `response_format`.
-- `utils/validation.py` — `validate_safe_id()` for path traversal prevention on project_id/simulation_id parameters
+- `services/` — Core business logic:
+  - `ontology_generator.py` — LLM-driven entity/relationship extraction (enforces exactly 10 entity types, excludes reserved Zep field names like `uuid`, `created_at`, `summary`)
+  - `graph_builder.py` — Zep SDK wrapper. Graph IDs prefixed `mirofish_`. Text chunks sent as `EpisodeData` in batches of 3. Uses dynamic Pydantic model creation for `EntityModel`/`EdgeModel`.
+  - `oasis_profile_generator.py` — Converts entities to OASIS agent profiles (CSV/JSON)
+  - `simulation_runner.py` — Subprocess-based OASIS execution with file-based IPC
+  - `simulation_ipc.py` — Directory-based message queue: writes JSON commands to `ipc_commands/`, polls responses from `ipc_responses/`. Command types: `INTERVIEW`, `BATCH_INTERVIEW`, `CLOSE_ENV`
+  - `simulation_manager.py` — Orchestrates simulation lifecycle. `SimulationStatus` enum: `CREATED` → `PREPARING` → `READY` → (running) → `COMPLETED`/`FAILED`
+  - `report_agent.py` — ReACT tool loop (largest service file)
+  - `zep_entity_reader.py`, `zep_graph_memory_updater.py`, `zep_tools.py` — Zep graph integration
+  - `simulation_config_generator.py` — Generates OASIS config with time dilation and timezone settings
+  - `text_processor.py` — Document text extraction and chunking
+- `utils/` — `llm_client.py` (unified LLM client, auto-detects Anthropic vs OpenAI), `validation.py` (path traversal prevention), `retry.py` (exponential backoff decorator), `file_parser.py`/`file_utils.py` (multi-stage encoding fallback: UTF-8 → charset_normalizer → chardet → replace mode), `logger.py`, `zep_paging.py`
 - `models/` — File-based persistence (JSON on disk under `backend/uploads/projects/`). Atomic writes (temp file + `os.replace()`). No database. Project states: `CREATED` → `ONTOLOGY_GENERATED` → `GRAPH_BUILDING` → `GRAPH_COMPLETED`
-- `scripts/` — Standalone OASIS simulation runners (`run_twitter_simulation.py`, `run_reddit_simulation.py`, `run_parallel_simulation.py`) launched as subprocesses by `SimulationRunner`
-- `tests/` — 126 unit and integration tests: `test_llm_client.py` (50), `test_project.py` (30), `test_retry.py` (28), `test_api.py` (18)
+- `scripts/` (at `backend/scripts/`, not `backend/app/scripts/`) — Standalone OASIS simulation runners (`run_twitter_simulation.py`, `run_reddit_simulation.py`, `run_parallel_simulation.py`) launched as subprocesses by `SimulationRunner`. Also `action_logger.py` (JSONL logging per platform) and `simulation_utils.py`.
+- `tests/` — 157 unit and integration tests: `test_llm_client.py` (52), `test_api.py` (40), `test_project.py` (39), `test_retry.py` (25)
 
 ### Frontend (`frontend/src/`)
 
-- Vue 3 Composition API (`<script setup>`) throughout, no state management library (just a simple reactive store in `store/pendingUpload.js` with localStorage persistence)
+- Vue 3 Composition API (`<script setup>`) throughout, no state management library (just a simple reactive store in `store/pendingUpload.js` with localStorage persistence — uses `reactive()` deliberately since File objects can't be deeply reactive)
 - `views/` — Page-level components: `Home.vue` (landing + file upload), `MainView.vue` (layout wrapper + multi-step wizard orchestrator), `SimulationRunView.vue`, `ReportView.vue`, `InteractionView.vue`, `NotFound.vue` (404)
 - Router has `beforeEach` navigation guards validating required route params; routes use lazy loading via dynamic imports
-- `components/Step{1-5}*.vue` — Workflow steps matching the 5-step pipeline. `Step4Report.vue` is the largest (~5150 lines)
+- `components/Step{1-5}*.vue` — Workflow steps matching the 5-step pipeline. `Step4Report.vue` is the largest (~5046 lines)
 - `components/GraphPanel.vue` — D3.js force-directed graph visualization with interactive node/edge selection
+- `components/HistoryDatabase.vue` — History/database browser; `Toast.vue` + `composables/useToast.js` for notifications
 - `api/` — Axios clients with 5-minute timeout, `requestWithRetry()` exponential backoff, proxied to `:5001` via Vite config
+- Step 5 (Interaction) performs a multi-hop data fetch: `reportId` → `simulation_id` → `project_id` → `graph_id` → graph data
 - No linting or formatting tools configured
 - Custom CSS only (no framework), Google Fonts: Inter, JetBrains Mono, Noto Sans SC, Space Grotesk
 
 ### Key Patterns
 
+- **File-based IPC**: Simulation subprocess communicates with Flask via directory-based message queue (`ipc_commands/` and `ipc_responses/` directories with JSON files), not pipes or sockets
+- **Simulation Wait Mode**: After rounds complete, OASIS process stays alive for post-simulation agent interviews rather than exiting
 - **Async operations**: Graph building, simulation, and report generation are all async tasks with progress polling (not WebSockets)
-- **Subprocess isolation**: OASIS simulations run in separate Python processes with IPC to avoid blocking Flask
 - **Thread safety**: `SimulationRunner` uses `threading.Lock` for class-level state; `ZepGraphMemoryUpdater` uses `_counter_lock` for counter atomicity
 - **Atomic persistence**: All JSON file writes use temp file + `os.replace()` to prevent corruption
+- **JSONL action logging**: Agent actions stream to platform-specific `actions.jsonl` files via `PlatformActionLogger`; report agent uses `agent_log.jsonl`
+- **Platform action whitelists**: Hardcoded in `config.py` — Twitter: `CREATE_POST`, `REPOST`, `QUOTE`, `LIKE`, `FOLLOW`, `IDLE`; Reddit: `POST`, `COMMENT`, `LIKE`, `DISLIKE`, `SEARCH`, `TREND`, `FOLLOW`, `MUTE`, `REFRESH`, `IDLE`
+- **Process cleanup**: `atexit` handlers kill orphaned simulation subprocesses on Flask shutdown; simulation scripts handle `SIGINT`/`SIGTERM` for graceful closure; frontend calls `checkAndStopRunningSimulation()` on mount to terminate orphans
+- **Simulation state files**: `run_state.json` (recovery after restart), `state.json` (metadata + entity counts) in project upload directory
 - **Input validation**: `validate_safe_id()` prevents path traversal; API params have bounds checking
 - **XSS prevention**: All `v-html` rendered content is sanitized via DOMPurify in shared `utils/markdown.js`
-- **UI language**: English (translated from original Chinese)
+- **Zep community summaries**: Generated asynchronously after graph build — frontend includes manual refresh hint since summaries have a delay
+- **UI language**: English (translated from original Chinese; some backend comments still in Chinese)
 
 ## Claude API Integration (Fork-Specific)
 
