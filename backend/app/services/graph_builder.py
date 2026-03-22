@@ -11,6 +11,8 @@ from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass
 from datetime import datetime
 
+from graphiti_core.nodes import EpisodeType
+
 from ..config import Config
 from ..models.task import TaskManager, TaskStatus
 from ..utils.graph_paging import fetch_all_nodes, fetch_all_edges
@@ -218,7 +220,7 @@ class GraphBuilderService:
                     episode_body=chunk,
                     source_description="MiroFish document upload",
                     reference_time=datetime.now(),
-                    source="text",
+                    source=EpisodeType.text,
                     group_id=graph_id,
                     entity_types=entity_types,
                 ))
