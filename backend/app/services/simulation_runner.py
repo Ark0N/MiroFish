@@ -12,6 +12,7 @@ import threading
 import subprocess
 import signal
 import atexit
+import tempfile
 from typing import Dict, Any, List, Optional, Union
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -215,6 +216,9 @@ class SimulationRunner:
         '../../scripts'
     )
     
+    # Threading lock for all class-level mutable dicts
+    _lock = threading.Lock()
+
     # 内存中的运行状态
     _run_states: Dict[str, SimulationRunState] = {}
     _processes: Dict[str, subprocess.Popen] = {}
@@ -222,20 +226,22 @@ class SimulationRunner:
     _monitor_threads: Dict[str, threading.Thread] = {}
     _stdout_files: Dict[str, Any] = {}  # 存储 stdout 文件句柄
     _stderr_files: Dict[str, Any] = {}  # 存储 stderr 文件句柄
-    
+
     # 图谱记忆更新配置
     _graph_memory_enabled: Dict[str, bool] = {}  # simulation_id -> enabled
     
     @classmethod
     def get_run_state(cls, simulation_id: str) -> Optional[SimulationRunState]:
         """获取运行状态"""
-        if simulation_id in cls._run_states:
-            return cls._run_states[simulation_id]
-        
-        # 尝试从文件加载
+        with cls._lock:
+            if simulation_id in cls._run_states:
+                return cls._run_states[simulation_id]
+
+        # 尝试从文件加载（outside lock - file I/O)
         state = cls._load_run_state(simulation_id)
         if state:
-            cls._run_states[simulation_id] = state
+            with cls._lock:
+                cls._run_states[simulation_id] = state
         return state
     
     @classmethod
@@ -296,18 +302,30 @@ class SimulationRunner:
     
     @classmethod
     def _save_run_state(cls, state: SimulationRunState):
-        """保存运行状态到文件"""
+        """保存运行状态到文件（atomic write via temp file + os.replace）"""
         sim_dir = os.path.join(cls.RUN_STATE_DIR, state.simulation_id)
         os.makedirs(sim_dir, exist_ok=True)
         state_file = os.path.join(sim_dir, "run_state.json")
-        
+
         data = state.to_detail_dict()
-        
-        with open(state_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        
-        cls._run_states[state.simulation_id] = state
-    
+
+        temp_fd, temp_path = tempfile.mkstemp(
+            dir=os.path.dirname(state_file), suffix='.tmp'
+        )
+        try:
+            with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            os.replace(temp_path, state_file)
+        except:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+            raise
+
+        with cls._lock:
+            cls._run_states[state.simulation_id] = state
+
     @classmethod
     def start_simulation(
         cls,
@@ -372,16 +390,19 @@ class SimulationRunner:
         if enable_graph_memory_update:
             if not graph_id:
                 raise ValueError("启用图谱记忆更新时必须提供 graph_id")
-            
+
             try:
                 ZepGraphMemoryManager.create_updater(simulation_id, graph_id)
-                cls._graph_memory_enabled[simulation_id] = True
+                with cls._lock:
+                    cls._graph_memory_enabled[simulation_id] = True
                 logger.info(f"已启用图谱记忆更新: simulation_id={simulation_id}, graph_id={graph_id}")
             except Exception as e:
                 logger.error(f"创建图谱记忆更新器失败: {e}")
-                cls._graph_memory_enabled[simulation_id] = False
+                with cls._lock:
+                    cls._graph_memory_enabled[simulation_id] = False
         else:
-            cls._graph_memory_enabled[simulation_id] = False
+            with cls._lock:
+                cls._graph_memory_enabled[simulation_id] = False
         
         # 确定运行哪个脚本（脚本位于 backend/scripts/ 目录）
         if platform == "twitter":
@@ -402,7 +423,8 @@ class SimulationRunner:
         
         # 创建动作队列
         action_queue = Queue()
-        cls._action_queues[simulation_id] = action_queue
+        with cls._lock:
+            cls._action_queues[simulation_id] = action_queue
         
         # 启动模拟进程
         try:
@@ -446,23 +468,24 @@ class SimulationRunner:
                 start_new_session=True,  # 创建新进程组，确保服务器关闭时能终止所有相关进程
             )
             
-            # 保存文件句柄以便后续关闭
-            cls._stdout_files[simulation_id] = main_log_file
-            cls._stderr_files[simulation_id] = None  # 不再需要单独的 stderr
-            
+            # 保存文件句柄和进程引用（under lock for dict writes)
             state.process_pid = process.pid
             state.runner_status = RunnerStatus.RUNNING
-            cls._processes[simulation_id] = process
+            with cls._lock:
+                cls._stdout_files[simulation_id] = main_log_file
+                cls._stderr_files[simulation_id] = None  # 不再需要单独的 stderr
+                cls._processes[simulation_id] = process
             cls._save_run_state(state)
-            
-            # 启动监控线程
+
+            # 启动监控线程（outside lock - thread.start is a long op)
             monitor_thread = threading.Thread(
                 target=cls._monitor_simulation,
                 args=(simulation_id,),
                 daemon=True
             )
             monitor_thread.start()
-            cls._monitor_threads[simulation_id] = monitor_thread
+            with cls._lock:
+                cls._monitor_threads[simulation_id] = monitor_thread
             
             logger.info(f"模拟启动成功: {simulation_id}, pid={process.pid}, platform={platform}")
             
@@ -483,7 +506,8 @@ class SimulationRunner:
         twitter_actions_log = os.path.join(sim_dir, "twitter", "actions.jsonl")
         reddit_actions_log = os.path.join(sim_dir, "reddit", "actions.jsonl")
         
-        process = cls._processes.get(simulation_id)
+        with cls._lock:
+            process = cls._processes.get(simulation_id)
         state = cls.get_run_state(simulation_id)
         
         if not process or not state:
@@ -548,32 +572,35 @@ class SimulationRunner:
             cls._save_run_state(state)
         
         finally:
-            # 停止图谱记忆更新器
-            if cls._graph_memory_enabled.get(simulation_id, False):
+            # 停止图谱记忆更新器 (check under lock, call stop outside lock)
+            with cls._lock:
+                graph_mem_enabled = cls._graph_memory_enabled.get(simulation_id, False)
+            if graph_mem_enabled:
                 try:
                     ZepGraphMemoryManager.stop_updater(simulation_id)
                     logger.info(f"已停止图谱记忆更新: simulation_id={simulation_id}")
                 except Exception as e:
                     logger.error(f"停止图谱记忆更新器失败: {e}")
-                cls._graph_memory_enabled.pop(simulation_id, None)
-            
-            # 清理进程资源
-            cls._processes.pop(simulation_id, None)
-            cls._action_queues.pop(simulation_id, None)
-            
-            # 关闭日志文件句柄
-            if simulation_id in cls._stdout_files:
+                with cls._lock:
+                    cls._graph_memory_enabled.pop(simulation_id, None)
+
+            # 清理进程资源和文件句柄 (grab handles under lock, close outside)
+            with cls._lock:
+                cls._processes.pop(simulation_id, None)
+                cls._action_queues.pop(simulation_id, None)
+                stdout_fh = cls._stdout_files.pop(simulation_id, None)
+                stderr_fh = cls._stderr_files.pop(simulation_id, None)
+
+            if stdout_fh:
                 try:
-                    cls._stdout_files[simulation_id].close()
+                    stdout_fh.close()
                 except Exception:
                     pass
-                cls._stdout_files.pop(simulation_id, None)
-            if simulation_id in cls._stderr_files and cls._stderr_files[simulation_id]:
+            if stderr_fh:
                 try:
-                    cls._stderr_files[simulation_id].close()
+                    stderr_fh.close()
                 except Exception:
                     pass
-                cls._stderr_files.pop(simulation_id, None)
     
     @classmethod
     def _read_action_log(
@@ -596,7 +623,8 @@ class SimulationRunner:
             新的读取位置
         """
         # 检查是否启用了图谱记忆更新
-        graph_memory_enabled = cls._graph_memory_enabled.get(state.simulation_id, False)
+        with cls._lock:
+            graph_memory_enabled = cls._graph_memory_enabled.get(state.simulation_id, False)
         graph_updater = None
         if graph_memory_enabled:
             graph_updater = ZepGraphMemoryManager.get_updater(state.simulation_id)
@@ -781,8 +809,9 @@ class SimulationRunner:
         state.runner_status = RunnerStatus.STOPPING
         cls._save_run_state(state)
         
-        # 终止进程
-        process = cls._processes.get(simulation_id)
+        # 终止进程 (grab ref under lock, terminate outside lock)
+        with cls._lock:
+            process = cls._processes.get(simulation_id)
         if process and process.poll() is None:
             try:
                 cls._terminate_process(process, simulation_id)
@@ -797,21 +826,24 @@ class SimulationRunner:
                     process.wait(timeout=5)
                 except Exception:
                     process.kill()
-        
+
         state.runner_status = RunnerStatus.STOPPED
         state.twitter_running = False
         state.reddit_running = False
         state.completed_at = datetime.now().isoformat()
         cls._save_run_state(state)
-        
+
         # 停止图谱记忆更新器
-        if cls._graph_memory_enabled.get(simulation_id, False):
+        with cls._lock:
+            graph_mem_enabled = cls._graph_memory_enabled.get(simulation_id, False)
+        if graph_mem_enabled:
             try:
                 ZepGraphMemoryManager.stop_updater(simulation_id)
                 logger.info(f"已停止图谱记忆更新: simulation_id={simulation_id}")
             except Exception as e:
                 logger.error(f"停止图谱记忆更新器失败: {e}")
-            cls._graph_memory_enabled.pop(simulation_id, None)
+            with cls._lock:
+                cls._graph_memory_enabled.pop(simulation_id, None)
         
         logger.info(f"模拟已停止: {simulation_id}")
         return state
@@ -1164,8 +1196,8 @@ class SimulationRunner:
                         errors.append(f"删除 {dir_name}/actions.jsonl 失败: {str(e)}")
         
         # 清理内存中的运行状态
-        if simulation_id in cls._run_states:
-            del cls._run_states[simulation_id]
+        with cls._lock:
+            cls._run_states.pop(simulation_id, None)
         
         logger.info(f"清理模拟日志完成: {simulation_id}, 删除文件: {cleaned_files}")
         
@@ -1190,30 +1222,33 @@ class SimulationRunner:
             return
         cls._cleanup_done = True
         
-        # 检查是否有内容需要清理（避免空进程的进程打印无用日志）
-        has_processes = bool(cls._processes)
-        has_updaters = bool(cls._graph_memory_enabled)
-        
+        # Check if there is anything to clean up (snapshot under lock)
+        with cls._lock:
+            has_processes = bool(cls._processes)
+            has_updaters = bool(cls._graph_memory_enabled)
+
         if not has_processes and not has_updaters:
             return  # 没有需要清理的内容，静默返回
-        
+
         logger.info("正在清理所有模拟进程...")
-        
+
         # 首先停止所有图谱记忆更新器（stop_all 内部会打印日志）
         try:
             ZepGraphMemoryManager.stop_all()
         except Exception as e:
             logger.error(f"停止图谱记忆更新器失败: {e}")
-        cls._graph_memory_enabled.clear()
-        
-        # 复制字典以避免在迭代时修改
-        processes = list(cls._processes.items())
-        
+        with cls._lock:
+            cls._graph_memory_enabled.clear()
+
+        # 复制字典以避免在迭代时修改 (snapshot under lock)
+        with cls._lock:
+            processes = list(cls._processes.items())
+
         for simulation_id, process in processes:
             try:
                 if process.poll() is None:  # 进程仍在运行
                     logger.info(f"终止模拟进程: {simulation_id}, pid={process.pid}")
-                    
+
                     try:
                         # 使用跨平台的进程终止方法
                         cls._terminate_process(process, simulation_id, timeout=5)
@@ -1224,7 +1259,7 @@ class SimulationRunner:
                             process.wait(timeout=3)
                         except Exception:
                             process.kill()
-                    
+
                     # 更新 run_state.json
                     state = cls.get_run_state(simulation_id)
                     if state:
@@ -1234,7 +1269,7 @@ class SimulationRunner:
                         state.completed_at = datetime.now().isoformat()
                         state.error = "服务器关闭，模拟被终止"
                         cls._save_run_state(state)
-                    
+
                     # 同时更新 state.json，将状态设为 stopped
                     try:
                         sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
@@ -1252,30 +1287,32 @@ class SimulationRunner:
                             logger.warning(f"state.json 不存在: {state_file}")
                     except Exception as state_err:
                         logger.warning(f"更新 state.json 失败: {simulation_id}, error={state_err}")
-                        
+
             except Exception as e:
                 logger.error(f"清理进程失败: {simulation_id}, error={e}")
-        
-        # 清理文件句柄
-        for simulation_id, file_handle in list(cls._stdout_files.items()):
+
+        # Snapshot and clear file handles under lock, then close outside lock
+        with cls._lock:
+            stdout_handles = list(cls._stdout_files.items())
+            stderr_handles = list(cls._stderr_files.items())
+            cls._stdout_files.clear()
+            cls._stderr_files.clear()
+            cls._processes.clear()
+            cls._action_queues.clear()
+
+        for simulation_id, file_handle in stdout_handles:
             try:
                 if file_handle:
                     file_handle.close()
             except Exception:
                 pass
-        cls._stdout_files.clear()
-        
-        for simulation_id, file_handle in list(cls._stderr_files.items()):
+
+        for simulation_id, file_handle in stderr_handles:
             try:
                 if file_handle:
                     file_handle.close()
             except Exception:
                 pass
-        cls._stderr_files.clear()
-        
-        # 清理内存中的状态
-        cls._processes.clear()
-        cls._action_queues.clear()
         
         logger.info("模拟进程清理完成")
     
@@ -1314,7 +1351,9 @@ class SimulationRunner:
         def cleanup_handler(signum=None, frame=None):
             """信号处理器：先清理模拟进程，再调用原处理器"""
             # 只有在有进程需要清理时才打印日志
-            if cls._processes or cls._graph_memory_enabled:
+            with cls._lock:
+                has_work = bool(cls._processes) or bool(cls._graph_memory_enabled)
+            if has_work:
                 logger.info(f"收到信号 {signum}，开始清理...")
             cls.cleanup_all_simulations()
             

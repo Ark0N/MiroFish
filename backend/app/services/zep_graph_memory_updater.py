@@ -258,7 +258,8 @@ class ZepGraphMemoryUpdater:
         self._running = False
         self._worker_thread: Optional[threading.Thread] = None
         
-        # 统计
+        # 统计（protected by _counter_lock for thread safety）
+        self._counter_lock = threading.Lock()
         self._total_activities = 0  # 实际添加到队列的活动数
         self._total_sent = 0        # 成功发送到Zep的批次数
         self._total_items_sent = 0  # 成功发送到Zep的活动条数
@@ -295,12 +296,18 @@ class ZepGraphMemoryUpdater:
         if self._worker_thread and self._worker_thread.is_alive():
             self._worker_thread.join(timeout=10)
         
+        with self._counter_lock:
+            total_act = self._total_activities
+            total_sent = self._total_sent
+            total_items = self._total_items_sent
+            failed = self._failed_count
+            skipped = self._skipped_count
         logger.info(f"ZepGraphMemoryUpdater 已停止: graph_id={self.graph_id}, "
-                   f"total_activities={self._total_activities}, "
-                   f"batches_sent={self._total_sent}, "
-                   f"items_sent={self._total_items_sent}, "
-                   f"failed={self._failed_count}, "
-                   f"skipped={self._skipped_count}")
+                   f"total_activities={total_act}, "
+                   f"batches_sent={total_sent}, "
+                   f"items_sent={total_items}, "
+                   f"failed={failed}, "
+                   f"skipped={skipped}")
     
     def add_activity(self, activity: AgentActivity):
         """
@@ -325,11 +332,13 @@ class ZepGraphMemoryUpdater:
         """
         # 跳过DO_NOTHING类型的活动
         if activity.action_type == "DO_NOTHING":
-            self._skipped_count += 1
+            with self._counter_lock:
+                self._skipped_count += 1
             return
-        
+
         self._activity_queue.put(activity)
-        self._total_activities += 1
+        with self._counter_lock:
+            self._total_activities += 1
         logger.debug(f"添加活动到Zep队列: {activity.agent_name} - {activity.action_type}")
     
     def add_activity_from_dict(self, data: Dict[str, Any], platform: str):
@@ -411,20 +420,22 @@ class ZepGraphMemoryUpdater:
                     data=combined_text
                 )
                 
-                self._total_sent += 1
-                self._total_items_sent += len(activities)
+                with self._counter_lock:
+                    self._total_sent += 1
+                    self._total_items_sent += len(activities)
                 display_name = self._get_platform_display_name(platform)
                 logger.info(f"成功批量发送 {len(activities)} 条{display_name}活动到图谱 {self.graph_id}")
                 logger.debug(f"批量内容预览: {combined_text[:200]}...")
                 return
-                
+
             except Exception as e:
                 if attempt < self.MAX_RETRIES - 1:
                     logger.warning(f"批量发送到Zep失败 (尝试 {attempt + 1}/{self.MAX_RETRIES}): {e}")
                     time.sleep(self.RETRY_DELAY * (attempt + 1))
                 else:
                     logger.error(f"批量发送到Zep失败，已重试{self.MAX_RETRIES}次: {e}")
-                    self._failed_count += 1
+                    with self._counter_lock:
+                        self._failed_count += 1
     
     def _flush_remaining(self):
         """发送队列和缓冲区中剩余的活动"""
@@ -455,17 +466,24 @@ class ZepGraphMemoryUpdater:
         """获取统计信息"""
         with self._buffer_lock:
             buffer_sizes = {p: len(b) for p, b in self._platform_buffers.items()}
-        
+
+        with self._counter_lock:
+            total_activities = self._total_activities
+            total_sent = self._total_sent
+            total_items_sent = self._total_items_sent
+            failed_count = self._failed_count
+            skipped_count = self._skipped_count
+
         return {
             "graph_id": self.graph_id,
             "batch_size": self.BATCH_SIZE,
-            "total_activities": self._total_activities,  # 添加到队列的活动总数
-            "batches_sent": self._total_sent,            # 成功发送的批次数
-            "items_sent": self._total_items_sent,        # 成功发送的活动条数
-            "failed_count": self._failed_count,          # 发送失败的批次数
-            "skipped_count": self._skipped_count,        # 被过滤跳过的活动数（DO_NOTHING）
+            "total_activities": total_activities,    # 添加到队列的活动总数
+            "batches_sent": total_sent,              # 成功发送的批次数
+            "items_sent": total_items_sent,          # 成功发送的活动条数
+            "failed_count": failed_count,            # 发送失败的批次数
+            "skipped_count": skipped_count,          # 被过滤跳过的活动数（DO_NOTHING）
             "queue_size": self._activity_queue.qsize(),
-            "buffer_sizes": buffer_sizes,                # 各平台缓冲区大小
+            "buffer_sizes": buffer_sizes,            # 各平台缓冲区大小
             "running": self._running,
         }
 

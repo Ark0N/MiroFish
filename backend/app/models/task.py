@@ -56,10 +56,13 @@ class TaskManager:
     任务管理器
     线程安全的任务状态管理
     """
-    
+
     _instance = None
     _lock = threading.Lock()
-    
+
+    # Maximum number of tasks to keep in memory
+    MAX_TASKS = 1000
+
     def __new__(cls):
         """单例模式"""
         if cls._instance is None:
@@ -69,21 +72,43 @@ class TaskManager:
                     cls._instance._tasks: Dict[str, Task] = {}
                     cls._instance._task_lock = threading.Lock()
         return cls._instance
-    
+
+    def _evict_completed_tasks(self):
+        """
+        Evict oldest completed/failed tasks when over MAX_TASKS limit.
+        Must be called while holding self._task_lock.
+        """
+        if len(self._tasks) <= self.MAX_TASKS:
+            return
+
+        # Find completed/failed tasks sorted by creation time (oldest first)
+        finished = [
+            (tid, task) for tid, task in self._tasks.items()
+            if task.status in [TaskStatus.COMPLETED, TaskStatus.FAILED]
+        ]
+        finished.sort(key=lambda x: x[1].created_at)
+
+        # Remove oldest finished tasks until we're at or below MAX_TASKS
+        to_remove = len(self._tasks) - self.MAX_TASKS
+        for i, (tid, _) in enumerate(finished):
+            if i >= to_remove:
+                break
+            del self._tasks[tid]
+
     def create_task(self, task_type: str, metadata: Optional[Dict] = None) -> str:
         """
         创建新任务
-        
+
         Args:
             task_type: 任务类型
             metadata: 额外元数据
-            
+
         Returns:
             任务ID
         """
         task_id = str(uuid.uuid4())
         now = datetime.now()
-        
+
         task = Task(
             task_id=task_id,
             task_type=task_type,
@@ -92,10 +117,11 @@ class TaskManager:
             updated_at=now,
             metadata=metadata or {}
         )
-        
+
         with self._task_lock:
             self._tasks[task_id] = task
-        
+            self._evict_completed_tasks()
+
         return task_id
     
     def get_task(self, task_id: str) -> Optional[Task]:

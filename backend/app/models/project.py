@@ -7,11 +7,13 @@ import os
 import json
 import uuid
 import shutil
+import tempfile
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from enum import Enum
 from dataclasses import dataclass, field, asdict
 from ..config import Config
+from ..utils.validation import validate_safe_id
 
 
 class ProjectStatus(str, Enum):
@@ -112,6 +114,7 @@ class ProjectManager:
     @classmethod
     def _get_project_dir(cls, project_id: str) -> str:
         """获取项目目录路径"""
+        validate_safe_id(project_id, "project_id")
         return os.path.join(cls.PROJECTS_DIR, project_id)
     
     @classmethod
@@ -166,24 +169,36 @@ class ProjectManager:
     
     @classmethod
     def save_project(cls, project: Project) -> None:
-        """保存项目元数据"""
+        """保存项目元数据（atomic write via temp file + os.replace）"""
         project.updated_at = datetime.now().isoformat()
         meta_path = cls._get_project_meta_path(project.project_id)
-        
-        with open(meta_path, 'w', encoding='utf-8') as f:
-            json.dump(project.to_dict(), f, ensure_ascii=False, indent=2)
+
+        temp_fd, temp_path = tempfile.mkstemp(
+            dir=os.path.dirname(meta_path), suffix='.tmp'
+        )
+        try:
+            with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
+                json.dump(project.to_dict(), f, ensure_ascii=False, indent=2)
+            os.replace(temp_path, meta_path)
+        except:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+            raise
     
     @classmethod
     def get_project(cls, project_id: str) -> Optional[Project]:
         """
         获取项目
-        
+
         Args:
             project_id: 项目ID
-            
+
         Returns:
             Project对象，如果不存在返回None
         """
+        validate_safe_id(project_id, "project_id")
         meta_path = cls._get_project_meta_path(project_id)
         
         if not os.path.exists(meta_path):
@@ -222,13 +237,14 @@ class ProjectManager:
     def delete_project(cls, project_id: str) -> bool:
         """
         删除项目及其所有文件
-        
+
         Args:
             project_id: 项目ID
-            
+
         Returns:
             是否删除成功
         """
+        validate_safe_id(project_id, "project_id")
         project_dir = cls._get_project_dir(project_id)
         
         if not os.path.exists(project_dir):
@@ -241,15 +257,16 @@ class ProjectManager:
     def save_file_to_project(cls, project_id: str, file_storage, original_filename: str) -> Dict[str, str]:
         """
         保存上传的文件到项目目录
-        
+
         Args:
             project_id: 项目ID
             file_storage: Flask的FileStorage对象
             original_filename: 原始文件名
-            
+
         Returns:
             文件信息字典 {filename, path, size}
         """
+        validate_safe_id(project_id, "project_id")
         files_dir = cls._get_project_files_dir(project_id)
         os.makedirs(files_dir, exist_ok=True)
         
