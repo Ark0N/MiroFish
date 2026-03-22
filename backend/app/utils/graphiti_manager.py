@@ -86,6 +86,48 @@ class VoyageAIEmbedder(EmbedderClient):
         return result.embeddings
 
 
+class _AsyncBridge:
+    """Persistent event loop running in a background thread.
+
+    All Graphiti async operations go through this single loop so that
+    Neo4j driver futures stay attached to the same loop.
+    """
+
+    def __init__(self):
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._thread: Optional[threading.Thread] = None
+        self._lock = threading.Lock()
+
+    def _ensure_running(self):
+        if self._loop is not None and self._loop.is_running():
+            return
+        with self._lock:
+            if self._loop is not None and self._loop.is_running():
+                return
+            self._loop = asyncio.new_event_loop()
+            self._thread = threading.Thread(
+                target=self._loop.run_forever, daemon=True, name="graphiti-loop"
+            )
+            self._thread.start()
+            logger.info("Started persistent async event loop for Graphiti")
+
+    def run(self, coro):
+        self._ensure_running()
+        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        return future.result()
+
+    def stop(self):
+        if self._loop is not None and self._loop.is_running():
+            self._loop.call_soon_threadsafe(self._loop.stop)
+            if self._thread is not None:
+                self._thread.join(timeout=5)
+            self._loop = None
+            self._thread = None
+
+
+_bridge = _AsyncBridge()
+
+
 class GraphitiManager:
     """Thread-safe singleton for the Graphiti client."""
 
@@ -138,15 +180,5 @@ class GraphitiManager:
 
 
 def run_async(coro):
-    """Run an async coroutine from synchronous Flask/thread code."""
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-
-    if loop and loop.is_running():
-        # Already in an async context — run in a separate thread to avoid deadlock
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            return pool.submit(asyncio.run, coro).result()
-    else:
-        return asyncio.run(coro)
+    """Run an async coroutine via the persistent event loop bridge."""
+    return _bridge.run(coro)
