@@ -360,3 +360,63 @@ class TestProjectModel:
         assert restored.status == project.status
         assert restored.graph_id == project.graph_id
         assert restored.chunk_size == project.chunk_size
+
+
+class TestAtomicWriteJson:
+    """Tests for the atomic_write_json utility."""
+
+    def test_writes_valid_json(self, tmp_path):
+        from app.utils.file_utils import atomic_write_json
+        file_path = str(tmp_path / "test.json")
+        data = {"key": "value", "num": 42}
+        atomic_write_json(file_path, data)
+
+        with open(file_path, "r") as f:
+            loaded = json.load(f)
+        assert loaded == data
+
+    def test_creates_parent_directories(self, tmp_path):
+        from app.utils.file_utils import atomic_write_json
+        file_path = str(tmp_path / "nested" / "deep" / "test.json")
+        atomic_write_json(file_path, {"nested": True})
+
+        assert os.path.isfile(file_path)
+
+    def test_no_lock_files_remain(self, tmp_path):
+        from app.utils.file_utils import atomic_write_json
+        file_path = str(tmp_path / "clean.json")
+        atomic_write_json(file_path, {"clean": True})
+
+        remaining = os.listdir(str(tmp_path))
+        lock_files = [f for f in remaining if f.endswith(".lock")]
+        assert lock_files == []
+
+    def test_no_temp_files_remain(self, tmp_path):
+        from app.utils.file_utils import atomic_write_json
+        file_path = str(tmp_path / "no_tmp.json")
+        atomic_write_json(file_path, {"tmp": False})
+
+        remaining = os.listdir(str(tmp_path))
+        tmp_files = [f for f in remaining if f.endswith(".tmp")]
+        assert tmp_files == []
+
+    def test_overwrites_existing_file(self, tmp_path):
+        from app.utils.file_utils import atomic_write_json
+        file_path = str(tmp_path / "overwrite.json")
+        atomic_write_json(file_path, {"version": 1})
+        atomic_write_json(file_path, {"version": 2})
+
+        with open(file_path, "r") as f:
+            loaded = json.load(f)
+        assert loaded["version"] == 2
+
+    def test_handles_unicode(self, tmp_path):
+        from app.utils.file_utils import atomic_write_json
+        file_path = str(tmp_path / "unicode.json")
+        data = {"name": "模拟配置", "emoji": "🐟"}
+        atomic_write_json(file_path, data)
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            loaded = json.load(f)
+        assert loaded["name"] == "模拟配置"
+        assert loaded["emoji"] == "🐟"

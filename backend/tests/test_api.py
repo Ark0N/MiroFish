@@ -221,3 +221,75 @@ class TestReportCheckEndpoint:
         assert data['success'] is True
         assert data['data']['has_report'] is False
         assert data['data']['interview_unlocked'] is False
+
+
+class TestPathTraversalRejection:
+    """Verify that path traversal IDs are rejected with 400 errors."""
+
+    def test_simulation_create_rejects_traversal_project_id(self, client):
+        response = client.post('/api/simulation/create', json={
+            'project_id': '../../../etc/passwd'
+        })
+        assert response.status_code == 400
+        assert response.get_json()['success'] is False
+
+    def test_simulation_prepare_rejects_traversal_simulation_id(self, client):
+        response = client.post('/api/simulation/prepare', json={
+            'simulation_id': '../../malicious'
+        })
+        assert response.status_code == 400
+        assert response.get_json()['success'] is False
+
+    def test_simulation_start_rejects_traversal_simulation_id(self, client):
+        response = client.post('/api/simulation/start', json={
+            'simulation_id': 'sim_id/../../etc'
+        })
+        assert response.status_code == 400
+        assert response.get_json()['success'] is False
+
+    def test_simulation_stop_rejects_traversal_simulation_id(self, client):
+        response = client.post('/api/simulation/stop', json={
+            'simulation_id': '../traversal'
+        })
+        assert response.status_code == 400
+        assert response.get_json()['success'] is False
+
+    def test_report_generate_rejects_traversal_simulation_id(self, client):
+        response = client.post('/api/report/generate', json={
+            'simulation_id': '../../attack'
+        })
+        assert response.status_code == 400
+        assert response.get_json()['success'] is False
+
+    def test_report_chat_rejects_traversal_simulation_id(self, client):
+        response = client.post('/api/report/chat', json={
+            'simulation_id': '../../../etc/passwd',
+            'message': 'test'
+        })
+        assert response.status_code == 400
+        assert response.get_json()['success'] is False
+
+    def test_simulation_list_rejects_traversal_project_id(self, client):
+        response = client.get('/api/simulation/list', query_string={
+            'project_id': '../traversal'
+        })
+        assert response.status_code == 400
+        assert response.get_json()['success'] is False
+
+    def test_report_status_rejects_traversal_simulation_id(self, client):
+        response = client.get('/api/report/generate/status', query_string={
+            'simulation_id': '../../../etc/shadow'
+        })
+        assert response.status_code == 400
+        assert response.get_json()['success'] is False
+
+    def test_graph_project_rejects_traversal_id(self, client):
+        response = client.get('/api/graph/project/../../etc')
+        assert response.status_code in (400, 404)  # May raise ValueError caught differently
+
+    def test_env_status_rejects_traversal(self, client):
+        response = client.post('/api/simulation/env-status', json={
+            'simulation_id': '../../attack'
+        })
+        assert response.status_code == 400
+        assert response.get_json()['success'] is False
