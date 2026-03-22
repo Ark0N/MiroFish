@@ -36,7 +36,10 @@ class LLMClient:
 
         if self._use_anthropic:
             import anthropic
-            self.anthropic_client = anthropic.Anthropic(api_key=self.api_key)
+            anthropic_kwargs = {"api_key": self.api_key}
+            if self.base_url and "openai" not in self.base_url.lower():
+                anthropic_kwargs["base_url"] = self.base_url
+            self.anthropic_client = anthropic.Anthropic(**anthropic_kwargs)
             self.client = None
         else:
             self.anthropic_client = None

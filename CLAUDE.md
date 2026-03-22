@@ -57,7 +57,7 @@ docker compose up
 ### Frontend (`frontend/src/`)
 
 - Vue 3 Composition API (`<script setup>`) throughout, no state management library (just a simple reactive store in `store/pendingUpload.js`)
-- `views/` — Page-level: `Home.vue` (landing + file upload), `Process.vue` (multi-step wizard orchestrator), `MainView.vue` (layout wrapper), `SimulationRunView.vue`, `ReportView.vue`, `InteractionView.vue`
+- `views/` — Page-level: `Home.vue` (landing + file upload), `MainView.vue` (layout wrapper + multi-step wizard orchestrator), `SimulationRunView.vue`, `ReportView.vue`, `InteractionView.vue`
 - `components/Step{1-5}*.vue` — Workflow steps matching the 5-step pipeline. Step4Report.vue is the largest (~5150 lines)
 - `components/GraphPanel.vue` — D3.js force-directed graph visualization with interactive node/edge selection
 - `api/` — Axios clients with 5-minute timeout, `requestWithRetry()` exponential backoff, proxied to `:5001` via Vite config
@@ -76,7 +76,7 @@ docker compose up
 This fork adapts all LLM calls for Anthropic's native SDK:
 
 - **`llm_client.py`** — `LLMClient` auto-detects `sk-ant-` keys, separates system messages (Claude requirement), appends JSON instruction instead of `response_format: json_object`
-- **`oasis_profile_generator.py`** — `_enhance_with_llm` calls Anthropic API natively
+- **`oasis_profile_generator.py`** — `_generate_profile_with_llm` calls Anthropic API natively
 - **`simulation_config_generator.py`** — `_call_llm_with_retry` patched for Anthropic
 - **`run_*.py` scripts** — Detect Anthropic keys and use `ModelPlatformType.ANTHROPIC` in CAMEL-AI instead of `OPENAI`
 

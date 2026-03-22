@@ -9,6 +9,7 @@ OASIS Agent Profile生成器
 """
 
 import json
+import re
 import random
 import time
 from typing import Dict, Any, List, Optional
@@ -196,7 +197,10 @@ class OasisProfileGenerator:
         self._use_anthropic = _is_anthropic_key(self.api_key)
         if self._use_anthropic:
             import anthropic
-            self._anthropic_client = anthropic.Anthropic(api_key=self.api_key)
+            anthropic_kwargs = {"api_key": self.api_key}
+            if self.base_url and "openai" not in self.base_url.lower():
+                anthropic_kwargs["base_url"] = self.base_url
+            self._anthropic_client = anthropic.Anthropic(**anthropic_kwargs)
             self.client = None
         else:
             self._anthropic_client = None
@@ -546,7 +550,10 @@ class OasisProfileGenerator:
                         temperature=temp,
                         max_tokens=8192,
                     )
+                    if not resp.content:
+                        raise ValueError("Empty response from API")
                     content = resp.content[0].text
+                    content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.DOTALL).strip()
                     finish_reason = resp.stop_reason  # "end_turn" or "max_tokens"
                     if finish_reason == "max_tokens":
                         finish_reason = "length"

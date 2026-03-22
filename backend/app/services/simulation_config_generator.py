@@ -12,6 +12,7 @@
 
 import json
 import math
+import re
 from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
@@ -238,7 +239,10 @@ class SimulationConfigGenerator:
         self._use_anthropic = _is_anthropic_key(self.api_key)
         if self._use_anthropic:
             import anthropic
-            self._anthropic_client = anthropic.Anthropic(api_key=self.api_key)
+            anthropic_kwargs = {"api_key": self.api_key}
+            if self.base_url and "openai" not in self.base_url.lower():
+                anthropic_kwargs["base_url"] = self.base_url
+            self._anthropic_client = anthropic.Anthropic(**anthropic_kwargs)
             self.client = None
         else:
             self._anthropic_client = None
@@ -458,7 +462,10 @@ class SimulationConfigGenerator:
                         temperature=temp,
                         max_tokens=8192,
                     )
+                    if not resp.content:
+                        raise ValueError("Empty response from API")
                     content = resp.content[0].text
+                    content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.DOTALL).strip()
                     finish_reason = "length" if resp.stop_reason == "max_tokens" else "stop"
                 else:
                     response = self.client.chat.completions.create(

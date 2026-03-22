@@ -809,6 +809,7 @@ onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   if (currentSimulation) {
     currentSimulation.stop()
+    currentSimulation = null
   }
 })
 </script>

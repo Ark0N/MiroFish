@@ -693,6 +693,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopPolling()
+  isGeneratingReport.value = false
 })
 </script>
 

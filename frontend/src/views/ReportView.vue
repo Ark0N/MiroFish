@@ -200,7 +200,7 @@ const refreshGraph = () => {
 
 // Watch route params
 watch(() => route.params.reportId, (newId) => {
-  if (newId && newId !== currentReportId.value) {
+  if (newId) {
     currentReportId.value = newId
     loadReportData()
   }
@@ -208,7 +208,6 @@ watch(() => route.params.reportId, (newId) => {
 
 onMounted(() => {
   addLog('ReportView 初始化')
-  loadReportData()
 })
 </script>
 

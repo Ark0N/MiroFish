@@ -190,22 +190,25 @@ def generate_report():
         logger.error(f"启动报告生成任务失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
+            "error": str(e)
         }), 500
 
 
-@report_bp.route('/generate/status', methods=['POST'])
+@report_bp.route('/generate/status', methods=['GET', 'POST'])
 def get_generate_status():
     """
     查询报告生成任务进度
-    
-    请求（JSON）：
+
+    支持 GET 和 POST 两种方式：
+
+    GET /api/report/generate/status?task_id=task_xxxx&simulation_id=sim_xxxx
+
+    POST（JSON）：
         {
             "task_id": "task_xxxx",         // 可选，generate返回的task_id
             "simulation_id": "sim_xxxx"     // 可选，模拟ID
         }
-    
+
     返回：
         {
             "success": true,
@@ -218,10 +221,13 @@ def get_generate_status():
         }
     """
     try:
-        data = request.get_json() or {}
-        
-        task_id = data.get('task_id')
-        simulation_id = data.get('simulation_id')
+        if request.method == 'GET':
+            task_id = request.args.get('task_id')
+            simulation_id = request.args.get('simulation_id')
+        else:
+            data = request.get_json() or {}
+            task_id = data.get('task_id')
+            simulation_id = data.get('simulation_id')
         
         # 如果提供了simulation_id，先检查是否已有完成的报告
         if simulation_id:
@@ -306,8 +312,7 @@ def get_report(report_id: str):
         logger.error(f"获取报告失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
+            "error": str(e)
         }), 500
 
 
@@ -345,8 +350,7 @@ def get_report_by_simulation(simulation_id: str):
         logger.error(f"获取报告失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
+            "error": str(e)
         }), 500
 
 
@@ -385,8 +389,7 @@ def list_reports():
         logger.error(f"列出报告失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
+            "error": str(e)
         }), 500
 
 
@@ -431,8 +434,7 @@ def download_report(report_id: str):
         logger.error(f"下载报告失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
+            "error": str(e)
         }), 500
 
 
@@ -457,8 +459,7 @@ def delete_report(report_id: str):
         logger.error(f"删除报告失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
+            "error": str(e)
         }), 500
 
 
@@ -554,8 +555,7 @@ def chat_with_report_agent():
         logger.error(f"对话失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
+            "error": str(e)
         }), 500
 
 
@@ -597,8 +597,7 @@ def get_report_progress(report_id: str):
         logger.error(f"获取报告进度失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
+            "error": str(e)
         }), 500
 
 
@@ -648,8 +647,7 @@ def get_report_sections(report_id: str):
         logger.error(f"获取章节列表失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
+            "error": str(e)
         }), 500
 
 
@@ -692,8 +690,7 @@ def get_single_section(report_id: str, section_index: int):
         logger.error(f"获取章节内容失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
+            "error": str(e)
         }), 500
 
 
@@ -743,8 +740,7 @@ def check_report_status(simulation_id: str):
         logger.error(f"检查报告状态失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
+            "error": str(e)
         }), 500
 
 
@@ -804,8 +800,7 @@ def get_agent_log(report_id: str):
         logger.error(f"获取Agent日志失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
+            "error": str(e)
         }), 500
 
 
@@ -838,8 +833,7 @@ def stream_agent_log(report_id: str):
         logger.error(f"获取Agent日志失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
+            "error": str(e)
         }), 500
 
 
@@ -886,8 +880,7 @@ def get_console_log(report_id: str):
         logger.error(f"获取控制台日志失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
+            "error": str(e)
         }), 500
 
 
@@ -920,8 +913,7 @@ def stream_console_log(report_id: str):
         logger.error(f"获取控制台日志失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
+            "error": str(e)
         }), 500
 
 
@@ -970,8 +962,7 @@ def search_graph_tool():
         logger.error(f"图谱搜索失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
+            "error": str(e)
         }), 500
 
 
@@ -1010,6 +1001,5 @@ def get_graph_statistics_tool():
         logger.error(f"获取图谱统计失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
+            "error": str(e)
         }), 500
