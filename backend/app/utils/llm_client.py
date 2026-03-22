@@ -180,6 +180,11 @@ class LLMClient:
         except anthropic.APIConnectionError as e:
             raise RuntimeError(f"Anthropic connection error: {e}") from e
 
+        if response.stop_reason == "content_filter":
+            raise ValueError(
+                "Anthropic content filter triggered: response blocked by safety policy"
+            )
+
         if not response.content:
             raise ValueError("Empty response from Anthropic API")
 

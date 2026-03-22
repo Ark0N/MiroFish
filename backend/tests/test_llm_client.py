@@ -473,7 +473,66 @@ class TestLLMClientInit:
 
 
 # ---------------------------------------------------------------------------
-# 8. validate_safe_id
+# 8. content_filter stop_reason handling
+# ---------------------------------------------------------------------------
+
+class TestContentFilterHandling:
+    """Test that content_filter stop_reason raises an error."""
+
+    @patch("app.utils.llm_client.Config")
+    @patch("anthropic.Anthropic")
+    def test_content_filter_raises_valueerror(self, mock_anthropic_cls, mock_config):
+        mock_config.LLM_API_KEY = "sk-ant-api03-test"
+        mock_config.LLM_BASE_URL = "https://api.anthropic.com/v1/"
+        mock_config.LLM_MODEL_NAME = "claude-haiku-4-5-20251001"
+
+        mock_instance = MagicMock()
+        mock_anthropic_cls.return_value = mock_instance
+
+        # Simulate content_filter response
+        mock_response = MagicMock()
+        mock_response.stop_reason = "content_filter"
+        mock_response.content = [MagicMock(text="")]
+        mock_instance.messages.create.return_value = mock_response
+
+        from app.utils.llm_client import LLMClient
+        client = LLMClient(
+            api_key="sk-ant-api03-test",
+            base_url="https://api.anthropic.com/v1/",
+            model="claude-haiku-4-5-20251001",
+        )
+
+        with pytest.raises(ValueError, match="content filter"):
+            client.chat([{"role": "user", "content": "test"}])
+
+    @patch("app.utils.llm_client.Config")
+    @patch("anthropic.Anthropic")
+    def test_end_turn_succeeds(self, mock_anthropic_cls, mock_config):
+        mock_config.LLM_API_KEY = "sk-ant-api03-test"
+        mock_config.LLM_BASE_URL = "https://api.anthropic.com/v1/"
+        mock_config.LLM_MODEL_NAME = "claude-haiku-4-5-20251001"
+
+        mock_instance = MagicMock()
+        mock_anthropic_cls.return_value = mock_instance
+
+        mock_response = MagicMock()
+        mock_response.stop_reason = "end_turn"
+        mock_response.content = [MagicMock(text="Hello")]
+        mock_instance.messages.create.return_value = mock_response
+
+        from app.utils.llm_client import LLMClient
+        client = LLMClient(
+            api_key="sk-ant-api03-test",
+            base_url="https://api.anthropic.com/v1/",
+            model="claude-haiku-4-5-20251001",
+        )
+
+        result = client.chat([{"role": "user", "content": "test"}])
+        assert result == "Hello"
+
+
+# ---------------------------------------------------------------------------
+# 9. validate_safe_id
 # ---------------------------------------------------------------------------
 
 class TestValidateSafeId:
