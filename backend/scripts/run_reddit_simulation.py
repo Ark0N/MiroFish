@@ -449,18 +449,29 @@ class RedditSimulationRunner:
         if not llm_model:
             llm_model = self.config.get("llm_model", "gpt-4o-mini")
         
-        # 设置 camel-ai 所需的环境变量
+        # Detect Anthropic API keys (sk-ant-) and use native ANTHROPIC platform
+        is_anthropic = llm_api_key.startswith("sk-ant-") or "anthropic" in (llm_base_url or "").lower()
+
+        if is_anthropic:
+            os.environ["ANTHROPIC_API_KEY"] = llm_api_key
+            print(f"LLM配置: [Anthropic] model={llm_model}...")
+            return ModelFactory.create(
+                model_platform=ModelPlatformType.ANTHROPIC,
+                model_type=llm_model,
+            )
+
+        # 设置 camel-ai 所需的环境变量 (OpenAI-compatible)
         if llm_api_key:
             os.environ["OPENAI_API_KEY"] = llm_api_key
-        
+
         if not os.environ.get("OPENAI_API_KEY"):
             raise ValueError("缺少 API Key 配置，请在项目根目录 .env 文件中设置 LLM_API_KEY")
-        
+
         if llm_base_url:
             os.environ["OPENAI_API_BASE_URL"] = llm_base_url
-        
+
         print(f"LLM配置: model={llm_model}, base_url={llm_base_url[:40] if llm_base_url else '默认'}...")
-        
+
         return ModelFactory.create(
             model_platform=ModelPlatformType.OPENAI,
             model_type=llm_model,

@@ -17,6 +17,7 @@ from datetime import datetime
 
 from openai import OpenAI
 from zep_cloud.client import Zep
+from ..utils.llm_client import _is_anthropic_key
 
 from ..config import Config
 from ..utils.logger import get_logger
@@ -192,11 +193,18 @@ class OasisProfileGenerator:
         if not self.api_key:
             raise ValueError("LLM_API_KEY 未配置")
         
-        self.client = OpenAI(
-            api_key=self.api_key,
-            base_url=self.base_url
-        )
-        
+        self._use_anthropic = _is_anthropic_key(self.api_key)
+        if self._use_anthropic:
+            import anthropic
+            self._anthropic_client = anthropic.Anthropic(api_key=self.api_key)
+            self.client = None
+        else:
+            self._anthropic_client = None
+            self.client = OpenAI(
+                api_key=self.api_key,
+                base_url=self.base_url
+            )
+
         # Zep客户端用于检索丰富上下文
         self.zep_api_key = zep_api_key or Config.ZEP_API_KEY
         self.zep_client = None
@@ -526,21 +534,36 @@ class OasisProfileGenerator:
         
         for attempt in range(max_attempts):
             try:
-                response = self.client.chat.completions.create(
-                    model=self.model_name,
-                    messages=[
-                        {"role": "system", "content": self._get_system_prompt(is_individual)},
-                        {"role": "user", "content": prompt}
-                    ],
-                    response_format={"type": "json_object"},
-                    temperature=0.7 - (attempt * 0.1)  # 每次重试降低温度
-                    # 不设置max_tokens，让LLM自由发挥
-                )
-                
-                content = response.choices[0].message.content
-                
-                # 检查是否被截断（finish_reason不是'stop'）
-                finish_reason = response.choices[0].finish_reason
+                sys_prompt = self._get_system_prompt(is_individual)
+                temp = 0.7 - (attempt * 0.1)
+
+                if self._use_anthropic:
+                    json_hint = "\n\nIMPORTANT: Respond with valid JSON only. No markdown, no code blocks."
+                    resp = self._anthropic_client.messages.create(
+                        model=self.model_name,
+                        system=sys_prompt + json_hint,
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=temp,
+                        max_tokens=8192,
+                    )
+                    content = resp.content[0].text
+                    finish_reason = resp.stop_reason  # "end_turn" or "max_tokens"
+                    if finish_reason == "max_tokens":
+                        finish_reason = "length"
+                    else:
+                        finish_reason = "stop"
+                else:
+                    response = self.client.chat.completions.create(
+                        model=self.model_name,
+                        messages=[
+                            {"role": "system", "content": sys_prompt},
+                            {"role": "user", "content": prompt}
+                        ],
+                        response_format={"type": "json_object"},
+                        temperature=temp,
+                    )
+                    content = response.choices[0].message.content
+                    finish_reason = response.choices[0].finish_reason
                 if finish_reason == 'length':
                     logger.warning(f"LLM输出被截断 (attempt {attempt+1}), 尝试修复...")
                     content = self._fix_truncated_json(content)
