@@ -12,11 +12,24 @@ from graphiti_core import Graphiti
 from graphiti_core.llm_client.anthropic_client import AnthropicClient
 from graphiti_core.llm_client.config import LLMConfig
 from graphiti_core.embedder.client import EmbedderClient
+from graphiti_core.cross_encoder.client import CrossEncoderClient
 
 from ..config import Config
 from ..utils.logger import get_logger
 
 logger = get_logger('mirofish.graphiti')
+
+
+class NoOpCrossEncoder(CrossEncoderClient):
+    """Pass-through cross encoder that preserves original order.
+
+    Avoids the default OpenAIRerankerClient which requires OPENAI_API_KEY.
+    The cross encoder is only used for search reranking and is not critical
+    for graph construction.
+    """
+
+    async def rank(self, query: str, passages: list[str]) -> list[tuple[str, float]]:
+        return [(p, 1.0) for p in passages]
 
 
 def _create_embedder() -> EmbedderClient:
@@ -102,6 +115,7 @@ class GraphitiManager:
                         password=Config.NEO4J_PASSWORD,
                         llm_client=llm_client,
                         embedder=embedder,
+                        cross_encoder=NoOpCrossEncoder(),
                     )
 
                     run_async(cls._instance.build_indices_and_constraints())

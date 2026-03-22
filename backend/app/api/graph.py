@@ -5,6 +5,7 @@
 
 import os
 import threading
+import traceback
 from flask import request, jsonify
 
 from . import graph_bp
