@@ -8,6 +8,7 @@ import traceback
 from flask import request, jsonify, send_file
 
 from . import simulation_bp
+from .. import limiter
 from ..config import Config
 from ..services.zep_entity_reader import ZepEntityReader
 from ..services.oasis_profile_generator import OasisProfileGenerator
@@ -352,6 +353,7 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
 
 
 @simulation_bp.route('/prepare', methods=['POST'])
+@limiter.limit("10 per minute")
 def prepare_simulation():
     """
     准备模拟环境（异步任务，LLM智能生成所有参数）
@@ -644,6 +646,7 @@ def prepare_simulation():
 
 
 @simulation_bp.route('/prepare/status', methods=['POST'])
+@limiter.limit("60 per minute")
 def get_prepare_status():
     """
     查询准备任务进度
@@ -1443,6 +1446,7 @@ def generate_profiles():
 # ============== 模拟运行控制接口 ==============
 
 @simulation_bp.route('/start', methods=['POST'])
+@limiter.limit("10 per minute")
 def start_simulation():
     """
     开始运行模拟
@@ -1695,6 +1699,7 @@ def stop_simulation():
 # ============== 实时状态监控接口 ==============
 
 @simulation_bp.route('/<simulation_id>/run-status', methods=['GET'])
+@limiter.limit("60 per minute")
 def get_run_status(simulation_id: str):
     """
     获取模拟运行实时状态（用于前端轮询）

@@ -9,6 +9,7 @@ import threading
 from flask import request, jsonify
 
 from . import graph_bp
+from .. import limiter
 from ..config import Config
 from ..services.ontology_generator import OntologyGenerator
 from ..services.graph_builder import GraphBuilderService
@@ -119,6 +120,7 @@ def reset_project(project_id: str):
 # ============== 接口1：上传文件并生成本体 ==============
 
 @graph_bp.route('/ontology/generate', methods=['POST'])
+@limiter.limit("10 per minute")
 def generate_ontology():
     """
     接口1：上传文件，分析生成本体定义
@@ -256,6 +258,7 @@ def generate_ontology():
 # ============== 接口2：构建图谱 ==============
 
 @graph_bp.route('/build', methods=['POST'])
+@limiter.limit("10 per minute")
 def build_graph():
     """
     接口2：根据project_id构建图谱
@@ -540,6 +543,7 @@ def build_graph():
 # ============== 任务查询接口 ==============
 
 @graph_bp.route('/task/<task_id>', methods=['GET'])
+@limiter.limit("60 per minute")
 def get_task(task_id: str):
     """
     查询任务状态
@@ -575,6 +579,7 @@ def list_tasks():
 # ============== 图谱数据接口 ==============
 
 @graph_bp.route('/data/<graph_id>', methods=['GET'])
+@limiter.limit("30 per minute")
 def get_graph_data(graph_id: str):
     """
     获取图谱数据（节点和边）

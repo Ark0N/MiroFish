@@ -9,6 +9,7 @@ import threading
 from flask import request, jsonify, send_file, after_this_request
 
 from . import report_bp
+from .. import limiter
 from ..config import Config
 from ..services.report_agent import ReportAgent, ReportManager, ReportStatus
 from ..services.simulation_manager import SimulationManager
@@ -22,6 +23,7 @@ logger = get_logger('mirofish.api.report')
 # ============== 报告生成接口 ==============
 
 @report_bp.route('/generate', methods=['POST'])
+@limiter.limit("10 per minute")
 def generate_report():
     """
     生成模拟分析报告（异步任务）
@@ -195,6 +197,7 @@ def generate_report():
 
 
 @report_bp.route('/generate/status', methods=['GET', 'POST'])
+@limiter.limit("60 per minute")
 def get_generate_status():
     """
     查询报告生成任务进度
