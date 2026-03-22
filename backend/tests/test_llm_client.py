@@ -468,7 +468,8 @@ class TestLLMClientInit:
         )
 
         call_kwargs = mock_anthropic_cls.call_args.kwargs
-        assert call_kwargs["base_url"] == "https://api.anthropic.com/v1/"
+        # /v1/ suffix is stripped since the Anthropic SDK adds it internally
+        assert call_kwargs["base_url"] == "https://api.anthropic.com"
 
 
 # ---------------------------------------------------------------------------

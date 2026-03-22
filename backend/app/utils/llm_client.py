@@ -17,6 +17,31 @@ def _is_anthropic_key(api_key: str) -> bool:
     return api_key.startswith("sk-ant-")
 
 
+def _clean_anthropic_base_url(base_url: str) -> str:
+    """Strip trailing /v1/ from base_url since Anthropic SDK adds it internally."""
+    clean = base_url.rstrip('/')
+    if clean.endswith('/v1'):
+        clean = clean[:-3]
+    return clean
+
+
+def create_anthropic_client(api_key: str = None, base_url: str = None):
+    """
+    Factory for creating Anthropic client instances with consistent configuration.
+
+    Use this instead of creating anthropic.Anthropic() directly to ensure
+    base_url stripping, key validation, and consistent setup.
+    """
+    import anthropic
+    api_key = api_key or Config.LLM_API_KEY
+    base_url = base_url or Config.LLM_BASE_URL
+
+    kwargs = {"api_key": api_key}
+    if base_url and "openai" not in base_url.lower():
+        kwargs["base_url"] = _clean_anthropic_base_url(base_url)
+    return anthropic.Anthropic(**kwargs)
+
+
 class LLMClient:
     """LLM客户端 - 自动检测 Anthropic key 并使用原生 SDK"""
 
@@ -36,15 +61,7 @@ class LLMClient:
         self._use_anthropic = _is_anthropic_key(self.api_key)
 
         if self._use_anthropic:
-            import anthropic
-            anthropic_kwargs = {"api_key": self.api_key}
-            if self.base_url and "openai" not in self.base_url.lower():
-                # Anthropic SDK adds /v1/messages itself; strip trailing /v1/ if present
-                clean_url = self.base_url.rstrip('/')
-                if clean_url.endswith('/v1'):
-                    clean_url = clean_url[:-3]
-                anthropic_kwargs["base_url"] = clean_url
-            self.anthropic_client = anthropic.Anthropic(**anthropic_kwargs)
+            self.anthropic_client = create_anthropic_client(self.api_key, self.base_url)
             self.client = None
         else:
             self.anthropic_client = None
