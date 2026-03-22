@@ -4,10 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**MiroFish** is an AI-powered swarm intelligence prediction engine. It uploads seed documents, builds a knowledge graph, spawns thousands of AI agents with unique personalities, runs social media simulations (Twitter/Reddit), and produces prediction reports from emergent agent behavior.
+**MiroFish** is an AI-powered swarm intelligence prediction engine. Upload seed documents, build a knowledge graph, spawn thousands of AI agents with unique personalities, run social media simulations (Twitter/Reddit), and produce prediction reports from emergent agent behavior.
 
 - **Tech Stack**: Python 3.11+ (Flask), Vue 3 (Vite), CAMEL-AI/OASIS for simulation, Zep Cloud for knowledge graphs, D3.js for visualization
-- **LLM**: Configured to use Claude (Anthropic) via native SDK — auto-detected from `sk-ant-` API key prefix
+- **LLM**: This fork uses Claude (Anthropic) via native SDK — auto-detected from `sk-ant-` API key prefix. Upstream uses Qwen/OpenAI.
 - **License**: AGPL-3.0
 
 ## Build & Run Commands
@@ -31,6 +31,9 @@ cd backend && uv run pytest
 
 # Backend Python dependencies only
 cd backend && uv sync
+
+# Docker
+docker compose up
 ```
 
 ## Architecture
@@ -43,43 +46,39 @@ cd backend && uv sync
 4. **Report Generation** — `ReportAgent` (ReACT loop) uses 4 retrieval tools (InsightForge, PanoramaSearch, QuickSearch, interviews) → generates structured Markdown report
 5. **Deep Interaction** — Chat with ReportAgent or individual agents for follow-up analysis
 
-### Backend Structure (`backend/app/`)
+### Backend (`backend/app/`)
 
-- `api/` — Flask blueprints: `graph.py`, `simulation.py`, `report.py` (all under `/api/`)
-- `services/` — Core business logic (graph building, ontology, profiles, simulation management, report agent)
-- `utils/llm_client.py` — Unified LLM client, auto-detects Anthropic keys and uses native SDK
-- `models/` — File-based persistence (JSON on disk, no database)
-- `scripts/` — OASIS simulation runners (launched as subprocesses)
+- `api/` — Flask blueprints: `graph.py` (~620 lines, handles ontology + graph building + project CRUD), `simulation.py`, `report.py` (all under `/api/`)
+- `services/` — Core business logic. Key services: `ontology_generator.py`, `graph_builder.py` (Zep SDK wrapper), `oasis_profile_generator.py` (entities → OASIS agent profiles as CSV/JSON), `simulation_runner.py` (subprocess-based OASIS execution with IPC), `report_agent.py` (ReACT tool loop)
+- `utils/llm_client.py` — Unified LLM client with `chat()` and `chat_json()` methods. Auto-detects Anthropic keys (`sk-ant-*`) vs OpenAI-compatible. Strips `<think>` tags from reasoning models. For JSON mode with Claude, appends system prompt instruction instead of `response_format`.
+- `models/` — File-based persistence (JSON on disk under `backend/uploads/projects/`). No database. Project states: `CREATED` → `ONTOLOGY_GENERATED` → `GRAPH_BUILDING` → `GRAPH_COMPLETED`
+- `scripts/` — Standalone OASIS simulation runners (`run_twitter_simulation.py`, `run_reddit_simulation.py`, `run_parallel_simulation.py`) launched as subprocesses by `SimulationRunner`
 
-### Frontend Structure (`frontend/src/`)
+### Frontend (`frontend/src/`)
 
-- `components/Step{1-5}*.vue` — Workflow steps matching the 5-step pipeline
-- `components/GraphPanel.vue` — D3.js knowledge graph visualization
-- `api/` — Axios clients with retry logic, proxied to `:5001` via Vite config
-- `views/` — Page-level components (Home, MainView, SimulationRunView, ReportView, InteractionView)
+- Vue 3 Composition API (`<script setup>`) throughout, no state management library (just a simple reactive store in `store/pendingUpload.js`)
+- `views/` — Page-level: `Home.vue` (landing + file upload), `Process.vue` (multi-step wizard orchestrator), `MainView.vue` (layout wrapper), `SimulationRunView.vue`, `ReportView.vue`, `InteractionView.vue`
+- `components/Step{1-5}*.vue` — Workflow steps matching the 5-step pipeline. Step4Report.vue is the largest (~5150 lines)
+- `components/GraphPanel.vue` — D3.js force-directed graph visualization with interactive node/edge selection
+- `api/` — Axios clients with 5-minute timeout, `requestWithRetry()` exponential backoff, proxied to `:5001` via Vite config
+- No linting or formatting tools configured
+- Custom CSS only (no framework), Google Fonts: Inter, JetBrains Mono, Noto Sans SC, Space Grotesk
 
-### Key Data Flow
+### Key Patterns
 
-```
-Documents → LLM (Ontology) → Zep (Knowledge Graph) → Entity Extraction
-→ Agent Profiles → OASIS Simulation (Twitter/Reddit subprocess)
-→ Actions feed back to Zep Graph → ReACT Report Agent → Markdown Report
-→ Interactive Chat
-```
+- **Async operations**: Graph building, simulation, and report generation are all async tasks with progress polling (not WebSockets)
+- **Subprocess isolation**: OASIS simulations run in separate Python processes with IPC to avoid blocking Flask
+- **Bilingual UI**: Chinese primary with English support
+- **Simulation actions**: Twitter (CREATE_POST, LIKE_POST, REPOST, FOLLOW, QUOTE_POST, DO_NOTHING), Reddit (LIKE_POST, DISLIKE_POST, CREATE_POST, CREATE_COMMENT, etc.)
 
-### Persistence
+## Claude API Integration (Fork-Specific)
 
-All data is file-based JSON under `backend/uploads/projects/`. No SQL database.
+This fork adapts all LLM calls for Anthropic's native SDK:
 
-## Claude API Integration (Custom)
-
-This fork is adapted to use Claude instead of the default Qwen/OpenAI models:
-
-- **`backend/app/utils/llm_client.py`** — `LLMClient` auto-detects `sk-ant-` keys, uses Anthropic native SDK with proper system message separation and JSON prompting
-- **`backend/app/services/oasis_profile_generator.py`** — Patched `_enhance_with_llm` to call Anthropic API natively
-- **`backend/app/services/simulation_config_generator.py`** — Patched `_call_llm_with_retry` for Anthropic
-- **`backend/scripts/run_*.py`** — All 3 simulation scripts detect Anthropic keys and use `ModelPlatformType.ANTHROPIC` in CAMEL-AI instead of `OPENAI`
-- **JSON mode**: Claude doesn't support `response_format: json_object` — instead, a system prompt instruction is appended asking for pure JSON output
+- **`llm_client.py`** — `LLMClient` auto-detects `sk-ant-` keys, separates system messages (Claude requirement), appends JSON instruction instead of `response_format: json_object`
+- **`oasis_profile_generator.py`** — `_enhance_with_llm` calls Anthropic API natively
+- **`simulation_config_generator.py`** — `_call_llm_with_retry` patched for Anthropic
+- **`run_*.py` scripts** — Detect Anthropic keys and use `ModelPlatformType.ANTHROPIC` in CAMEL-AI instead of `OPENAI`
 
 ## Environment Variables (`.env`)
 
@@ -90,13 +89,18 @@ This fork is adapted to use Claude instead of the default Qwen/OpenAI models:
 | `LLM_MODEL_NAME` | Yes | e.g., `claude-haiku-4-5-20251001` |
 | `ZEP_API_KEY` | Yes | Zep Cloud API key |
 | `LLM_BOOST_*` | No | Optional second LLM for parallel simulation speedup |
+| `OASIS_DEFAULT_MAX_ROUNDS` | No | Simulation rounds (default: 10) |
 
 ## API Endpoints
 
-- `/api/graph/*` — Ontology generation, graph building, graph data retrieval
-- `/api/simulation/*` — Entity reading, simulation lifecycle, interviews, action history
-- `/api/report/*` — Report generation, progress, sections, chat, agent logs
-- `/health` — Health check
+- `POST /api/graph/ontology/generate` — Upload files + generate ontology (multipart form)
+- `POST /api/graph/build` — Build knowledge graph (async, poll via `GET /api/graph/task/{task_id}`)
+- `GET /api/graph/data/{graph_id}` — Fetch graph nodes/edges
+- `POST /api/simulation/prepare` — Generate agent profiles (async)
+- `POST /api/simulation/run` — Execute simulation
+- `POST /api/report/generate` — Generate report (async)
+- `POST /api/report/chat` — Chat with ReportAgent
+- `GET /health` — Health check
 
 ## Cost Warning
 
