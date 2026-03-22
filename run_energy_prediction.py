@@ -324,7 +324,7 @@ def run_pipeline(base_url, max_rounds=15):
     task_id = result["data"]["task_id"]
     print(f"  Graph build task started: {task_id}")
 
-    task_result = poll_task(base_url, task_id, "Graph Build", timeout=600)
+    task_result = poll_task(base_url, task_id, "Graph Build", timeout=1800)
     if not task_result:
         return False
 
