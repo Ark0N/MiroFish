@@ -126,16 +126,16 @@ class SimulationManager:
     
     # 模拟数据存储目录
     SIMULATION_DATA_DIR = os.path.join(
-        os.path.dirname(__file__), 
+        os.path.dirname(__file__),
         '../../uploads/simulations'
     )
-    
+
+    # 内存中的模拟状态缓存（类级别，所有实例共享）
+    _simulations: Dict[str, SimulationState] = {}
+
     def __init__(self):
         # 确保目录存在
         os.makedirs(self.SIMULATION_DATA_DIR, exist_ok=True)
-        
-        # 内存中的模拟状态缓存
-        self._simulations: Dict[str, SimulationState] = {}
     
     def _get_simulation_dir(self, simulation_id: str) -> str:
         """获取模拟数据目录"""

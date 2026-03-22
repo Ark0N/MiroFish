@@ -55,4 +55,27 @@ const router = createRouter({
   routes
 })
 
+router.beforeEach((to, from, next) => {
+  // Always allow home and 404
+  if (to.name === 'Home' || to.name === 'NotFound') {
+    return next()
+  }
+
+  // Check required params exist
+  const requiredParams = {
+    'Process': 'projectId',
+    'Simulation': 'simulationId',
+    'SimulationRun': 'simulationId',
+    'Report': 'reportId',
+    'Interaction': 'reportId'
+  }
+
+  const paramName = requiredParams[to.name]
+  if (paramName && !to.params[paramName]) {
+    return next({ name: 'Home' })
+  }
+
+  next()
+})
+
 export default router

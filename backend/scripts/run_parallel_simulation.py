@@ -527,10 +527,11 @@ class ParallelIPCHandler:
         if not os.path.exists(db_path):
             return result
         
+        conn = None
         try:
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
-            
+
             # 查询最新的Interview记录
             cursor.execute("""
                 SELECT user_id, info, created_at
@@ -539,7 +540,7 @@ class ParallelIPCHandler:
                 ORDER BY created_at DESC
                 LIMIT 1
             """, (ActionType.INTERVIEW.value, agent_id))
-            
+
             row = cursor.fetchone()
             if row:
                 user_id, info_json, created_at = row
@@ -549,11 +550,12 @@ class ParallelIPCHandler:
                     result["timestamp"] = created_at
                 except json.JSONDecodeError:
                     result["response"] = info_json
-            
-            conn.close()
-            
+
         except Exception as e:
             print(f"  读取Interview结果失败: {e}")
+        finally:
+            if conn is not None:
+                conn.close()
         
         return result
     
@@ -678,10 +680,11 @@ def fetch_new_actions_from_db(
     if not os.path.exists(db_path):
         return actions, new_last_rowid
     
+    conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        
+
         # 使用 rowid 来追踪已处理的记录（rowid 是 SQLite 的内置自增字段）
         # 这样可以避免 created_at 格式差异问题（Twitter 用整数，Reddit 用日期时间字符串）
         cursor.execute("""
@@ -690,21 +693,21 @@ def fetch_new_actions_from_db(
             WHERE rowid > ?
             ORDER BY rowid ASC
         """, (last_rowid,))
-        
+
         for rowid, user_id, action, info_json in cursor.fetchall():
             # 更新最大 rowid
             new_last_rowid = rowid
-            
+
             # 过滤非核心动作
             if action in FILTERED_ACTIONS:
                 continue
-            
+
             # 解析动作参数
             try:
                 action_args = json.loads(info_json) if info_json else {}
             except json.JSONDecodeError:
                 action_args = {}
-            
+
             # 精简 action_args，只保留关键字段（保留完整内容，不截断）
             simplified_args = {}
             if 'content' in action_args:
@@ -725,23 +728,25 @@ def fetch_new_actions_from_db(
                 simplified_args['like_id'] = action_args['like_id']
             if 'dislike_id' in action_args:
                 simplified_args['dislike_id'] = action_args['dislike_id']
-            
+
             # 转换动作类型名称
             action_type = ACTION_TYPE_MAP.get(action, action.upper())
-            
+
             # 补充上下文信息（帖子内容、用户名等）
             _enrich_action_context(cursor, action_type, simplified_args, agent_names)
-            
+
             actions.append({
                 'agent_id': user_id,
                 'agent_name': agent_names.get(user_id, f'Agent_{user_id}'),
                 'action_type': action_type,
                 'action_args': simplified_args,
             })
-        
-        conn.close()
+
     except Exception as e:
         print(f"读取数据库动作失败: {e}")
+    finally:
+        if conn is not None:
+            conn.close()
     
     return actions, new_last_rowid
 
@@ -1219,56 +1224,57 @@ async def run_twitter_simulation(
     
     # 记录 round 0 结束
     if action_logger:
-        action_logger.log_round_end(0, initial_action_count)
-    
+        action_logger.log_round_end(0, initial_action_count, simulated_hours=0)
+
     # 主模拟循环
     time_config = config.get("time_config", {})
     total_hours = time_config.get("total_simulation_hours", 72)
     minutes_per_round = time_config.get("minutes_per_round", 30)
     total_rounds = (total_hours * 60) // minutes_per_round
-    
+
     # 如果指定了最大轮数，则截断
     if max_rounds is not None and max_rounds > 0:
         original_rounds = total_rounds
         total_rounds = min(total_rounds, max_rounds)
         if total_rounds < original_rounds:
             log_info(f"轮数已截断: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
-    
+
     start_time = datetime.now()
-    
+
     for round_num in range(total_rounds):
         # 检查是否收到退出信号
         if _shutdown_event and _shutdown_event.is_set():
             if main_logger:
                 main_logger.info(f"收到退出信号，在第 {round_num + 1} 轮停止模拟")
             break
-        
+
         simulated_minutes = round_num * minutes_per_round
         simulated_hour = (simulated_minutes // 60) % 24
         simulated_day = simulated_minutes // (60 * 24) + 1
-        
+        current_simulated_hours = simulated_minutes // 60
+
         active_agents = get_active_agents_for_round(
             result.env, config, simulated_hour, round_num
         )
-        
+
         # 无论是否有活跃agent，都记录round开始
         if action_logger:
             action_logger.log_round_start(round_num + 1, simulated_hour)
-        
+
         if not active_agents:
             # 没有活跃agent时也记录round结束（actions_count=0）
             if action_logger:
-                action_logger.log_round_end(round_num + 1, 0)
+                action_logger.log_round_end(round_num + 1, 0, simulated_hours=current_simulated_hours)
             continue
-        
+
         actions = {agent: LLMAction() for _, agent in active_agents}
         await result.env.step(actions)
-        
+
         # 从数据库获取实际执行的动作并记录
         actual_actions, last_rowid = fetch_new_actions_from_db(
             db_path, last_rowid, agent_names
         )
-        
+
         round_action_count = 0
         for action_data in actual_actions:
             if action_logger:
@@ -1281,14 +1287,14 @@ async def run_twitter_simulation(
                 )
                 total_actions += 1
                 round_action_count += 1
-        
+
         if action_logger:
-            action_logger.log_round_end(round_num + 1, round_action_count)
-        
+            action_logger.log_round_end(round_num + 1, round_action_count, simulated_hours=current_simulated_hours)
+
         if (round_num + 1) % 20 == 0:
             progress = (round_num + 1) / total_rounds * 100
             log_info(f"Day {simulated_day}, {simulated_hour:02d}:00 - Round {round_num + 1}/{total_rounds} ({progress:.1f}%)")
-    
+
     # 注意：不关闭环境，保留给Interview使用
     
     if action_logger:
@@ -1418,56 +1424,57 @@ async def run_reddit_simulation(
     
     # 记录 round 0 结束
     if action_logger:
-        action_logger.log_round_end(0, initial_action_count)
-    
+        action_logger.log_round_end(0, initial_action_count, simulated_hours=0)
+
     # 主模拟循环
     time_config = config.get("time_config", {})
     total_hours = time_config.get("total_simulation_hours", 72)
     minutes_per_round = time_config.get("minutes_per_round", 30)
     total_rounds = (total_hours * 60) // minutes_per_round
-    
+
     # 如果指定了最大轮数，则截断
     if max_rounds is not None and max_rounds > 0:
         original_rounds = total_rounds
         total_rounds = min(total_rounds, max_rounds)
         if total_rounds < original_rounds:
             log_info(f"轮数已截断: {original_rounds} -> {total_rounds} (max_rounds={max_rounds})")
-    
+
     start_time = datetime.now()
-    
+
     for round_num in range(total_rounds):
         # 检查是否收到退出信号
         if _shutdown_event and _shutdown_event.is_set():
             if main_logger:
                 main_logger.info(f"收到退出信号，在第 {round_num + 1} 轮停止模拟")
             break
-        
+
         simulated_minutes = round_num * minutes_per_round
         simulated_hour = (simulated_minutes // 60) % 24
         simulated_day = simulated_minutes // (60 * 24) + 1
-        
+        current_simulated_hours = simulated_minutes // 60
+
         active_agents = get_active_agents_for_round(
             result.env, config, simulated_hour, round_num
         )
-        
+
         # 无论是否有活跃agent，都记录round开始
         if action_logger:
             action_logger.log_round_start(round_num + 1, simulated_hour)
-        
+
         if not active_agents:
             # 没有活跃agent时也记录round结束（actions_count=0）
             if action_logger:
-                action_logger.log_round_end(round_num + 1, 0)
+                action_logger.log_round_end(round_num + 1, 0, simulated_hours=current_simulated_hours)
             continue
-        
+
         actions = {agent: LLMAction() for _, agent in active_agents}
         await result.env.step(actions)
-        
+
         # 从数据库获取实际执行的动作并记录
         actual_actions, last_rowid = fetch_new_actions_from_db(
             db_path, last_rowid, agent_names
         )
-        
+
         round_action_count = 0
         for action_data in actual_actions:
             if action_logger:
@@ -1480,14 +1487,14 @@ async def run_reddit_simulation(
                 )
                 total_actions += 1
                 round_action_count += 1
-        
+
         if action_logger:
-            action_logger.log_round_end(round_num + 1, round_action_count)
-        
+            action_logger.log_round_end(round_num + 1, round_action_count, simulated_hours=current_simulated_hours)
+
         if (round_num + 1) % 20 == 0:
             progress = (round_num + 1) / total_rounds * 100
             log_info(f"Day {simulated_day}, {simulated_hour:02d}:00 - Round {round_num + 1}/{total_rounds} ({progress:.1f}%)")
-    
+
     # 注意：不关闭环境，保留给Interview使用
     
     if action_logger:

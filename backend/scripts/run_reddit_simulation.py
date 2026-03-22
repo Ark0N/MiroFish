@@ -310,10 +310,11 @@ class IPCHandler:
         if not os.path.exists(db_path):
             return result
         
+        conn = None
         try:
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
-            
+
             # 查询最新的Interview记录
             cursor.execute("""
                 SELECT user_id, info, created_at
@@ -322,7 +323,7 @@ class IPCHandler:
                 ORDER BY created_at DESC
                 LIMIT 1
             """, (ActionType.INTERVIEW.value, agent_id))
-            
+
             row = cursor.fetchone()
             if row:
                 user_id, info_json, created_at = row
@@ -332,11 +333,12 @@ class IPCHandler:
                     result["timestamp"] = created_at
                 except json.JSONDecodeError:
                     result["response"] = info_json
-            
-            conn.close()
-            
+
         except Exception as e:
             print(f"  读取Interview结果失败: {e}")
+        finally:
+            if conn is not None:
+                conn.close()
         
         return result
     
