@@ -769,6 +769,9 @@ def get_prepare_status():
 @simulation_bp.route('/<simulation_id>', methods=['GET'])
 def get_simulation(simulation_id: str):
     """获取模拟状态"""
+    err = _validate_id_param(simulation_id, "simulation_id")
+    if err:
+        return err
     try:
         manager = SimulationManager()
         state = manager.get_simulation(simulation_id)
@@ -1007,10 +1010,13 @@ def get_simulation_history():
 def get_simulation_profiles(simulation_id: str):
     """
     获取模拟的Agent Profile
-    
+
     Query参数：
         platform: 平台类型（reddit/twitter，默认reddit）
     """
+    err = _validate_id_param(simulation_id, "simulation_id")
+    if err:
+        return err
     try:
         platform = request.args.get('platform', 'reddit')
         
@@ -1068,22 +1074,25 @@ def get_simulation_profiles_realtime(simulation_id: str):
             }
         }
     """
+    err = _validate_id_param(simulation_id, "simulation_id")
+    if err:
+        return err
     import json
     import csv
     from datetime import datetime
-    
+
     try:
         platform = request.args.get('platform', 'reddit')
-        
+
         # 获取模拟目录
         sim_dir = os.path.join(Config.OASIS_SIMULATION_DATA_DIR, simulation_id)
-        
+
         if not os.path.exists(sim_dir):
             return jsonify({
                 "success": False,
                 "error": f"模拟不存在: {simulation_id}"
             }), 404
-        
+
         # 确定文件路径
         if platform == "reddit":
             profiles_file = os.path.join(sim_dir, "reddit_profiles.json")
@@ -1173,9 +1182,12 @@ def get_simulation_config_realtime(simulation_id: str):
             }
         }
     """
+    err = _validate_id_param(simulation_id, "simulation_id")
+    if err:
+        return err
     import json
     from datetime import datetime
-    
+
     try:
         # 获取模拟目录
         sim_dir = os.path.join(Config.OASIS_SIMULATION_DATA_DIR, simulation_id)
@@ -1272,7 +1284,7 @@ def get_simulation_config_realtime(simulation_id: str):
 def get_simulation_config(simulation_id: str):
     """
     获取模拟配置（LLM智能生成的完整配置）
-    
+
     返回包含：
         - time_config: 时间配置（模拟时长、轮次、高峰/低谷时段）
         - agent_configs: 每个Agent的活动配置（活跃度、发言频率、立场等）
@@ -1280,6 +1292,9 @@ def get_simulation_config(simulation_id: str):
         - platform_configs: 平台配置
         - generation_reasoning: LLM的配置推理说明
     """
+    err = _validate_id_param(simulation_id, "simulation_id")
+    if err:
+        return err
     try:
         manager = SimulationManager()
         config = manager.get_simulation_config(simulation_id)
@@ -1306,6 +1321,9 @@ def get_simulation_config(simulation_id: str):
 @simulation_bp.route('/<simulation_id>/config/download', methods=['GET'])
 def download_simulation_config(simulation_id: str):
     """下载模拟配置文件"""
+    err = _validate_id_param(simulation_id, "simulation_id")
+    if err:
+        return err
     try:
         manager = SimulationManager()
         sim_dir = manager._get_simulation_dir(simulation_id)
@@ -1733,9 +1751,12 @@ def get_run_status(simulation_id: str):
             }
         }
     """
+    err = _validate_id_param(simulation_id, "simulation_id")
+    if err:
+        return err
     try:
         run_state = SimulationRunner.get_run_state(simulation_id)
-        
+
         if not run_state:
             return jsonify({
                 "success": True,
@@ -1801,6 +1822,9 @@ def get_run_status_detail(simulation_id: str):
             }
         }
     """
+    err = _validate_id_param(simulation_id, "simulation_id")
+    if err:
+        return err
     try:
         run_state = SimulationRunner.get_run_state(simulation_id)
         platform_filter = request.args.get('platform')
@@ -1885,6 +1909,9 @@ def get_simulation_actions(simulation_id: str):
             }
         }
     """
+    err = _validate_id_param(simulation_id, "simulation_id")
+    if err:
+        return err
     try:
         limit = request.args.get('limit', 100, type=int)
         offset = request.args.get('offset', 0, type=int)
@@ -1921,15 +1948,18 @@ def get_simulation_actions(simulation_id: str):
 def get_simulation_timeline(simulation_id: str):
     """
     获取模拟时间线（按轮次汇总）
-    
+
     用于前端展示进度条和时间线视图
-    
+
     Query参数：
         start_round: 起始轮次（默认0）
         end_round: 结束轮次（默认全部）
-    
+
     返回每轮的汇总信息
     """
+    err = _validate_id_param(simulation_id, "simulation_id")
+    if err:
+        return err
     try:
         start_round = request.args.get('start_round', 0, type=int)
         end_round = request.args.get('end_round', type=int)
@@ -1960,9 +1990,12 @@ def get_simulation_timeline(simulation_id: str):
 def get_agent_stats(simulation_id: str):
     """
     获取每个Agent的统计信息
-    
+
     用于前端展示Agent活跃度排行、动作分布等
     """
+    err = _validate_id_param(simulation_id, "simulation_id")
+    if err:
+        return err
     try:
         stats = SimulationRunner.get_agent_stats(simulation_id)
         
@@ -1988,14 +2021,17 @@ def get_agent_stats(simulation_id: str):
 def get_simulation_posts(simulation_id: str):
     """
     获取模拟中的帖子
-    
+
     Query参数：
         platform: 平台类型（twitter/reddit）
         limit: 返回数量（默认50）
         offset: 偏移量
-    
+
     返回帖子列表（从SQLite数据库读取）
     """
+    err = _validate_id_param(simulation_id, "simulation_id")
+    if err:
+        return err
     try:
         platform = request.args.get('platform', 'reddit')
         limit = request.args.get('limit', 50, type=int)
@@ -2063,12 +2099,15 @@ def get_simulation_posts(simulation_id: str):
 def get_simulation_comments(simulation_id: str):
     """
     获取模拟中的评论（仅Reddit）
-    
+
     Query参数：
         post_id: 过滤帖子ID（可选）
         limit: 返回数量
         offset: 偏移量
     """
+    err = _validate_id_param(simulation_id, "simulation_id")
+    if err:
+        return err
     try:
         post_id = request.args.get('post_id')
         limit = request.args.get('limit', 50, type=int)
