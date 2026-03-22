@@ -6,6 +6,7 @@ to each add_episode() call. Graphiti v0.11.6 only supports
 entity_types (not edge_types) in add_episode().
 """
 
+import threading
 from typing import Dict, Any, Optional
 
 from pydantic import BaseModel, Field
@@ -27,6 +28,7 @@ def _safe_attr_name(attr_name: str) -> str:
 
 # group_id -> {"entity_types": dict[str, BaseModel]}
 _cache: Dict[str, Dict[str, Any]] = {}
+_cache_lock = threading.Lock()
 
 
 def store_ontology(group_id: str, mirofish_ontology: Dict[str, Any]):
@@ -66,7 +68,8 @@ def store_ontology(group_id: str, mirofish_ontology: Dict[str, Any]):
 
         entity_types[name] = model_cls
 
-    _cache[group_id] = {"entity_types": entity_types}
+    with _cache_lock:
+        _cache[group_id] = {"entity_types": entity_types}
     logger.info(f"Stored ontology for group_id={group_id}: {len(entity_types)} entity types")
 
 
@@ -85,4 +88,5 @@ def get_entity_types(group_id: str) -> Optional[Dict[str, type]]:
 
 def clear(group_id: str):
     """Remove cached ontology for a group_id."""
-    _cache.pop(group_id, None)
+    with _cache_lock:
+        _cache.pop(group_id, None)

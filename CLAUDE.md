@@ -38,7 +38,7 @@ cd backend && uv run pytest tests/test_llm_client.py::TestThinkTagStripping::tes
 # Backend Python dependencies only
 cd backend && uv sync
 
-# Docker (production with gunicorn, multi-stage build, non-root user)
+# Docker (multi-stage build, gunicorn, non-root user; also starts Neo4j)
 docker compose up --build
 ```
 
@@ -94,7 +94,7 @@ docker compose up --build
 - **Thread safety**: `SimulationRunner` uses `threading.Lock` for class-level state; `GraphMemoryUpdater` uses `_counter_lock` for counter atomicity
 - **Atomic persistence**: All JSON file writes use temp file + `os.replace()` to prevent corruption
 - **JSONL action logging**: Agent actions stream to platform-specific `actions.jsonl` files via `PlatformActionLogger`; report agent uses `agent_log.jsonl`
-- **Platform action whitelists**: Hardcoded in `config.py` — Twitter: `CREATE_POST`, `REPOST`, `QUOTE`, `LIKE`, `FOLLOW`, `IDLE`; Reddit: `POST`, `COMMENT`, `LIKE`, `DISLIKE`, `SEARCH`, `TREND`, `FOLLOW`, `MUTE`, `REFRESH`, `IDLE`
+- **Platform action whitelists**: Hardcoded in `config.py` — Twitter: `CREATE_POST`, `LIKE_POST`, `REPOST`, `FOLLOW`, `DO_NOTHING`, `QUOTE_POST`; Reddit: `LIKE_POST`, `DISLIKE_POST`, `CREATE_POST`, `CREATE_COMMENT`, `LIKE_COMMENT`, `DISLIKE_COMMENT`, `SEARCH_POSTS`, `SEARCH_USER`, `TREND`, `REFRESH`, `DO_NOTHING`, `FOLLOW`, `MUTE`
 - **Process cleanup**: `atexit` handlers kill orphaned simulation subprocesses on Flask shutdown; simulation scripts handle `SIGINT`/`SIGTERM` for graceful closure; frontend calls `checkAndStopRunningSimulation()` on mount to terminate orphans
 - **Simulation state files**: `run_state.json` (recovery after restart), `state.json` (metadata + entity counts) in project upload directory
 - **Input validation**: `validate_safe_id()` prevents path traversal; API params have bounds checking
@@ -123,7 +123,10 @@ This fork adapts all LLM calls for Anthropic's native SDK:
 | `NEO4J_PASSWORD` | Yes | Neo4j password |
 | `VOYAGE_API_KEY` | Yes | Voyage AI API key (for Graphiti embeddings) |
 | `LLM_BOOST_*` | No | Optional second LLM for parallel simulation speedup |
+| `CORS_ORIGINS` | No | Comma-separated origins (default: `http://localhost:3000,http://127.0.0.1:3000`) |
 | `OASIS_DEFAULT_MAX_ROUNDS` | No | Simulation rounds (default: 10) |
+| `REPORT_AGENT_MAX_TOOL_CALLS` | No | Max tool calls per report generation (default: 5) |
+| `REPORT_AGENT_MAX_REFLECTION_ROUNDS` | No | Max reflection rounds (default: 2) |
 
 ## API Endpoints
 

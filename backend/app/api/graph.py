@@ -437,7 +437,7 @@ def build_graph():
                 # 创建图谱
                 task_manager.update_task(
                     task_id,
-                    message="创建Zep图谱...",
+                    message="创建Graphiti图谱...",
                     progress=10
                 )
                 graph_id = builder.create_graph(name=graph_name)
@@ -469,35 +469,31 @@ def build_graph():
                     progress=15
                 )
                 
-                episode_uuids = builder.add_text_batches(
-                    graph_id, 
+                builder.add_text_batches(
+                    graph_id,
                     chunks,
                     batch_size=3,
                     progress_callback=add_progress_callback
                 )
-                
-                # 等待Zep处理完成（查询每个episode的processed状态）
+
+                # Build communities (optional, non-fatal)
                 task_manager.update_task(
                     task_id,
-                    message="等待Zep处理数据...",
-                    progress=55
+                    message="构建社区...",
+                    progress=60
                 )
-                
-                def wait_progress_callback(msg, progress_ratio):
-                    progress = 55 + int(progress_ratio * 35)  # 55% - 90%
-                    task_manager.update_task(
-                        task_id,
-                        message=msg,
-                        progress=progress
-                    )
-                
-                builder._wait_for_episodes(episode_uuids, wait_progress_callback)
-                
+                try:
+                    from ..utils.graphiti_manager import GraphitiManager, run_async
+                    graphiti = GraphitiManager.get_instance()
+                    run_async(graphiti.build_communities(group_ids=[graph_id]))
+                except Exception as community_err:
+                    build_logger.warning(f"[{task_id}] Community building failed (non-fatal): {community_err}")
+
                 # 获取图谱数据
                 task_manager.update_task(
                     task_id,
                     message="获取图谱数据...",
-                    progress=95
+                    progress=90
                 )
                 graph_data = builder.get_graph_data(graph_id)
                 
@@ -641,7 +637,7 @@ def get_graph_data(graph_id: str):
 @graph_bp.route('/delete/<graph_id>', methods=['DELETE'])
 def delete_graph(graph_id: str):
     """
-    删除Zep图谱
+    删除图谱
     """
     try:
         validate_safe_id(graph_id, "graph_id")

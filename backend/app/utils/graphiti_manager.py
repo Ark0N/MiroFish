@@ -34,7 +34,7 @@ class VoyageAIEmbedder(EmbedderClient):
         if isinstance(input_data, str):
             texts = [input_data]
         elif isinstance(input_data, list) and len(input_data) > 0 and isinstance(input_data[0], str):
-            texts = [input_data[0]]
+            texts = input_data
         else:
             texts = [str(input_data)]
         result = await self._client.embed(texts, model=self.model, input_type='document')
