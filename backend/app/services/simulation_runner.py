@@ -1690,48 +1690,44 @@ class SimulationRunner:
             return []
         
         results = []
-        
-        conn = None
+
         try:
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
+            with sqlite3.connect(db_path) as conn:
+                cursor = conn.cursor()
 
-            if agent_id is not None:
-                cursor.execute("""
-                    SELECT user_id, info, created_at
-                    FROM trace
-                    WHERE action = 'interview' AND user_id = ?
-                    ORDER BY created_at DESC
-                    LIMIT ?
-                """, (agent_id, limit))
-            else:
-                cursor.execute("""
-                    SELECT user_id, info, created_at
-                    FROM trace
-                    WHERE action = 'interview'
-                    ORDER BY created_at DESC
-                    LIMIT ?
-                """, (limit,))
+                if agent_id is not None:
+                    cursor.execute("""
+                        SELECT user_id, info, created_at
+                        FROM trace
+                        WHERE action = 'interview' AND user_id = ?
+                        ORDER BY created_at DESC
+                        LIMIT ?
+                    """, (agent_id, limit))
+                else:
+                    cursor.execute("""
+                        SELECT user_id, info, created_at
+                        FROM trace
+                        WHERE action = 'interview'
+                        ORDER BY created_at DESC
+                        LIMIT ?
+                    """, (limit,))
 
-            for user_id, info_json, created_at in cursor.fetchall():
-                try:
-                    info = json.loads(info_json) if info_json else {}
-                except json.JSONDecodeError:
-                    info = {"raw": info_json}
+                for user_id, info_json, created_at in cursor.fetchall():
+                    try:
+                        info = json.loads(info_json) if info_json else {}
+                    except json.JSONDecodeError:
+                        info = {"raw": info_json}
 
-                results.append({
-                    "agent_id": user_id,
-                    "response": info.get("response", info),
-                    "prompt": info.get("prompt", ""),
-                    "timestamp": created_at,
-                    "platform": platform_name
-                })
+                    results.append({
+                        "agent_id": user_id,
+                        "response": info.get("response", info),
+                        "prompt": info.get("prompt", ""),
+                        "timestamp": created_at,
+                        "platform": platform_name
+                    })
 
         except Exception as e:
             logger.error(f"读取Interview历史失败 ({platform_name}): {e}")
-        finally:
-            if conn is not None:
-                conn.close()
         
         return results
 

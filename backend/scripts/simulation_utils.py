@@ -303,34 +303,30 @@ class IPCHandlerBase:
         if not os.path.exists(db_path):
             return result
 
-        conn = None
         try:
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
+            with sqlite3.connect(db_path) as conn:
+                cursor = conn.cursor()
 
-            cursor.execute("""
-                SELECT user_id, info, created_at
-                FROM trace
-                WHERE action = ? AND user_id = ?
-                ORDER BY created_at DESC
-                LIMIT 1
-            """, (ActionType.INTERVIEW.value, agent_id))
+                cursor.execute("""
+                    SELECT user_id, info, created_at
+                    FROM trace
+                    WHERE action = ? AND user_id = ?
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                """, (ActionType.INTERVIEW.value, agent_id))
 
-            row = cursor.fetchone()
-            if row:
-                user_id, info_json, created_at = row
-                try:
-                    info = json.loads(info_json) if info_json else {}
-                    result["response"] = info.get("response", info)
-                    result["timestamp"] = created_at
-                except json.JSONDecodeError:
-                    result["response"] = info_json
+                row = cursor.fetchone()
+                if row:
+                    user_id, info_json, created_at = row
+                    try:
+                        info = json.loads(info_json) if info_json else {}
+                        result["response"] = info.get("response", info)
+                        result["timestamp"] = created_at
+                    except json.JSONDecodeError:
+                        result["response"] = info_json
 
         except Exception as e:
             print(f"  读取Interview结果失败: {e}")
-        finally:
-            if conn is not None:
-                conn.close()
 
         return result
 
