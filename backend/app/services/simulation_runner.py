@@ -1266,8 +1266,8 @@ class SimulationRunner:
                                 state_data = json.load(f)
                             state_data['status'] = 'stopped'
                             state_data['updated_at'] = datetime.now().isoformat()
-                            with open(state_file, 'w', encoding='utf-8') as f:
-                                json.dump(state_data, f, indent=2, ensure_ascii=False)
+                            from ..utils.file_utils import atomic_write_json
+                            atomic_write_json(state_file, state_data)
                             logger.info(f"已更新 state.json 状态为 stopped: {simulation_id}")
                         else:
                             logger.warning(f"state.json 不存在: {state_file}")
