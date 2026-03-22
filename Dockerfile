@@ -1,29 +1,44 @@
-FROM python:3.11
+# Stage 1: Build frontend
+FROM node:22-slim AS frontend-builder
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
 
-# 安装 Node.js （满足 >=18）及必要工具
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends nodejs npm \
-  && rm -rf /var/lib/apt/lists/*
+# Stage 2: Production backend
+FROM python:3.11-slim AS production
 
-# 从 uv 官方镜像复制 uv
-COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /uvx /bin/
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /usr/local/bin/uv
+
+# Create non-root user
+RUN groupadd -r mirofish && useradd -r -g mirofish -m mirofish
 
 WORKDIR /app
 
-# 先复制依赖描述文件以利用缓存
-COPY package.json package-lock.json ./
-COPY frontend/package.json frontend/package-lock.json ./frontend/
+# Install Python dependencies
 COPY backend/pyproject.toml backend/uv.lock ./backend/
+RUN cd backend && uv sync --frozen --no-dev
 
-# 安装依赖（Node + Python）
-RUN npm ci \
-  && npm ci --prefix frontend \
-  && cd backend && uv sync --frozen
+# Copy backend source
+COPY backend/ ./backend/
 
-# 复制项目源码
-COPY . .
+# Copy built frontend
+COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
-EXPOSE 3000 5001
+# Create required directories
+RUN mkdir -p backend/uploads backend/logs && \
+    chown -R mirofish:mirofish /app
 
-# 同时启动前后端（开发模式）
-CMD ["npm", "run", "dev"]
+# Switch to non-root user
+USER mirofish
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5001/health')" || exit 1
+
+EXPOSE 5001
+
+# Production command with gunicorn
+CMD ["uv", "run", "--directory", "backend", "gunicorn", "--config", "gunicorn.conf.py", "app:create_app()"]
