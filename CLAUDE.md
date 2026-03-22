@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **MiroFish** is an AI-powered swarm intelligence prediction engine. Upload seed documents, build a knowledge graph, spawn thousands of AI agents with unique personalities, run social media simulations (Twitter/Reddit), and produce prediction reports from emergent agent behavior.
 
 - **Tech Stack**: Python 3.11+ (Flask), Vue 3 (Vite), CAMEL-AI/OASIS for simulation, Graphiti + Neo4j for knowledge graphs, D3.js for visualization
-- **LLM**: This fork uses Claude (Anthropic) via native SDK — auto-detected from `sk-ant-` API key prefix. Upstream uses Qwen/OpenAI.
+- **LLM**: Hybrid setup — Claude (Anthropic) for quality-critical phases (ontology, graph, reports), local Ollama on GPU for simulation agents (zero API cost). Auto-detected from `sk-ant-` key prefix. Upstream uses Qwen/OpenAI.
 - **License**: AGPL-3.0
 
 ## Build & Run Commands
@@ -68,9 +68,9 @@ docker compose up --build
   - `graph_tools.py` — Report agent retrieval tools (InsightForge, PanoramaSearch, QuickSearch, interviews)
   - `simulation_config_generator.py` — Generates OASIS config with time dilation and timezone settings
   - `text_processor.py` — Document text extraction and chunking
-- `utils/` — `llm_client.py` (unified LLM client, auto-detects Anthropic vs OpenAI), `validation.py` (path traversal prevention), `retry.py` (exponential backoff decorator), `file_parser.py`/`file_utils.py` (multi-stage encoding fallback: UTF-8 → charset_normalizer → chardet → replace mode), `logger.py`, `graphiti_manager.py` (thread-safe Graphiti singleton + async bridge), `ontology_store.py`, `graph_paging.py`
+- `utils/` — `llm_client.py` (unified LLM client, auto-detects Anthropic vs OpenAI), `validation.py` (path traversal prevention), `retry.py` (exponential backoff decorator), `file_parser.py`/`file_utils.py` (multi-stage encoding fallback: UTF-8 → charset_normalizer → chardet → replace mode), `logger.py`, `graphiti_manager.py` (thread-safe Graphiti singleton + async bridge + embedder factory: Voyage AI or local Ollama), `ontology_store.py` (thread-safe ontology cache), `graph_paging.py`
 - `models/` — File-based persistence (JSON on disk under `backend/uploads/projects/`). Atomic writes (temp file + `os.replace()`). No database. Project states: `CREATED` → `ONTOLOGY_GENERATED` → `GRAPH_BUILDING` → `GRAPH_COMPLETED`
-- `scripts/` (at `backend/scripts/`, not `backend/app/scripts/`) — Standalone OASIS simulation runners (`run_twitter_simulation.py`, `run_reddit_simulation.py`, `run_parallel_simulation.py`) launched as subprocesses by `SimulationRunner`. Also `action_logger.py` (JSONL logging per platform) and `simulation_utils.py`.
+- `scripts/` (at `backend/scripts/`, not `backend/app/scripts/`) — Standalone OASIS simulation runners (`run_twitter_simulation.py`, `run_reddit_simulation.py`, `run_parallel_simulation.py`) launched as subprocesses by `SimulationRunner`. Also `action_logger.py` (JSONL logging per platform) and `simulation_utils.py` (dual LLM config, model creation, signal handlers).
 - `tests/` — 157 unit and integration tests: `test_llm_client.py` (52), `test_api.py` (40), `test_project.py` (39), `test_retry.py` (25)
 
 ### Frontend (`frontend/src/`)
@@ -102,14 +102,27 @@ docker compose up --build
 - **Graphiti communities**: `build_communities()` called after graph build; failure is non-fatal
 - **UI language**: English (translated from original Chinese; some backend comments still in Chinese)
 
-## Claude API Integration (Fork-Specific)
+## LLM Integration (Fork-Specific)
 
-This fork adapts all LLM calls for Anthropic's native SDK:
+### Hybrid Architecture
 
-- **`llm_client.py`** — `LLMClient` auto-detects `sk-ant-` keys, separates system messages (Claude requirement), appends JSON instruction instead of `response_format: json_object`
-- **`oasis_profile_generator.py`** — `_generate_profile_with_llm` calls Anthropic API natively
-- **`simulation_config_generator.py`** — `_call_llm_with_retry` patched for Anthropic
-- **`run_*.py` scripts** — Detect Anthropic keys and use `ModelPlatformType.ANTHROPIC` in CAMEL-AI instead of `OPENAI`
+This fork uses a **two-tier LLM setup** to balance quality and cost:
+
+- **Primary LLM (Claude)** — Used for quality-critical phases: ontology extraction, graph building (Graphiti entity extraction), profile generation, config generation, and report generation. Configured via `LLM_API_KEY`/`LLM_BASE_URL`/`LLM_MODEL_NAME`.
+- **Simulation LLM (local Ollama)** — Used for all simulation agent calls (both Twitter and Reddit). Configured via `LLM_BOOST_*` env vars. When `LLM_BOOST_API_KEY` is set, both platforms route to it; otherwise falls back to the primary LLM.
+
+### Embeddings
+
+Embeddings for Graphiti semantic search use a configurable backend via `_create_embedder()` in `graphiti_manager.py`:
+- **Default**: Local Ollama with `nomic-embed-text` (768 dims, no API key, no rate limits)
+- **Optional**: Voyage AI (set `VOYAGE_API_KEY` to enable)
+
+### Key Files
+
+- **`llm_client.py`** — `LLMClient` auto-detects `sk-ant-` keys, separates system messages (Claude requirement), strips `<think>` tags, appends JSON instruction instead of `response_format: json_object`
+- **`graphiti_manager.py`** — `_create_embedder()` factory picks Voyage AI or local OpenAI-compatible embedder; `GraphitiManager` singleton with async bridge (`run_async`)
+- **`simulation_utils.py`** — `create_model()` supports dual LLM configs; detects Anthropic keys for `ModelPlatformType.ANTHROPIC`, routes boost config to OpenAI-compatible endpoints (Ollama)
+- **`run_parallel_simulation.py`** — Both Twitter and Reddit use `create_model(config, use_boost=True)` to route all simulation traffic to the local LLM
 
 ## Environment Variables (`.env`)
 
@@ -125,7 +138,9 @@ This fork adapts all LLM calls for Anthropic's native SDK:
 | `EMBEDDER_BASE_URL` | No | Local embedder URL (default: `http://localhost:11434/v1` for Ollama) |
 | `EMBEDDER_MODEL` | No | Local embedding model (default: `nomic-embed-text`) |
 | `EMBEDDER_DIM` | No | Embedding dimensions (default: `768`) |
-| `LLM_BOOST_*` | No | Optional second LLM for parallel simulation speedup |
+| `LLM_BOOST_API_KEY` | No | Simulation LLM API key (e.g. `ollama` for Ollama) |
+| `LLM_BOOST_BASE_URL` | No | Simulation LLM URL (e.g. `http://<gpu-host>:11434/v1`) |
+| `LLM_BOOST_MODEL_NAME` | No | Simulation LLM model (e.g. `qwen3-sim` — Qwen3:32b with thinking disabled) |
 | `CORS_ORIGINS` | No | Comma-separated origins (default: `http://localhost:3000,http://127.0.0.1:3000`) |
 | `OASIS_DEFAULT_MAX_ROUNDS` | No | Simulation rounds (default: 10) |
 | `REPORT_AGENT_MAX_TOOL_CALLS` | No | Max tool calls per report generation (default: 5) |
@@ -142,9 +157,11 @@ This fork adapts all LLM calls for Anthropic's native SDK:
 - `POST /api/report/chat` — Chat with ReportAgent
 - `GET /health` — Health check
 
-## Cost Warning
+## Cost & Infrastructure
 
-Simulations run hundreds/thousands of LLM calls. Start with <40 rounds. Use `claude-haiku-4-5-20251001` for testing.
+- **With local simulation LLM** (`LLM_BOOST_*` configured): Simulation runs at $0 API cost. Only ontology/graph/reports use Claude (~$0.50-1.50/run).
+- **Without local LLM**: All calls go through Claude API. A 45-agent, 15-round simulation costs ~$3-4 on Haiku. Start with <40 rounds.
+- **Local Ollama setup**: Requires `ollama pull nomic-embed-text` on the local machine (embeddings) and a GPU machine running Ollama with `qwen3-sim` (simulation agents, created from `qwen3:32b` with thinking disabled and 16K context via custom Modelfile).
 
 ---
 
