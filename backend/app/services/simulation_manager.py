@@ -7,6 +7,7 @@ OASIS模拟管理器
 import os
 import json
 import shutil
+import threading
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -131,6 +132,7 @@ class SimulationManager:
 
     # 内存中的模拟状态缓存（类级别，所有实例共享）
     _simulations: Dict[str, SimulationState] = {}
+    _cache_lock = threading.Lock()
 
     def __init__(self):
         # 确保目录存在
@@ -152,16 +154,18 @@ class SimulationManager:
         state.updated_at = datetime.now().isoformat()
         atomic_write_json(state_file, state.to_dict())
 
-        self._simulations[state.simulation_id] = state
+        with self._cache_lock:
+            self._simulations[state.simulation_id] = state
     
     def _load_simulation_state(self, simulation_id: str) -> Optional[SimulationState]:
         """从文件加载模拟状态"""
-        if simulation_id in self._simulations:
-            return self._simulations[simulation_id]
-        
+        with self._cache_lock:
+            if simulation_id in self._simulations:
+                return self._simulations[simulation_id]
+
         sim_dir = self._get_simulation_dir(simulation_id)
         state_file = os.path.join(sim_dir, "state.json")
-        
+
         if not os.path.exists(state_file):
             return None
 
@@ -190,8 +194,9 @@ class SimulationManager:
             updated_at=data.get("updated_at", datetime.now().isoformat()),
             error=data.get("error"),
         )
-        
-        self._simulations[simulation_id] = state
+
+        with self._cache_lock:
+            self._simulations[simulation_id] = state
         return state
     
     def create_simulation(
