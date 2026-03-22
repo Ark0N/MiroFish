@@ -465,7 +465,12 @@ class SimulationConfigGenerator:
                     if not resp.content:
                         raise ValueError("Empty response from API")
                     content = resp.content[0].text
+                    # Strip closed think tags
                     content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.DOTALL).strip()
+                    # Also strip unclosed think tags (truncated output)
+                    content = re.sub(r'<think>[\s\S]*$', '', content, flags=re.DOTALL).strip()
+                    if resp.stop_reason == "content_filter":
+                        raise ValueError("Response was filtered by content safety policy")
                     finish_reason = "length" if resp.stop_reason == "max_tokens" else "stop"
                 else:
                     response = self.client.chat.completions.create(

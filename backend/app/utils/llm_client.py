@@ -73,7 +73,10 @@ class LLMClient:
             content = self._chat_openai(messages, temperature, max_tokens, response_format)
 
         # 部分模型会在content中包含<think>思考内容，需要移除
-        content = re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
+        # Strip closed think tags
+        content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.DOTALL).strip()
+        # Also strip unclosed think tags (truncated output)
+        content = re.sub(r'<think>[\s\S]*$', '', content, flags=re.DOTALL).strip()
         return content
 
     def _chat_openai(

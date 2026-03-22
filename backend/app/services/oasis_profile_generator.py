@@ -553,7 +553,12 @@ class OasisProfileGenerator:
                     if not resp.content:
                         raise ValueError("Empty response from API")
                     content = resp.content[0].text
+                    # Strip closed think tags
                     content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.DOTALL).strip()
+                    # Also strip unclosed think tags (truncated output)
+                    content = re.sub(r'<think>[\s\S]*$', '', content, flags=re.DOTALL).strip()
+                    if resp.stop_reason == "content_filter":
+                        raise ValueError("Response was filtered by content safety policy")
                     finish_reason = resp.stop_reason  # "end_turn" or "max_tokens"
                     if finish_reason == "max_tokens":
                         finish_reason = "length"
