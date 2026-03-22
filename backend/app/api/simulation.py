@@ -16,6 +16,7 @@ from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner, RunnerStatus
 from ..utils.logger import get_logger
 from ..models.project import ProjectManager
+from ..utils.validation import validate_safe_id
 
 logger = get_logger('mirofish.api.simulation')
 
@@ -23,6 +24,17 @@ logger = get_logger('mirofish.api.simulation')
 # Interview prompt 优化前缀
 # 添加此前缀可以避免Agent调用工具，直接用文本回复
 INTERVIEW_PROMPT_PREFIX = "结合你的人设、所有的过往记忆与行动，不调用任何工具直接用文本回复我："
+
+
+def _validate_id_param(value, param_name):
+    """Validate an ID parameter, return error response tuple or None."""
+    if not value:
+        return jsonify({"success": False, "error": f"请提供 {param_name}"}), 400
+    try:
+        validate_safe_id(value, param_name)
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    return None
 
 
 def optimize_interview_prompt(prompt: str) -> str:
@@ -192,12 +204,10 @@ def create_simulation():
         data = request.get_json() or {}
         
         project_id = data.get('project_id')
-        if not project_id:
-            return jsonify({
-                "success": False,
-                "error": "请提供 project_id"
-            }), 400
-        
+        err = _validate_id_param(project_id, "project_id")
+        if err:
+            return err
+
         project = ProjectManager.get_project(project_id)
         if not project:
             return jsonify({
@@ -403,11 +413,9 @@ def prepare_simulation():
         data = request.get_json() or {}
         
         simulation_id = data.get('simulation_id')
-        if not simulation_id:
-            return jsonify({
-                "success": False,
-                "error": "请提供 simulation_id"
-            }), 400
+        err = _validate_id_param(simulation_id, "simulation_id")
+        if err:
+            return err
         
         manager = SimulationManager()
         state = manager.get_simulation(simulation_id)
@@ -801,7 +809,12 @@ def list_simulations():
     """
     try:
         project_id = request.args.get('project_id')
-        
+        if project_id:
+            try:
+                validate_safe_id(project_id, "project_id")
+            except ValueError as e:
+                return jsonify({"success": False, "error": str(e)}), 400
+
         manager = SimulationManager()
         simulations = manager.list_simulations(project_id=project_id)
         
@@ -1491,11 +1504,9 @@ def start_simulation():
         data = request.get_json() or {}
 
         simulation_id = data.get('simulation_id')
-        if not simulation_id:
-            return jsonify({
-                "success": False,
-                "error": "请提供 simulation_id"
-            }), 400
+        err = _validate_id_param(simulation_id, "simulation_id")
+        if err:
+            return err
 
         platform = data.get('platform', 'parallel')
         max_rounds = data.get('max_rounds')  # 可选：最大模拟轮数
@@ -1662,11 +1673,9 @@ def stop_simulation():
         data = request.get_json() or {}
         
         simulation_id = data.get('simulation_id')
-        if not simulation_id:
-            return jsonify({
-                "success": False,
-                "error": "请提供 simulation_id"
-            }), 400
+        err = _validate_id_param(simulation_id, "simulation_id")
+        if err:
+            return err
         
         run_state = SimulationRunner.stop_simulation(simulation_id)
         
@@ -2194,13 +2203,11 @@ def interview_agent():
         prompt = data.get('prompt')
         platform = data.get('platform')  # 可选：twitter/reddit/None
         timeout = data.get('timeout', 60)
-        
-        if not simulation_id:
-            return jsonify({
-                "success": False,
-                "error": "请提供 simulation_id"
-            }), 400
-        
+
+        err = _validate_id_param(simulation_id, "simulation_id")
+        if err:
+            return err
+
         if agent_id is None:
             return jsonify({
                 "success": False,
@@ -2315,11 +2322,9 @@ def interview_agents_batch():
         platform = data.get('platform')  # 可选：twitter/reddit/None
         timeout = data.get('timeout', 120)
 
-        if not simulation_id:
-            return jsonify({
-                "success": False,
-                "error": "请提供 simulation_id"
-            }), 400
+        err = _validate_id_param(simulation_id, "simulation_id")
+        if err:
+            return err
 
         if not interviews or not isinstance(interviews, list):
             return jsonify({
@@ -2441,11 +2446,9 @@ def interview_all_agents():
         platform = data.get('platform')  # 可选：twitter/reddit/None
         timeout = data.get('timeout', 180)
 
-        if not simulation_id:
-            return jsonify({
-                "success": False,
-                "error": "请提供 simulation_id"
-            }), 400
+        err = _validate_id_param(simulation_id, "simulation_id")
+        if err:
+            return err
 
         if not prompt:
             return jsonify({
@@ -2543,12 +2546,10 @@ def get_interview_history():
         platform = data.get('platform')  # 不指定则返回两个平台的历史
         agent_id = data.get('agent_id')
         limit = data.get('limit', 100)
-        
-        if not simulation_id:
-            return jsonify({
-                "success": False,
-                "error": "请提供 simulation_id"
-            }), 400
+
+        err = _validate_id_param(simulation_id, "simulation_id")
+        if err:
+            return err
 
         history = SimulationRunner.get_interview_history(
             simulation_id=simulation_id,
@@ -2601,12 +2602,9 @@ def get_env_status():
         data = request.get_json() or {}
         
         simulation_id = data.get('simulation_id')
-        
-        if not simulation_id:
-            return jsonify({
-                "success": False,
-                "error": "请提供 simulation_id"
-            }), 400
+        err = _validate_id_param(simulation_id, "simulation_id")
+        if err:
+            return err
 
         env_alive = SimulationRunner.check_env_alive(simulation_id)
         
@@ -2668,13 +2666,11 @@ def close_simulation_env():
         
         simulation_id = data.get('simulation_id')
         timeout = data.get('timeout', 30)
-        
-        if not simulation_id:
-            return jsonify({
-                "success": False,
-                "error": "请提供 simulation_id"
-            }), 400
-        
+
+        err = _validate_id_param(simulation_id, "simulation_id")
+        if err:
+            return err
+
         result = SimulationRunner.close_simulation_env(
             simulation_id=simulation_id,
             timeout=timeout
