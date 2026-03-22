@@ -439,9 +439,9 @@ class SimulationManager:
                 )
             
             # 保存配置文件
+            from ..utils.file_utils import atomic_write_text
             config_path = os.path.join(sim_dir, "simulation_config.json")
-            with open(config_path, 'w', encoding='utf-8') as f:
-                f.write(sim_params.to_json())
+            atomic_write_text(config_path, sim_params.to_json())
             
             state.config_generated = True
             state.config_reasoning = sim_params.generation_reasoning

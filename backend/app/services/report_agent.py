@@ -2084,9 +2084,9 @@ class ReportManager:
         在规划阶段完成后立即调用
         """
         cls._ensure_report_folder(report_id)
-        
-        with open(cls._get_outline_path(report_id), 'w', encoding='utf-8') as f:
-            json.dump(outline.to_dict(), f, ensure_ascii=False, indent=2)
+
+        from ..utils.file_utils import atomic_write_json
+        atomic_write_json(cls._get_outline_path(report_id), outline.to_dict())
         
         logger.info(f"大纲已保存: {report_id}")
     
@@ -2430,18 +2430,18 @@ class ReportManager:
         """保存报告元信息和完整报告"""
         cls._ensure_report_folder(report.report_id)
         
+        from ..utils.file_utils import atomic_write_json, atomic_write_text
+
         # 保存元信息JSON
-        with open(cls._get_report_path(report.report_id), 'w', encoding='utf-8') as f:
-            json.dump(report.to_dict(), f, ensure_ascii=False, indent=2)
-        
+        atomic_write_json(cls._get_report_path(report.report_id), report.to_dict())
+
         # 保存大纲
         if report.outline:
             cls.save_outline(report.report_id, report.outline)
-        
+
         # 保存完整Markdown报告
         if report.markdown_content:
-            with open(cls._get_report_markdown_path(report.report_id), 'w', encoding='utf-8') as f:
-                f.write(report.markdown_content)
+            atomic_write_text(cls._get_report_markdown_path(report.report_id), report.markdown_content)
         
         logger.info(f"报告已保存: {report.report_id}")
     

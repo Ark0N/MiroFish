@@ -9,11 +9,12 @@ import tempfile
 from typing import Any, Dict
 
 
-def atomic_write_json(file_path: str, data: Dict[str, Any]) -> None:
-    """Write JSON data atomically with advisory file locking.
+def _atomic_write(file_path: str, write_fn) -> None:
+    """Core atomic write: lock, temp file, os.replace().
 
-    Uses a lock file to prevent concurrent writes, then writes to a
-    temp file and atomically replaces the target via os.replace().
+    Args:
+        file_path: Target file path.
+        write_fn: Callable(file_obj) that writes content to the temp file.
     """
     dir_path = os.path.dirname(file_path)
     os.makedirs(dir_path, exist_ok=True)
@@ -26,7 +27,7 @@ def atomic_write_json(file_path: str, data: Dict[str, Any]) -> None:
         temp_fd, temp_path = tempfile.mkstemp(dir=dir_path, suffix='.tmp')
         try:
             with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+                write_fn(f)
             os.replace(temp_path, file_path)
         except:
             try:
@@ -41,3 +42,13 @@ def atomic_write_json(file_path: str, data: Dict[str, Any]) -> None:
             os.unlink(lock_path)
         except OSError:
             pass  # Another process may have already removed it
+
+
+def atomic_write_json(file_path: str, data: Dict[str, Any]) -> None:
+    """Write JSON data atomically with advisory file locking."""
+    _atomic_write(file_path, lambda f: json.dump(data, f, ensure_ascii=False, indent=2))
+
+
+def atomic_write_text(file_path: str, text: str) -> None:
+    """Write text data atomically with advisory file locking."""
+    _atomic_write(file_path, lambda f: f.write(text))

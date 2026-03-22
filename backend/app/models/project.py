@@ -281,9 +281,9 @@ class ProjectManager:
     @classmethod
     def save_extracted_text(cls, project_id: str, text: str) -> None:
         """保存提取的文本"""
+        from ..utils.file_utils import atomic_write_text
         text_path = cls._get_project_text_path(project_id)
-        with open(text_path, 'w', encoding='utf-8') as f:
-            f.write(text)
+        atomic_write_text(text_path, text)
     
     @classmethod
     def get_extracted_text(cls, project_id: str) -> Optional[str]:
