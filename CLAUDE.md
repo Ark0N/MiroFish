@@ -26,14 +26,20 @@ npm run frontend   # Vite on port 3000
 # Build frontend
 npm run build
 
-# Run tests
+# Run all tests (126 tests)
 cd backend && uv run pytest
+
+# Run specific test file
+cd backend && uv run pytest tests/test_llm_client.py -v
+
+# Run single test
+cd backend && uv run pytest tests/test_llm_client.py::TestThinkTagStripping::test_single_line -v
 
 # Backend Python dependencies only
 cd backend && uv sync
 
-# Docker
-docker compose up
+# Docker (production with gunicorn)
+docker compose up --build
 ```
 
 ## Architecture
@@ -50,14 +56,17 @@ docker compose up
 
 - `api/` — Flask blueprints: `graph.py` (~620 lines, handles ontology + graph building + project CRUD), `simulation.py`, `report.py` (all under `/api/`)
 - `services/` — Core business logic. Key services: `ontology_generator.py`, `graph_builder.py` (Zep SDK wrapper), `oasis_profile_generator.py` (entities → OASIS agent profiles as CSV/JSON), `simulation_runner.py` (subprocess-based OASIS execution with IPC), `report_agent.py` (ReACT tool loop)
-- `utils/llm_client.py` — Unified LLM client with `chat()` and `chat_json()` methods. Auto-detects Anthropic keys (`sk-ant-*`) vs OpenAI-compatible. Strips `<think>` tags from reasoning models. For JSON mode with Claude, appends system prompt instruction instead of `response_format`.
-- `models/` — File-based persistence (JSON on disk under `backend/uploads/projects/`). No database. Project states: `CREATED` → `ONTOLOGY_GENERATED` → `GRAPH_BUILDING` → `GRAPH_COMPLETED`
+- `utils/llm_client.py` — Unified LLM client with `chat()` and `chat_json()` methods. Auto-detects Anthropic keys (`sk-ant-*`) vs OpenAI-compatible. Strips `<think>` tags (closed and unclosed) from reasoning models. For JSON mode with Claude, appends system prompt instruction instead of `response_format`.
+- `utils/validation.py` — `validate_safe_id()` for path traversal prevention on project_id/simulation_id parameters
+- `models/` — File-based persistence (JSON on disk under `backend/uploads/projects/`). Atomic writes (temp file + `os.replace()`). No database. Project states: `CREATED` → `ONTOLOGY_GENERATED` → `GRAPH_BUILDING` → `GRAPH_COMPLETED`
 - `scripts/` — Standalone OASIS simulation runners (`run_twitter_simulation.py`, `run_reddit_simulation.py`, `run_parallel_simulation.py`) launched as subprocesses by `SimulationRunner`
+- `tests/` — 126 unit and integration tests: `test_llm_client.py` (50), `test_project.py` (30), `test_retry.py` (28), `test_api.py` (18)
 
 ### Frontend (`frontend/src/`)
 
-- Vue 3 Composition API (`<script setup>`) throughout, no state management library (just a simple reactive store in `store/pendingUpload.js`)
-- `views/` — Page-level: `Home.vue` (landing + file upload), `MainView.vue` (layout wrapper + multi-step wizard orchestrator), `SimulationRunView.vue`, `ReportView.vue`, `InteractionView.vue`
+- Vue 3 Composition API (`<script setup>`) throughout, no state management library (just a simple reactive store in `store/pendingUpload.js` with localStorage persistence)
+- `views/` — Page-level: `Home.vue` (landing + file upload), `MainView.vue` (layout wrapper + multi-step wizard orchestrator), `SimulationRunView.vue`, `ReportView.vue`, `InteractionView.vue`, `NotFound.vue` (404)
+- Router has `beforeEach` navigation guards validating required route params; routes use lazy loading via dynamic imports
 - `components/Step{1-5}*.vue` — Workflow steps matching the 5-step pipeline. Step4Report.vue is the largest (~5150 lines)
 - `components/GraphPanel.vue` — D3.js force-directed graph visualization with interactive node/edge selection
 - `api/` — Axios clients with 5-minute timeout, `requestWithRetry()` exponential backoff, proxied to `:5001` via Vite config
@@ -68,6 +77,10 @@ docker compose up
 
 - **Async operations**: Graph building, simulation, and report generation are all async tasks with progress polling (not WebSockets)
 - **Subprocess isolation**: OASIS simulations run in separate Python processes with IPC to avoid blocking Flask
+- **Thread safety**: `SimulationRunner` uses `threading.Lock` for class-level state; `ZepGraphMemoryUpdater` uses `_counter_lock` for counter atomicity
+- **Atomic persistence**: All JSON file writes use temp file + `os.replace()` to prevent corruption
+- **Input validation**: `validate_safe_id()` prevents path traversal; API params have bounds checking
+- **XSS prevention**: All `v-html` rendered content is sanitized via DOMPurify in shared `utils/markdown.js`
 - **Bilingual UI**: Chinese primary with English support
 - **Simulation actions**: Twitter (CREATE_POST, LIKE_POST, REPOST, FOLLOW, QUOTE_POST, DO_NOTHING), Reddit (LIKE_POST, DISLIKE_POST, CREATE_POST, CREATE_COMMENT, etc.)
 
@@ -131,9 +144,18 @@ Full permissions granted. Act decisively without asking.
 ### Planning Mode (Automatic)
 Enter planning mode automatically for multi-file changes (3+), architectural decisions, unclear requirements, or new features. Skip only for single-file fixes, typos, and simple config changes.
 
+## Docker (Production)
+
+Multi-stage Dockerfile: Node.js builds frontend → Python 3.11-slim with gunicorn serves backend. Non-root user, HEALTHCHECK included. `docker-compose.yml` has resource limits (4G RAM, 4 CPUs) and log rotation.
+
+```bash
+docker compose up --build    # Build and run
+```
+
 ## Session Log
 
 | Date | Tasks Completed | Files Changed | Notes |
 |------|-----------------|---------------|-------|
 | 2026-03-22 | Project created | CLAUDE.md | Initial setup |
 | 2026-03-22 | Claude API integration | llm_client.py, oasis_profile_generator.py, simulation_config_generator.py, run_*.py, .env | Adapted all LLM calls for Anthropic native SDK |
+| 2026-03-22 | Security + quality overhaul | 30+ files | XSS fix, path traversal prevention, stack trace removal, atomic writes, thread safety, input validation, SQLite leak fixes, 126 tests, production Docker, navigation guards, lazy loading |
