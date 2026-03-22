@@ -2119,10 +2119,10 @@ class ReportManager:
             md_content += f"{cleaned_content}\n\n"
 
         # 保存文件
+        from ..utils.file_utils import atomic_write_text
         file_suffix = f"section_{section_index:02d}.md"
         file_path = os.path.join(cls._get_report_folder(report_id), file_suffix)
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(md_content)
+        atomic_write_text(file_path, md_content)
 
         logger.info(f"章节已保存: {report_id}/{file_suffix}")
         return file_path
@@ -2221,8 +2221,8 @@ class ReportManager:
             "updated_at": datetime.now().isoformat()
         }
         
-        with open(cls._get_progress_path(report_id), 'w', encoding='utf-8') as f:
-            json.dump(progress_data, f, ensure_ascii=False, indent=2)
+        from ..utils.file_utils import atomic_write_json
+        atomic_write_json(cls._get_progress_path(report_id), progress_data)
     
     @classmethod
     def get_progress(cls, report_id: str) -> Optional[Dict[str, Any]]:
@@ -2292,9 +2292,9 @@ class ReportManager:
         md_content = cls._post_process_report(md_content, outline)
         
         # 保存完整报告
+        from ..utils.file_utils import atomic_write_text
         full_path = cls._get_report_markdown_path(report_id)
-        with open(full_path, 'w', encoding='utf-8') as f:
-            f.write(md_content)
+        atomic_write_text(full_path, md_content)
         
         logger.info(f"完整报告已组装: {report_id}")
         return md_content
