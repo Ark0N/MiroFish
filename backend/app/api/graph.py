@@ -264,9 +264,10 @@ def generate_ontology():
         })
         
     except Exception as e:
+        logger.error(f"本体生成失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e)
+            "error": "本体生成失败"
         }), 500
 
 
@@ -553,9 +554,10 @@ def build_graph():
         })
         
     except Exception as e:
+        logger.error(f"图谱构建请求失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e)
+            "error": "图谱构建请求失败"
         }), 500
 
 
@@ -629,9 +631,10 @@ def get_graph_data(graph_id: str):
         })
         
     except Exception as e:
+        logger.error(f"获取图谱数据失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e)
+            "error": "获取图谱数据失败"
         }), 500
 
 
@@ -661,7 +664,8 @@ def delete_graph(graph_id: str):
         })
         
     except Exception as e:
+        logger.error(f"删除图谱失败: {str(e)}")
         return jsonify({
             "success": False,
-            "error": str(e)
+            "error": "删除图谱失败"
         }), 500
