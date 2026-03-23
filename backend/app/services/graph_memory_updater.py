@@ -1,7 +1,7 @@
 """
 Graph memory updater service.
 Dynamically updates the knowledge graph with agent activities during simulation.
-Replaces zep_graph_memory_updater.py (Zep Cloud → Graphiti + Neo4j).
+Replaces zep_graph_memory_updater.py (Zep Cloud -> Graphiti + Neo4j).
 
 All logic preserved: AgentActivity dataclass, _describe_* methods,
 queue/buffer system, thread safety, batch sending.
@@ -57,41 +57,41 @@ class AgentActivity:
     def _describe_create_post(self) -> str:
         content = self.action_args.get("content", "")
         if content:
-            return f"发布了一条帖子：「{content}」"
-        return "发布了一条帖子"
+            return f'published a post: "{content}"'
+        return "published a post"
 
     def _describe_like_post(self) -> str:
         post_content = self.action_args.get("post_content", "")
         post_author = self.action_args.get("post_author_name", "")
         if post_content and post_author:
-            return f"点赞了{post_author}的帖子：「{post_content}」"
+            return f'liked {post_author}\'s post: "{post_content}"'
         elif post_content:
-            return f"点赞了一条帖子：「{post_content}」"
+            return f'liked a post: "{post_content}"'
         elif post_author:
-            return f"点赞了{post_author}的一条帖子"
-        return "点赞了一条帖子"
+            return f"liked a post by {post_author}"
+        return "liked a post"
 
     def _describe_dislike_post(self) -> str:
         post_content = self.action_args.get("post_content", "")
         post_author = self.action_args.get("post_author_name", "")
         if post_content and post_author:
-            return f"踩了{post_author}的帖子：「{post_content}」"
+            return f'disliked {post_author}\'s post: "{post_content}"'
         elif post_content:
-            return f"踩了一条帖子：「{post_content}」"
+            return f'disliked a post: "{post_content}"'
         elif post_author:
-            return f"踩了{post_author}的一条帖子"
-        return "踩了一条帖子"
+            return f"disliked a post by {post_author}"
+        return "disliked a post"
 
     def _describe_repost(self) -> str:
         original_content = self.action_args.get("original_content", "")
         original_author = self.action_args.get("original_author_name", "")
         if original_content and original_author:
-            return f"转发了{original_author}的帖子：「{original_content}」"
+            return f'reposted {original_author}\'s post: "{original_content}"'
         elif original_content:
-            return f"转发了一条帖子：「{original_content}」"
+            return f'reposted a post: "{original_content}"'
         elif original_author:
-            return f"转发了{original_author}的一条帖子"
-        return "转发了一条帖子"
+            return f"reposted a post by {original_author}"
+        return "reposted a post"
 
     def _describe_quote_post(self) -> str:
         original_content = self.action_args.get("original_content", "")
@@ -99,22 +99,22 @@ class AgentActivity:
         quote_content = self.action_args.get("quote_content", "") or self.action_args.get("content", "")
         base = ""
         if original_content and original_author:
-            base = f"引用了{original_author}的帖子「{original_content}」"
+            base = f'quoted {original_author}\'s post "{original_content}"'
         elif original_content:
-            base = f"引用了一条帖子「{original_content}」"
+            base = f'quoted a post "{original_content}"'
         elif original_author:
-            base = f"引用了{original_author}的一条帖子"
+            base = f"quoted a post by {original_author}"
         else:
-            base = "引用了一条帖子"
+            base = "quoted a post"
         if quote_content:
-            base += f"，并评论道：「{quote_content}」"
+            base += f', and commented: "{quote_content}"'
         return base
 
     def _describe_follow(self) -> str:
         target_user_name = self.action_args.get("target_user_name", "")
         if target_user_name:
-            return f"关注了用户「{target_user_name}」"
-        return "关注了一个用户"
+            return f'followed user "{target_user_name}"'
+        return "followed a user"
 
     def _describe_create_comment(self) -> str:
         content = self.action_args.get("content", "")
@@ -122,52 +122,52 @@ class AgentActivity:
         post_author = self.action_args.get("post_author_name", "")
         if content:
             if post_content and post_author:
-                return f"在{post_author}的帖子「{post_content}」下评论道：「{content}」"
+                return f'commented on {post_author}\'s post "{post_content}": "{content}"'
             elif post_content:
-                return f"在帖子「{post_content}」下评论道：「{content}」"
+                return f'commented on post "{post_content}": "{content}"'
             elif post_author:
-                return f"在{post_author}的帖子下评论道：「{content}」"
-            return f"评论道：「{content}」"
-        return "发表了评论"
+                return f'commented on {post_author}\'s post: "{content}"'
+            return f'commented: "{content}"'
+        return "posted a comment"
 
     def _describe_like_comment(self) -> str:
         comment_content = self.action_args.get("comment_content", "")
         comment_author = self.action_args.get("comment_author_name", "")
         if comment_content and comment_author:
-            return f"点赞了{comment_author}的评论：「{comment_content}」"
+            return f'liked {comment_author}\'s comment: "{comment_content}"'
         elif comment_content:
-            return f"点赞了一条评论：「{comment_content}」"
+            return f'liked a comment: "{comment_content}"'
         elif comment_author:
-            return f"点赞了{comment_author}的一条评论"
-        return "点赞了一条评论"
+            return f"liked a comment by {comment_author}"
+        return "liked a comment"
 
     def _describe_dislike_comment(self) -> str:
         comment_content = self.action_args.get("comment_content", "")
         comment_author = self.action_args.get("comment_author_name", "")
         if comment_content and comment_author:
-            return f"踩了{comment_author}的评论：「{comment_content}」"
+            return f'disliked {comment_author}\'s comment: "{comment_content}"'
         elif comment_content:
-            return f"踩了一条评论：「{comment_content}」"
+            return f'disliked a comment: "{comment_content}"'
         elif comment_author:
-            return f"踩了{comment_author}的一条评论"
-        return "踩了一条评论"
+            return f"disliked a comment by {comment_author}"
+        return "disliked a comment"
 
     def _describe_search(self) -> str:
         query = self.action_args.get("query", "") or self.action_args.get("keyword", "")
-        return f"搜索了「{query}」" if query else "进行了搜索"
+        return f'searched for "{query}"' if query else "performed a search"
 
     def _describe_search_user(self) -> str:
         query = self.action_args.get("query", "") or self.action_args.get("username", "")
-        return f"搜索了用户「{query}」" if query else "搜索了用户"
+        return f'searched for user "{query}"' if query else "searched for a user"
 
     def _describe_mute(self) -> str:
         target_user_name = self.action_args.get("target_user_name", "")
         if target_user_name:
-            return f"屏蔽了用户「{target_user_name}」"
-        return "屏蔽了一个用户"
+            return f'muted user "{target_user_name}"'
+        return "muted a user"
 
     def _describe_generic(self) -> str:
-        return f"执行了{self.action_type}操作"
+        return f"performed a {self.action_type} action"
 
 
 class GraphMemoryUpdater:
@@ -180,8 +180,8 @@ class GraphMemoryUpdater:
 
     BATCH_SIZE = 5
     PLATFORM_DISPLAY_NAMES = {
-        'twitter': '世界1',
-        'reddit': '世界2',
+        'twitter': 'World 1',
+        'reddit': 'World 2',
     }
     SEND_INTERVAL = 0.5
     MAX_RETRIES = 3

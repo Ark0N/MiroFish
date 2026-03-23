@@ -405,7 +405,7 @@ class TestChatJson:
 
     def test_invalid_json_raises_valueerror(self):
         client = self._make_openai_client("not json at all")
-        with pytest.raises(ValueError, match="JSON格式无效"):
+        with pytest.raises(ValueError, match="Invalid JSON returned by LLM"):
             client.chat_json([{"role": "user", "content": "test"}])
 
 

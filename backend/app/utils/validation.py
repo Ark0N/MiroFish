@@ -1,5 +1,5 @@
 """
-输入验证工具
+Input validation utility.
 """
 
 import re

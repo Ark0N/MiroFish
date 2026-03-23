@@ -73,7 +73,7 @@ def test_profile_formats():
         print("-" * 40)
         generator._save_twitter_csv(test_profiles, twitter_path)
         
-        # 读取并验证CSV
+        # Read并验证CSV
         with open(twitter_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             rows = list(reader)
@@ -99,7 +99,7 @@ def test_profile_formats():
         print("-" * 40)
         generator._save_reddit_json(test_profiles, reddit_path)
         
-        # 读取并验证JSON
+        # Read并验证JSON
         with open(reddit_path, 'r', encoding='utf-8') as f:
             reddit_data = json.load(f)
         
@@ -123,7 +123,7 @@ def test_profile_formats():
         print(f"   [信息] 可选字段: {present_optional}")
     
     print("\n" + "=" * 60)
-    print("测试完成!")
+    print("测试complete!")
     print("=" * 60)
 
 
