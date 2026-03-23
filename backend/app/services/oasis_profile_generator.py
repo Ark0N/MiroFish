@@ -204,6 +204,12 @@ class OasisProfileGenerator:
                 base_url=self.base_url
             )
 
+        # Token usage tracking
+        self._total_input_tokens = 0
+        self._total_output_tokens = 0
+        self._total_api_calls = 0
+        self._token_lock = __import__('threading').Lock()
+
         # Graphiti client for enrichment search
         self.graph_id = graph_id
         self._graphiti_available = False
@@ -462,21 +468,36 @@ class OasisProfileGenerator:
                 temp = 0.7 - (attempt * 0.1)
 
                 if self._use_anthropic:
-                    json_hint = "\n\nIMPORTANT: Respond with valid JSON only. No markdown, no code blocks."
+                    json_hint = "\n\nIMPORTANT: Respond with valid JSON only. No markdown, no code blocks. Do NOT use <think> tags or any XML tags. Output the raw JSON object directly."
                     resp = self._anthropic_client.messages.create(
                         model=self.model_name,
                         system=sys_prompt + json_hint,
-                        messages=[{"role": "user", "content": prompt}],
+                        messages=[
+                            {"role": "user", "content": prompt},
+                            {"role": "assistant", "content": "{"}
+                        ],
                         temperature=temp,
                         max_tokens=8192,
                     )
                     if not resp.content:
                         raise ValueError("Empty response from API")
-                    content = resp.content[0].text
-                    # Strip closed think tags
+                    # Track token usage
+                    if hasattr(resp, 'usage') and resp.usage:
+                        with self._token_lock:
+                            self._total_input_tokens += resp.usage.input_tokens
+                            self._total_output_tokens += resp.usage.output_tokens
+                            self._total_api_calls += 1
+                    content = "{" + resp.content[0].text  # Prepend the prefilled '{'
+                    # Strip closed think tags, but preserve any JSON inside
+                    raw_content = content
                     content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.DOTALL).strip()
                     # Also strip unclosed think tags (truncated output)
                     content = re.sub(r'<think>[\s\S]*$', '', content, flags=re.DOTALL).strip()
+                    # If content is empty after stripping, try to extract JSON from original
+                    if not content and raw_content:
+                        json_match = re.search(r'\{[\s\S]*\}', raw_content)
+                        if json_match:
+                            content = json_match.group()
                     if resp.stop_reason == "content_filter":
                         raise ValueError("Response was filtered by content safety policy")
                     finish_reason = resp.stop_reason  # "end_turn" or "max_tokens"
@@ -953,8 +974,13 @@ Important:
                     # Write to file in real-time (even for fallback personas)
                     save_profiles_realtime()
         
-        logger.info(f"Persona generation complete! Generated {len([p for p in profiles if p])} agents")
-        
+        generated_count = len([p for p in profiles if p])
+        logger.info(f"Persona generation complete! Generated {generated_count} agents")
+        logger.info(f"LLM API usage summary: {self._total_api_calls} calls, "
+                     f"input={self._total_input_tokens:,} tokens, output={self._total_output_tokens:,} tokens, "
+                     f"estimated cost=${self._total_input_tokens * 1.0 / 1_000_000 + self._total_output_tokens * 5.0 / 1_000_000:.2f} "
+                     f"(Haiku @ $1/$5 per MTok)")
+
         return profiles
     
     def _print_generated_profile(self, entity_name: str, entity_type: str, profile: OasisAgentProfile):

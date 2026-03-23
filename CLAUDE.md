@@ -33,7 +33,7 @@ npm run frontend   # Vite on port 3000
 # Build frontend
 npm run build
 
-# Run all tests (157 tests)
+# Run all tests (156 tests)
 cd backend && uv run pytest
 
 # Run specific test file
@@ -78,7 +78,7 @@ docker compose up --build
 - `utils/` — `llm_client.py` (unified LLM client, auto-detects Anthropic vs OpenAI), `validation.py` (path traversal prevention), `retry.py` (exponential backoff decorator), `file_parser.py`/`file_utils.py` (multi-stage encoding fallback: UTF-8 → charset_normalizer → chardet → replace mode), `logger.py`, `graphiti_manager.py` (thread-safe Graphiti singleton + async bridge + embedder factory: Voyage AI or local Ollama), `ontology_store.py` (thread-safe ontology cache), `graph_paging.py`
 - `models/` — File-based persistence (JSON on disk under `backend/uploads/projects/`). Atomic writes (temp file + `os.replace()`). No database. Project states: `CREATED` → `ONTOLOGY_GENERATED` → `GRAPH_BUILDING` → `GRAPH_COMPLETED`
 - `scripts/` (at `backend/scripts/`, not `backend/app/scripts/`) — Standalone OASIS simulation runners (`run_twitter_simulation.py`, `run_reddit_simulation.py`, `run_parallel_simulation.py`) launched as subprocesses by `SimulationRunner`. Also `action_logger.py` (JSONL logging per platform) and `simulation_utils.py` (dual LLM config, model creation, signal handlers).
-- `tests/` — 157 unit tests across 4 files: `test_llm_client.py`, `test_api.py`, `test_project.py`, `test_retry.py`. No `conftest.py` or pytest config — tests are self-contained with `unittest.mock` (no real API/DB calls)
+- `tests/` — 156 unit tests across 4 files: `test_llm_client.py`, `test_api.py`, `test_project.py`, `test_retry.py`. No `conftest.py` or pytest config — tests are self-contained with `unittest.mock` (no real API/DB calls)
 
 ### Frontend (`frontend/src/`)
 
@@ -90,7 +90,7 @@ docker compose up --build
 - `components/Step{1-5}*.vue` — Workflow steps matching the 5-step pipeline. `Step4Report.vue` is the largest (~5046 lines)
 - `components/GraphPanel.vue` — D3.js force-directed graph visualization with interactive node/edge selection
 - `components/SettingsModal.vue` — Model selection (Haiku/Sonnet/Opus with per-token pricing), cost comparison bars, simulation scale controls (maxAgents 1-10000, maxRounds 1-1000)
-- `components/HistoryDatabase.vue` — History/database browser; `Toast.vue` + `composables/useToast.js` for notifications
+- `components/HistoryDatabase.vue` — History/database browser; `Toast.vue` + `composables/useToast.js` for notifications; `composables/useSystemLog.js` for system logging
 - `api/` — Axios clients with 5-minute timeout, `requestWithRetry()` exponential backoff, proxied to `:5001` via Vite config. Includes `settings.js` for model catalog endpoint
 - Step 5 (Interaction) performs a multi-hop data fetch: `reportId` → `simulation_id` → `project_id` → `graph_id` → graph data
 - No linting or formatting tools configured
@@ -179,6 +179,11 @@ Embeddings for Graphiti semantic search use a configurable backend via `_create_
 
 - GitHub Actions workflow (`.github/workflows/docker-image.yml`): Builds multi-platform Docker image on tag pushes using QEMU
 - Docker production setup: multi-stage build (Node for frontend → Python 3.11-slim with gunicorn), non-root user, 300s request timeout
+- E2E tests (`.github/workflows/e2e.yml`): Playwright-based browser tests in `e2e/` directory, tiered by scope:
+  - `tier1` — Smoke tests (no external services beyond Flask+Vite)
+  - `tier2` — Integration tests (needs Neo4j, Ollama, LLM API key)
+  - `pipeline` — Full pipeline tests (long-running, > 5 min)
+  - Run locally: `cd e2e && uv run pytest -m tier1` (or `tier2`, `pipeline`)
 
 ---
 
