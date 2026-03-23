@@ -16,6 +16,7 @@ from ..services.simulation_runner import SimulationRunner, RunnerStatus
 from ..utils.logger import get_logger
 from ..models.project import ProjectManager
 from ..utils.validation import validate_safe_id
+from .helpers import validate_id_param, require_neo4j
 
 logger = get_logger('mirofish.api.simulation')
 
@@ -23,17 +24,6 @@ logger = get_logger('mirofish.api.simulation')
 # Interview prompt 优化前缀
 # 添加此前缀可以避免Agent调用工具，直接用文本回复
 INTERVIEW_PROMPT_PREFIX = "结合你的人设、所有的过往记忆与行动，不调用任何工具直接用文本回复我："
-
-
-def _validate_id_param(value, param_name):
-    """Validate an ID parameter, return error response tuple or None."""
-    if not value:
-        return jsonify({"success": False, "error": f"请提供 {param_name}"}), 400
-    try:
-        validate_safe_id(value, param_name)
-    except ValueError as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-    return None
 
 
 def optimize_interview_prompt(prompt: str) -> str:
@@ -60,20 +50,18 @@ def optimize_interview_prompt(prompt: str) -> str:
 def get_graph_entities(graph_id: str):
     """
     获取图谱中的所有实体（已过滤）
-    
+
     只返回符合预定义实体类型的节点（Labels不只是Entity的节点）
-    
+
     Query参数：
         entity_types: 逗号分隔的实体类型列表（可选，用于进一步过滤）
         enrich: 是否获取相关边信息（默认true）
     """
     try:
-        if not Config.NEO4J_URI:
-            return jsonify({
-                "success": False,
-                "error": "NEO4J_URI未配置"
-            }), 500
-        
+        err = require_neo4j()
+        if err:
+            return err
+
         entity_types_str = request.args.get('entity_types', '')
         entity_types = [t.strip() for t in entity_types_str.split(',') if t.strip()] if entity_types_str else None
         enrich = request.args.get('enrich', 'true').lower() == 'true'
@@ -104,12 +92,10 @@ def get_graph_entities(graph_id: str):
 def get_entity_detail(graph_id: str, entity_uuid: str):
     """获取单个实体的详细信息"""
     try:
-        if not Config.NEO4J_URI:
-            return jsonify({
-                "success": False,
-                "error": "NEO4J_URI未配置"
-            }), 500
-        
+        err = require_neo4j()
+        if err:
+            return err
+
         reader = GraphEntityReader()
         entity = reader.get_entity_with_context(graph_id, entity_uuid)
         
@@ -136,12 +122,10 @@ def get_entity_detail(graph_id: str, entity_uuid: str):
 def get_entities_by_type(graph_id: str, entity_type: str):
     """获取指定类型的所有实体"""
     try:
-        if not Config.NEO4J_URI:
-            return jsonify({
-                "success": False,
-                "error": "NEO4J_URI未配置"
-            }), 500
-        
+        err = require_neo4j()
+        if err:
+            return err
+
         enrich = request.args.get('enrich', 'true').lower() == 'true'
         
         reader = GraphEntityReader()
@@ -204,7 +188,7 @@ def create_simulation():
         data = request.get_json() or {}
         
         project_id = data.get('project_id')
-        err = _validate_id_param(project_id, "project_id")
+        err = validate_id_param(project_id, "project_id")
         if err:
             return err
 
@@ -413,7 +397,7 @@ def prepare_simulation():
         data = request.get_json() or {}
         
         simulation_id = data.get('simulation_id')
-        err = _validate_id_param(simulation_id, "simulation_id")
+        err = validate_id_param(simulation_id, "simulation_id")
         if err:
             return err
         
@@ -791,7 +775,7 @@ def get_prepare_status():
 @simulation_bp.route('/<simulation_id>', methods=['GET'])
 def get_simulation(simulation_id: str):
     """获取模拟状态"""
-    err = _validate_id_param(simulation_id, "simulation_id")
+    err = validate_id_param(simulation_id, "simulation_id")
     if err:
         return err
     try:
@@ -1036,7 +1020,7 @@ def get_simulation_profiles(simulation_id: str):
     Query参数：
         platform: 平台类型（reddit/twitter，默认reddit）
     """
-    err = _validate_id_param(simulation_id, "simulation_id")
+    err = validate_id_param(simulation_id, "simulation_id")
     if err:
         return err
     try:
@@ -1096,7 +1080,7 @@ def get_simulation_profiles_realtime(simulation_id: str):
             }
         }
     """
-    err = _validate_id_param(simulation_id, "simulation_id")
+    err = validate_id_param(simulation_id, "simulation_id")
     if err:
         return err
     import json
@@ -1204,7 +1188,7 @@ def get_simulation_config_realtime(simulation_id: str):
             }
         }
     """
-    err = _validate_id_param(simulation_id, "simulation_id")
+    err = validate_id_param(simulation_id, "simulation_id")
     if err:
         return err
     import json
@@ -1314,7 +1298,7 @@ def get_simulation_config(simulation_id: str):
         - platform_configs: 平台配置
         - generation_reasoning: LLM的配置推理说明
     """
-    err = _validate_id_param(simulation_id, "simulation_id")
+    err = validate_id_param(simulation_id, "simulation_id")
     if err:
         return err
     try:
@@ -1343,7 +1327,7 @@ def get_simulation_config(simulation_id: str):
 @simulation_bp.route('/<simulation_id>/config/download', methods=['GET'])
 def download_simulation_config(simulation_id: str):
     """下载模拟配置文件"""
-    err = _validate_id_param(simulation_id, "simulation_id")
+    err = validate_id_param(simulation_id, "simulation_id")
     if err:
         return err
     try:
@@ -1544,7 +1528,7 @@ def start_simulation():
         data = request.get_json() or {}
 
         simulation_id = data.get('simulation_id')
-        err = _validate_id_param(simulation_id, "simulation_id")
+        err = validate_id_param(simulation_id, "simulation_id")
         if err:
             return err
 
@@ -1714,7 +1698,7 @@ def stop_simulation():
         data = request.get_json() or {}
         
         simulation_id = data.get('simulation_id')
-        err = _validate_id_param(simulation_id, "simulation_id")
+        err = validate_id_param(simulation_id, "simulation_id")
         if err:
             return err
         
@@ -1775,7 +1759,7 @@ def get_run_status(simulation_id: str):
             }
         }
     """
-    err = _validate_id_param(simulation_id, "simulation_id")
+    err = validate_id_param(simulation_id, "simulation_id")
     if err:
         return err
     try:
@@ -1846,7 +1830,7 @@ def get_run_status_detail(simulation_id: str):
             }
         }
     """
-    err = _validate_id_param(simulation_id, "simulation_id")
+    err = validate_id_param(simulation_id, "simulation_id")
     if err:
         return err
     try:
@@ -1933,7 +1917,7 @@ def get_simulation_actions(simulation_id: str):
             }
         }
     """
-    err = _validate_id_param(simulation_id, "simulation_id")
+    err = validate_id_param(simulation_id, "simulation_id")
     if err:
         return err
     try:
@@ -1981,7 +1965,7 @@ def get_simulation_timeline(simulation_id: str):
 
     返回每轮的汇总信息
     """
-    err = _validate_id_param(simulation_id, "simulation_id")
+    err = validate_id_param(simulation_id, "simulation_id")
     if err:
         return err
     try:
@@ -2017,7 +2001,7 @@ def get_agent_stats(simulation_id: str):
 
     用于前端展示Agent活跃度排行、动作分布等
     """
-    err = _validate_id_param(simulation_id, "simulation_id")
+    err = validate_id_param(simulation_id, "simulation_id")
     if err:
         return err
     try:
@@ -2053,7 +2037,7 @@ def get_simulation_posts(simulation_id: str):
 
     返回帖子列表（从SQLite数据库读取）
     """
-    err = _validate_id_param(simulation_id, "simulation_id")
+    err = validate_id_param(simulation_id, "simulation_id")
     if err:
         return err
     try:
@@ -2129,7 +2113,7 @@ def get_simulation_comments(simulation_id: str):
         limit: 返回数量
         offset: 偏移量
     """
-    err = _validate_id_param(simulation_id, "simulation_id")
+    err = validate_id_param(simulation_id, "simulation_id")
     if err:
         return err
     try:
@@ -2257,7 +2241,7 @@ def interview_agent():
         platform = data.get('platform')  # 可选：twitter/reddit/None
         timeout = data.get('timeout', 60)
 
-        err = _validate_id_param(simulation_id, "simulation_id")
+        err = validate_id_param(simulation_id, "simulation_id")
         if err:
             return err
 
@@ -2376,7 +2360,7 @@ def interview_agents_batch():
         platform = data.get('platform')  # 可选：twitter/reddit/None
         timeout = data.get('timeout', 120)
 
-        err = _validate_id_param(simulation_id, "simulation_id")
+        err = validate_id_param(simulation_id, "simulation_id")
         if err:
             return err
 
@@ -2501,7 +2485,7 @@ def interview_all_agents():
         platform = data.get('platform')  # 可选：twitter/reddit/None
         timeout = data.get('timeout', 180)
 
-        err = _validate_id_param(simulation_id, "simulation_id")
+        err = validate_id_param(simulation_id, "simulation_id")
         if err:
             return err
 
@@ -2602,7 +2586,7 @@ def get_interview_history():
         agent_id = data.get('agent_id')
         limit = data.get('limit', 100)
 
-        err = _validate_id_param(simulation_id, "simulation_id")
+        err = validate_id_param(simulation_id, "simulation_id")
         if err:
             return err
 
@@ -2657,7 +2641,7 @@ def get_env_status():
         data = request.get_json() or {}
         
         simulation_id = data.get('simulation_id')
-        err = _validate_id_param(simulation_id, "simulation_id")
+        err = validate_id_param(simulation_id, "simulation_id")
         if err:
             return err
 
@@ -2722,7 +2706,7 @@ def close_simulation_env():
         simulation_id = data.get('simulation_id')
         timeout = data.get('timeout', 30)
 
-        err = _validate_id_param(simulation_id, "simulation_id")
+        err = validate_id_param(simulation_id, "simulation_id")
         if err:
             return err
 
