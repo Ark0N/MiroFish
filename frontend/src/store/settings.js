@@ -1,6 +1,6 @@
 /**
  * Settings store — persists user preferences to localStorage.
- * Currently stores the selected LLM model for analysis phases.
+ * Stores: selected LLM model, max agents, max rounds.
  */
 import { reactive } from 'vue'
 
@@ -19,7 +19,9 @@ function loadFromStorage() {
 function saveToStorage(state) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      modelName: state.modelName
+      modelName: state.modelName,
+      maxAgents: state.maxAgents,
+      maxRounds: state.maxRounds
     }))
   } catch {
     // Ignore storage errors
@@ -29,8 +31,12 @@ function saveToStorage(state) {
 const saved = loadFromStorage()
 
 const state = reactive({
-  // null means "use server default" (whatever LLM_MODEL_NAME is set to)
-  modelName: saved?.modelName || null
+  // null means "use server default"
+  modelName: saved?.modelName || null,
+  // null means "use all entities from graph" (no limit)
+  maxAgents: saved?.maxAgents || null,
+  // null means "use server default" (OASIS_DEFAULT_MAX_ROUNDS, default 10)
+  maxRounds: saved?.maxRounds || null
 })
 
 export function getSelectedModel() {
@@ -39,6 +45,24 @@ export function getSelectedModel() {
 
 export function setSelectedModel(modelName) {
   state.modelName = modelName || null
+  saveToStorage(state)
+}
+
+export function getMaxAgents() {
+  return state.maxAgents
+}
+
+export function setMaxAgents(val) {
+  state.maxAgents = val ? parseInt(val, 10) : null
+  saveToStorage(state)
+}
+
+export function getMaxRounds() {
+  return state.maxRounds
+}
+
+export function setMaxRounds(val) {
+  state.maxRounds = val ? parseInt(val, 10) : null
   saveToStorage(state)
 }
 

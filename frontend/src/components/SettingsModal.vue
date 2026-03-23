@@ -13,7 +13,7 @@
             <div class="section-label">Analysis Model</div>
             <div class="section-desc">
               Choose which Claude model to use for ontology extraction, profile generation, and report generation.
-              Simulation agents always use the local LLM when configured.
+              Graph building uses the server-configured model. Simulation agents use the local LLM when configured.
             </div>
 
             <div v-if="loading" class="loading-text">Loading models...</div>
@@ -70,7 +70,49 @@
                 </div>
               </div>
               <div class="cost-note">
-                Cost multiplier relative to the cheapest model. Applies to ontology, graph, profile, config, and report phases only.
+                Cost multiplier relative to the cheapest model. Applies to ontology, profile, config, and report phases only.
+              </div>
+            </div>
+          </div>
+
+          <!-- Simulation Settings -->
+          <div class="setting-section sim-section">
+            <div class="section-label">Simulation</div>
+            <div class="section-desc">
+              Control the scale of simulations. Fewer agents and rounds run faster and cost less.
+            </div>
+
+            <div class="sim-fields">
+              <div class="sim-field">
+                <label class="field-label" for="max-agents">Max Agents</label>
+                <div class="field-input-row">
+                  <input
+                    id="max-agents"
+                    type="number"
+                    v-model.number="maxAgents"
+                    min="1"
+                    max="10000"
+                    placeholder="All"
+                    class="field-input"
+                  />
+                  <span class="field-hint">{{ maxAgents ? maxAgents + ' agents' : 'No limit (use all entities)' }}</span>
+                </div>
+              </div>
+
+              <div class="sim-field">
+                <label class="field-label" for="max-rounds">Max Rounds</label>
+                <div class="field-input-row">
+                  <input
+                    id="max-rounds"
+                    type="number"
+                    v-model.number="maxRounds"
+                    min="1"
+                    max="1000"
+                    placeholder="Default"
+                    class="field-input"
+                  />
+                  <span class="field-hint">{{ maxRounds ? maxRounds + ' rounds' : 'Server default (10)' }}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -87,7 +129,11 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { getAvailableModels } from '../api/settings'
-import { getSelectedModel, setSelectedModel } from '../store/settings'
+import {
+  getSelectedModel, setSelectedModel,
+  getMaxAgents, setMaxAgents,
+  getMaxRounds, setMaxRounds
+} from '../store/settings'
 
 const props = defineProps({
   visible: Boolean
@@ -100,6 +146,8 @@ const loading = ref(false)
 const fetchError = ref('')
 const selectedModel = ref(getSelectedModel())
 const serverDefault = ref('')
+const maxAgents = ref(getMaxAgents())
+const maxRounds = ref(getMaxRounds())
 
 const selectedModelData = computed(() => models.value.find(m => m.id === selectedModel.value))
 
@@ -130,7 +178,6 @@ async function fetchModels() {
     const res = await getAvailableModels()
     models.value = res.data.models
     serverDefault.value = res.data.current_model
-    // If no model selected yet, use the server default
     if (!selectedModel.value) {
       selectedModel.value = serverDefault.value
     }
@@ -143,6 +190,8 @@ async function fetchModels() {
 
 function save() {
   setSelectedModel(selectedModel.value)
+  setMaxAgents(maxAgents.value)
+  setMaxRounds(maxRounds.value)
   emit('close')
 }
 
@@ -151,8 +200,9 @@ watch(() => props.visible, (val) => {
     fetchModels()
   }
   if (val) {
-    // Sync from store in case it changed
     selectedModel.value = getSelectedModel() || serverDefault.value
+    maxAgents.value = getMaxAgents()
+    maxRounds.value = getMaxRounds()
   }
 })
 
@@ -408,6 +458,73 @@ onMounted(() => {
   font-size: 0.75rem;
   color: #999;
   line-height: 1.4;
+}
+
+/* Simulation settings */
+.sim-section {
+  border-top: 1px solid #e5e5e5;
+  padding-top: 20px;
+}
+
+.sim-fields {
+  display: flex;
+  gap: 20px;
+}
+
+.sim-field {
+  flex: 1;
+}
+
+.field-label {
+  display: block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: #333;
+}
+
+.field-input-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #e5e5e5;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  background: #fafafa;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+
+.field-input:focus {
+  outline: none;
+  border-color: #000;
+  background: #fff;
+}
+
+.field-input::placeholder {
+  color: #bbb;
+}
+
+/* Hide number input spinners for cleaner look */
+.field-input::-webkit-outer-spin-button,
+.field-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.field-input[type=number] {
+  -moz-appearance: textfield;
+}
+
+.field-hint {
+  font-size: 0.72rem;
+  color: #999;
+  font-family: 'JetBrains Mono', monospace;
 }
 
 /* Footer */

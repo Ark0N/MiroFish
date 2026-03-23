@@ -255,7 +255,8 @@ class SimulationManager:
         use_llm_for_profiles: bool = True,
         progress_callback: Optional[callable] = None,
         parallel_profile_count: int = 3,
-        model_name: Optional[str] = None
+        model_name: Optional[str] = None,
+        max_agents: Optional[int] = None
     ) -> SimulationState:
         """
         准备模拟环境（全程自动化）
@@ -304,25 +305,31 @@ class SimulationManager:
                 enrich_with_edges=True
             )
             
-            state.entities_count = filtered.filtered_count
+            # Apply max_agents limit if set
+            entities = filtered.entities
+            if max_agents and max_agents > 0 and len(entities) > max_agents:
+                logger.info(f"Limiting agents from {len(entities)} to {max_agents}")
+                entities = entities[:max_agents]
+
+            state.entities_count = len(entities)
             state.entity_types = list(filtered.entity_types)
-            
+
             if progress_callback:
                 progress_callback(
-                    "reading", 100, 
-                    f"完成，共 {filtered.filtered_count} 个实体",
-                    current=filtered.filtered_count,
-                    total=filtered.filtered_count
+                    "reading", 100,
+                    f"完成，共 {len(entities)} 个实体" + (f"（限制 {max_agents}）" if max_agents and filtered.filtered_count > max_agents else ""),
+                    current=len(entities),
+                    total=len(entities)
                 )
-            
-            if filtered.filtered_count == 0:
+
+            if len(entities) == 0:
                 state.status = SimulationStatus.FAILED
                 state.error = "没有找到符合条件的实体，请检查图谱是否正确构建"
                 self._save_simulation_state(state)
                 return state
             
             # ========== 阶段2: 生成Agent Profile ==========
-            total_entities = len(filtered.entities)
+            total_entities = len(entities)
             
             if progress_callback:
                 progress_callback(
@@ -360,7 +367,7 @@ class SimulationManager:
                 realtime_platform = "twitter"
             
             profiles = generator.generate_profiles_from_entities(
-                entities=filtered.entities,
+                entities=entities,
                 use_llm=use_llm_for_profiles,
                 progress_callback=profile_progress,
                 graph_id=state.graph_id,  # 传入graph_id用于Zep检索

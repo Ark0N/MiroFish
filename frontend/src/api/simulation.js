@@ -1,9 +1,19 @@
 import service, { requestWithRetry } from './index'
-import { getSelectedModel } from '../store/settings'
+import { getSelectedModel, getMaxAgents, getMaxRounds } from '../store/settings'
 
-function _withModel(data) {
+function _withSettings(data, { agents = false, rounds = false } = {}) {
+  let result = { ...data }
   const model = getSelectedModel()
-  return model ? { ...data, model_name: model } : data
+  if (model) result.model_name = model
+  if (agents) {
+    const ma = getMaxAgents()
+    if (ma) result.max_agents = ma
+  }
+  if (rounds) {
+    const mr = getMaxRounds()
+    if (mr && !result.max_rounds) result.max_rounds = mr
+  }
+  return result
 }
 
 /**
@@ -19,7 +29,7 @@ export const createSimulation = (data) => {
  * @param {Object} data - { simulation_id, entity_types?, use_llm_for_profiles?, parallel_profile_count?, force_regenerate? }
  */
 export const prepareSimulation = (data) => {
-  return requestWithRetry(() => service.post('/api/simulation/prepare', _withModel(data)), 3, 1000)
+  return requestWithRetry(() => service.post('/api/simulation/prepare', _withSettings(data, { agents: true })), 3, 1000)
 }
 
 /**
@@ -87,7 +97,7 @@ export const listSimulations = (projectId) => {
  * @param {Object} data - { simulation_id, platform?, max_rounds?, enable_graph_memory_update? }
  */
 export const startSimulation = (data) => {
-  return requestWithRetry(() => service.post('/api/simulation/start', data), 3, 1000)
+  return requestWithRetry(() => service.post('/api/simulation/start', _withSettings(data, { rounds: true })), 3, 1000)
 }
 
 /**
