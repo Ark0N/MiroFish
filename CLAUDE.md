@@ -61,7 +61,7 @@ docker compose up --build
 
 ### Backend (`backend/app/`)
 
-- `api/` — Flask blueprints: `graph.py` (ontology + graph building + project CRUD), `simulation.py` (largest API file), `report.py` — all under `/api/`
+- `api/` — Flask blueprints: `graph.py` (ontology + graph building + project CRUD), `simulation.py` (largest API file), `report.py`, `settings.py` (model catalog + pricing) — all under `/api/`
 - `services/` — Core business logic:
   - `ontology_generator.py` — LLM-driven entity/relationship extraction (enforces exactly 10 entity types, excludes reserved field names like `uuid`, `created_at`, `summary`)
   - `graph_builder.py` — Graphiti wrapper. Graph IDs (group_ids) prefixed `mirofish_`. Text chunks sent as episodes via `add_episode()`. Uses `ontology_store.py` to cache entity types per group_id.
@@ -78,17 +78,20 @@ docker compose up --build
 - `utils/` — `llm_client.py` (unified LLM client, auto-detects Anthropic vs OpenAI), `validation.py` (path traversal prevention), `retry.py` (exponential backoff decorator), `file_parser.py`/`file_utils.py` (multi-stage encoding fallback: UTF-8 → charset_normalizer → chardet → replace mode), `logger.py`, `graphiti_manager.py` (thread-safe Graphiti singleton + async bridge + embedder factory: Voyage AI or local Ollama), `ontology_store.py` (thread-safe ontology cache), `graph_paging.py`
 - `models/` — File-based persistence (JSON on disk under `backend/uploads/projects/`). Atomic writes (temp file + `os.replace()`). No database. Project states: `CREATED` → `ONTOLOGY_GENERATED` → `GRAPH_BUILDING` → `GRAPH_COMPLETED`
 - `scripts/` (at `backend/scripts/`, not `backend/app/scripts/`) — Standalone OASIS simulation runners (`run_twitter_simulation.py`, `run_reddit_simulation.py`, `run_parallel_simulation.py`) launched as subprocesses by `SimulationRunner`. Also `action_logger.py` (JSONL logging per platform) and `simulation_utils.py` (dual LLM config, model creation, signal handlers).
-- `tests/` — ~156 unit tests across 4 files: `test_llm_client.py`, `test_api.py`, `test_project.py`, `test_retry.py`. No `conftest.py` or pytest config — tests are self-contained with `unittest.mock` (no real API/DB calls)
+- `tests/` — 157 unit tests across 4 files: `test_llm_client.py`, `test_api.py`, `test_project.py`, `test_retry.py`. No `conftest.py` or pytest config — tests are self-contained with `unittest.mock` (no real API/DB calls)
 
 ### Frontend (`frontend/src/`)
 
-- Vue 3 Composition API (`<script setup>`) throughout, no state management library (just a simple reactive store in `store/pendingUpload.js` with localStorage persistence — uses `reactive()` deliberately since File objects can't be deeply reactive)
-- `views/` — Page-level components: `Home.vue` (landing + file upload), `MainView.vue` (layout wrapper + multi-step wizard orchestrator), `SimulationRunView.vue`, `ReportView.vue`, `InteractionView.vue`, `NotFound.vue` (404)
+- Vue 3 Composition API (`<script setup>`) throughout, no state management library (reactive stores in `store/` with localStorage persistence)
+- `store/pendingUpload.js` — File upload state (uses `reactive()` deliberately since File objects can't be deeply reactive)
+- `store/settings.js` — Persists `modelName`, `maxAgents`, `maxRounds` to localStorage; injected into API calls
+- `views/` — Page-level components: `Home.vue` (landing + file upload + settings modal), `MainView.vue` (layout wrapper + multi-step wizard orchestrator), `SimulationView.vue`, `SimulationRunView.vue`, `ReportView.vue`, `InteractionView.vue`, `NotFound.vue` (404)
 - Router has `beforeEach` navigation guards validating required route params; routes use lazy loading via dynamic imports
 - `components/Step{1-5}*.vue` — Workflow steps matching the 5-step pipeline. `Step4Report.vue` is the largest (~5046 lines)
 - `components/GraphPanel.vue` — D3.js force-directed graph visualization with interactive node/edge selection
+- `components/SettingsModal.vue` — Model selection (Haiku/Sonnet/Opus with per-token pricing), cost comparison bars, simulation scale controls (maxAgents 1-10000, maxRounds 1-1000)
 - `components/HistoryDatabase.vue` — History/database browser; `Toast.vue` + `composables/useToast.js` for notifications
-- `api/` — Axios clients with 5-minute timeout, `requestWithRetry()` exponential backoff, proxied to `:5001` via Vite config
+- `api/` — Axios clients with 5-minute timeout, `requestWithRetry()` exponential backoff, proxied to `:5001` via Vite config. Includes `settings.js` for model catalog endpoint
 - Step 5 (Interaction) performs a multi-hop data fetch: `reportId` → `simulation_id` → `project_id` → `graph_id` → graph data
 - No linting or formatting tools configured
 - Custom CSS only (no framework), Google Fonts: Inter, JetBrains Mono, Noto Sans SC, Space Grotesk
@@ -163,6 +166,7 @@ Embeddings for Graphiti semantic search use a configurable backend via `_create_
 - `POST /api/simulation/run` — Execute simulation
 - `POST /api/report/generate` — Generate report (async)
 - `POST /api/report/chat` — Chat with ReportAgent
+- `GET /api/settings/models` — List available Claude models with pricing
 - `GET /health` — Health check
 
 ## Cost & Infrastructure
