@@ -15,18 +15,9 @@ from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager
 from ..models.task import TaskManager, TaskStatus
 from ..utils.logger import get_logger
-from ..utils.validation import validate_safe_id
+from .helpers import validate_id_param
 
 logger = get_logger('mirofish.api.report')
-
-
-def _validate_path_id(value, param_name):
-    """Validate a URL path parameter. Returns a 400 response tuple or None."""
-    try:
-        validate_safe_id(value, param_name)
-    except ValueError as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-    return None
 
 
 # ============== 报告生成接口 ==============
@@ -61,15 +52,12 @@ def generate_report():
         data = request.get_json() or {}
         
         simulation_id = data.get('simulation_id')
-        if not simulation_id:
-            return jsonify({"success": False, "error": "请提供 simulation_id"}), 400
-        try:
-            validate_safe_id(simulation_id, "simulation_id")
-        except ValueError as e:
-            return jsonify({"success": False, "error": str(e)}), 400
+        err = validate_id_param(simulation_id, "simulation_id")
+        if err:
+            return err
 
         force_regenerate = data.get('force_regenerate', False)
-        
+
         # 获取模拟信息
         manager = SimulationManager()
         state = manager.get_simulation(simulation_id)
@@ -248,10 +236,9 @@ def get_generate_status():
             simulation_id = data.get('simulation_id')
         
         if simulation_id:
-            try:
-                validate_safe_id(simulation_id, "simulation_id")
-            except ValueError as e:
-                return jsonify({"success": False, "error": str(e)}), 400
+            err = validate_id_param(simulation_id, "simulation_id")
+            if err:
+                return err
 
         # 如果提供了simulation_id，先检查是否已有完成的报告
         if simulation_id:
@@ -318,7 +305,7 @@ def get_report(report_id: str):
             }
         }
     """
-    err = _validate_path_id(report_id, "report_id")
+    err = validate_id_param(report_id, "report_id")
     if err:
         return err
 
@@ -358,7 +345,7 @@ def get_report_by_simulation(simulation_id: str):
             }
         }
     """
-    err = _validate_path_id(simulation_id, "simulation_id")
+    err = validate_id_param(simulation_id, "simulation_id")
     if err:
         return err
 
@@ -432,7 +419,7 @@ def download_report(report_id: str):
 
     返回Markdown文件
     """
-    err = _validate_path_id(report_id, "report_id")
+    err = validate_id_param(report_id, "report_id")
     if err:
         return err
 
@@ -476,7 +463,7 @@ def download_report(report_id: str):
 @limiter.limit("30 per minute")
 def delete_report(report_id: str):
     """删除报告"""
-    err = _validate_path_id(report_id, "report_id")
+    err = validate_id_param(report_id, "report_id")
     if err:
         return err
 
@@ -539,13 +526,10 @@ def chat_with_report_agent():
         message = data.get('message')
         chat_history = data.get('chat_history', [])
 
-        if not simulation_id:
-            return jsonify({"success": False, "error": "请提供 simulation_id"}), 400
-        try:
-            validate_safe_id(simulation_id, "simulation_id")
-        except ValueError as e:
-            return jsonify({"success": False, "error": str(e)}), 400
-        
+        err = validate_id_param(simulation_id, "simulation_id")
+        if err:
+            return err
+
         if not message:
             return jsonify({
                 "success": False,
@@ -625,7 +609,7 @@ def get_report_progress(report_id: str):
             }
         }
     """
-    err = _validate_path_id(report_id, "report_id")
+    err = validate_id_param(report_id, "report_id")
     if err:
         return err
 
@@ -676,7 +660,7 @@ def get_report_sections(report_id: str):
             }
         }
     """
-    err = _validate_path_id(report_id, "report_id")
+    err = validate_id_param(report_id, "report_id")
     if err:
         return err
 
@@ -719,7 +703,7 @@ def get_single_section(report_id: str, section_index: int):
             }
         }
     """
-    err = _validate_path_id(report_id, "report_id")
+    err = validate_id_param(report_id, "report_id")
     if err:
         return err
 
@@ -773,7 +757,7 @@ def check_report_status(simulation_id: str):
             }
         }
     """
-    err = _validate_path_id(simulation_id, "simulation_id")
+    err = validate_id_param(simulation_id, "simulation_id")
     if err:
         return err
 
@@ -848,7 +832,7 @@ def get_agent_log(report_id: str):
             }
         }
     """
-    err = _validate_path_id(report_id, "report_id")
+    err = validate_id_param(report_id, "report_id")
     if err:
         return err
 
@@ -884,7 +868,7 @@ def stream_agent_log(report_id: str):
             }
         }
     """
-    err = _validate_path_id(report_id, "report_id")
+    err = validate_id_param(report_id, "report_id")
     if err:
         return err
 
@@ -936,7 +920,7 @@ def get_console_log(report_id: str):
             }
         }
     """
-    err = _validate_path_id(report_id, "report_id")
+    err = validate_id_param(report_id, "report_id")
     if err:
         return err
 
@@ -972,7 +956,7 @@ def stream_console_log(report_id: str):
             }
         }
     """
-    err = _validate_path_id(report_id, "report_id")
+    err = validate_id_param(report_id, "report_id")
     if err:
         return err
 

@@ -18,7 +18,7 @@ from ..utils.file_parser import FileParser
 from ..utils.logger import get_logger
 from ..models.task import TaskManager, TaskStatus
 from ..models.project import ProjectManager, ProjectStatus
-from ..utils.validation import validate_safe_id
+from .helpers import validate_id_param, require_neo4j
 
 # 获取日志器
 logger = get_logger('mirofish.api')
@@ -39,10 +39,9 @@ def get_project(project_id: str):
     """
     获取项目详情
     """
-    try:
-        validate_safe_id(project_id, "project_id")
-    except ValueError as e:
-        return jsonify({"success": False, "error": str(e)}), 400
+    err = validate_id_param(project_id, "project_id")
+    if err:
+        return err
 
     project = ProjectManager.get_project(project_id)
 
@@ -78,10 +77,9 @@ def delete_project(project_id: str):
     """
     删除项目
     """
-    try:
-        validate_safe_id(project_id, "project_id")
-    except ValueError as e:
-        return jsonify({"success": False, "error": str(e)}), 400
+    err = validate_id_param(project_id, "project_id")
+    if err:
+        return err
 
     success = ProjectManager.delete_project(project_id)
     
@@ -102,10 +100,9 @@ def reset_project(project_id: str):
     """
     重置项目状态（用于重新构建图谱）
     """
-    try:
-        validate_safe_id(project_id, "project_id")
-    except ValueError as e:
-        return jsonify({"success": False, "error": str(e)}), 400
+    err = validate_id_param(project_id, "project_id")
+    if err:
+        return err
 
     project = ProjectManager.get_project(project_id)
     
@@ -307,15 +304,10 @@ def build_graph():
         logger.info("=== 开始构建图谱 ===")
         
         # 检查配置
-        errors = []
-        if not Config.NEO4J_URI:
-            errors.append("NEO4J_URI未配置")
-        if errors:
-            logger.error(f"配置错误: {errors}")
-            return jsonify({
-                "success": False,
-                "error": "配置错误: " + "; ".join(errors)
-            }), 500
+        err = require_neo4j()
+        if err:
+            logger.error("配置错误: NEO4J_URI未配置")
+            return err
         
         # 解析请求
         data = request.get_json() or {}
@@ -327,10 +319,9 @@ def build_graph():
                 "success": False,
                 "error": "请提供 project_id"
             }), 400
-        try:
-            validate_safe_id(project_id, "project_id")
-        except ValueError as e:
-            return jsonify({"success": False, "error": str(e)}), 400
+        err = validate_id_param(project_id, "project_id")
+        if err:
+            return err
 
         # 获取项目
         project = ProjectManager.get_project(project_id)
@@ -571,10 +562,9 @@ def get_task(task_id: str):
     """
     查询任务状态
     """
-    try:
-        validate_safe_id(task_id, "task_id")
-    except ValueError as e:
-        return jsonify({"success": False, "error": str(e)}), 400
+    err = validate_id_param(task_id, "task_id")
+    if err:
+        return err
 
     task = TaskManager().get_task(task_id)
     
@@ -612,18 +602,15 @@ def get_graph_data(graph_id: str):
     """
     获取图谱数据（节点和边）
     """
-    try:
-        validate_safe_id(graph_id, "graph_id")
-    except ValueError as e:
-        return jsonify({"success": False, "error": str(e)}), 400
+    err = validate_id_param(graph_id, "graph_id")
+    if err:
+        return err
 
     try:
-        if not Config.NEO4J_URI:
-            return jsonify({
-                "success": False,
-                "error": "NEO4J_URI未配置"
-            }), 500
-        
+        err = require_neo4j()
+        if err:
+            return err
+
         builder = GraphBuilderService()
         graph_data = builder.get_graph_data(graph_id)
         
@@ -645,18 +632,15 @@ def delete_graph(graph_id: str):
     """
     删除图谱
     """
-    try:
-        validate_safe_id(graph_id, "graph_id")
-    except ValueError as e:
-        return jsonify({"success": False, "error": str(e)}), 400
+    err = validate_id_param(graph_id, "graph_id")
+    if err:
+        return err
 
     try:
-        if not Config.NEO4J_URI:
-            return jsonify({
-                "success": False,
-                "error": "NEO4J_URI未配置"
-            }), 500
-        
+        err = require_neo4j()
+        if err:
+            return err
+
         builder = GraphBuilderService()
         builder.delete_graph(graph_id)
         
