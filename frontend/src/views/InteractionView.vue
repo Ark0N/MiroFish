@@ -21,10 +21,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, defineAsyncComponent } from 'vue'
 import { useRoute } from 'vue-router'
 import WorkflowLayout from '../components/WorkflowLayout.vue'
-import Step5Interaction from '../components/Step5Interaction.vue'
+const Step5Interaction = defineAsyncComponent(() => import('../components/Step5Interaction.vue'))
 import { getProject, getGraphData } from '../api/graph'
 import { getSimulation } from '../api/simulation'
 import { getReport } from '../api/report'

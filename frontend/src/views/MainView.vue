@@ -34,11 +34,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import WorkflowLayout from '../components/WorkflowLayout.vue'
 import Step1GraphBuild from '../components/Step1GraphBuild.vue'
-import Step2EnvSetup from '../components/Step2EnvSetup.vue'
+const Step2EnvSetup = defineAsyncComponent(() => import('../components/Step2EnvSetup.vue'))
 import { generateOntology, getProject, buildGraph, getTaskStatus, getGraphData } from '../api/graph'
 import { getPendingUpload, clearPendingUpload } from '../store/pendingUpload'
 import { useSystemLog } from '../composables/useSystemLog'

@@ -117,9 +117,9 @@
               </button>
               <div v-if="showAgentDropdown" class="dropdown-menu">
                 <div class="dropdown-header">Select conversation target</div>
-                <div 
-                  v-for="(agent, idx) in profiles" 
-                  :key="idx"
+                <div
+                  v-for="(agent, idx) in profiles"
+                  :key="agent.username"
                   class="dropdown-item"
                   @click="selectAgent(agent, idx)"
                 >
