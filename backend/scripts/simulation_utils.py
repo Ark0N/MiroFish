@@ -1,15 +1,15 @@
 """
-OASIS 模拟脚本共享工具模块
+OASIS simulation script shared utilities module
 
-提供三个模拟脚本（Twitter、Reddit、并行模拟）共用的基础设施：
-- UnicodeFormatter: 日志格式化器，将 Unicode 转义序列转换为可读字符
-- MaxTokensWarningFilter: 过滤 camel-ai 关于 max_tokens 的日志警告
-- setup_oasis_logging(): 配置 OASIS 日志到固定文件
-- create_model(): 创建 LLM 模型（支持 Anthropic 检测和 Boost 配置）
-- setup_signal_handlers(): 优雅关闭的信号处理
-- IPCHandlerBase: IPC 命令处理基类（poll/response/status/interview 结果查询）
-- CommandType: IPC 命令类型常量
-- IPC 目录/文件名常量
+Provides shared infrastructure for the three simulation scripts (Twitter, Reddit, parallel):
+- UnicodeFormatter: Log formatter that converts Unicode escape sequences to readable characters
+- MaxTokensWarningFilter: Filters camel-ai max_tokens log warnings
+- setup_oasis_logging(): Configure OASIS logging to fixed files
+- create_model(): Create LLM model (supports Anthropic detection and Boost config)
+- setup_signal_handlers(): Signal handlers for graceful shutdown
+- IPCHandlerBase: IPC command handler base class (poll/response/status/interview result query)
+- CommandType: IPC command type constants
+- IPC directory/file name constants
 """
 
 import json
@@ -28,7 +28,7 @@ from typing import Dict, Any, List, Optional
 # ============================================================
 
 class UnicodeFormatter(logging.Formatter):
-    """自定义格式化器，将 Unicode 转义序列转换为可读字符"""
+    """Custom formatter that converts Unicode escape sequences to readable characters."""
 
     UNICODE_ESCAPE_PATTERN = re.compile(r'\\u([0-9a-fA-F]{4})')
 
@@ -45,7 +45,7 @@ class UnicodeFormatter(logging.Formatter):
 
 
 class MaxTokensWarningFilter(logging.Filter):
-    """过滤掉 camel-ai 关于 max_tokens 的警告（我们故意不设置 max_tokens，让模型自行决定）"""
+    """Filter out camel-ai max_tokens warnings (we intentionally don't set max_tokens, letting the model decide)."""
 
     def filter(self, record):
         if "max_tokens" in record.getMessage() and "Invalid or missing" in record.getMessage():
@@ -54,15 +54,15 @@ class MaxTokensWarningFilter(logging.Filter):
 
 
 def install_max_tokens_filter():
-    """在模块加载时立即添加过滤器，确保在 camel 代码执行前生效"""
+    """Add filter immediately at module load time, ensuring it takes effect before camel code runs."""
     logging.getLogger().addFilter(MaxTokensWarningFilter())
 
 
 def setup_oasis_logging(log_dir: str):
-    """配置 OASIS 的日志，使用固定名称的日志文件"""
+    """Configure OASIS logging with fixed-name log files."""
     os.makedirs(log_dir, exist_ok=True)
 
-    # 清理旧的日志文件
+    # Clean up old log files
     for f in os.listdir(log_dir):
         old_log = os.path.join(log_dir, f)
         if os.path.isfile(old_log) and f.endswith('.log'):
@@ -100,20 +100,20 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
     """
     创建LLM模型
 
-    支持双 LLM 配置，用于并行模拟时提速：
+    支持双 LLM 配置，用于Parallel simulation时提速：
     - 通用配置：LLM_API_KEY, LLM_BASE_URL, LLM_MODEL_NAME
     - 加速配置（可选）：LLM_BOOST_API_KEY, LLM_BOOST_BASE_URL, LLM_BOOST_MODEL_NAME
 
-    如果配置了加速 LLM，并行模拟时可以让不同平台使用不同的 API 服务商，提高并发能力。
+    如果配置了加速 LLM，Parallel simulation时可以让不同平台使用不同的 API 服务商，提高并发能力。
 
     Args:
-        config: 模拟配置字典
+        config: Simulation config字典
         use_boost: 是否使用加速 LLM 配置（如果可用）
     """
     from camel.models import ModelFactory
     from camel.types import ModelPlatformType
 
-    # 检查是否有加速配置
+    # Check是否有加速配置
     boost_api_key = os.environ.get("LLM_BOOST_API_KEY", "")
     boost_base_url = os.environ.get("LLM_BOOST_BASE_URL", "")
     boost_model = os.environ.get("LLM_BOOST_MODEL_NAME", "")
@@ -146,7 +146,7 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
             model_type=llm_model,
         )
 
-    # 设置 camel-ai 所需的环境变量 (OpenAI-compatible)
+    # Configure camel-ai 所需的环境变量 (OpenAI-compatible)
     if llm_api_key:
         os.environ["OPENAI_API_KEY"] = llm_api_key
 
@@ -170,8 +170,8 @@ def create_model(config: Dict[str, Any], use_boost: bool = False):
 
 def setup_signal_handlers(shutdown_event_ref, cleanup_done_ref):
     """
-    设置信号处理器，确保收到 SIGTERM/SIGINT 时能够正确退出
-    让程序有机会正常清理资源（关闭数据库、环境等）
+    设置Signal handling器，确保收到 SIGTERM/SIGINT 时能够正确退出
+    让程序有机会正常清理资源（关闭Database、环境等）
 
     Args:
         shutdown_event_ref: 一个可调用对象，返回当前的 shutdown asyncio.Event（或 None）
@@ -186,7 +186,7 @@ def setup_signal_handlers(shutdown_event_ref, cleanup_done_ref):
             if event:
                 event.set()
         else:
-            # 重复收到信号才强制退出
+            # 重复Received signal才强制退出
             print("强制退出...")
             sys.exit(1)
 
@@ -212,7 +212,7 @@ class CommandType:
 
 class IPCHandlerBase:
     """
-    IPC命令处理基类
+    IPCCommand handling基类
 
     提供 poll_command、send_response、update_status 以及
     _get_interview_result 等通用方法。子类只需实现 handle_interview、
@@ -231,7 +231,7 @@ class IPCHandlerBase:
         os.makedirs(self.responses_dir, exist_ok=True)
 
     def update_status(self, status: str):
-        """更新环境状态"""
+        """更新Environment status"""
         with open(self.status_file, 'w', encoding='utf-8') as f:
             json.dump({
                 "status": status,
@@ -239,7 +239,7 @@ class IPCHandlerBase:
             }, f, ensure_ascii=False, indent=2)
 
     def poll_command(self) -> Optional[Dict[str, Any]]:
-        """轮询获取待处理命令"""
+        """轮询获取待Processing command"""
         if not os.path.exists(self.commands_dir):
             return None
 
@@ -284,11 +284,11 @@ class IPCHandlerBase:
 
     def _get_interview_result(self, agent_id: int, db_name: str) -> Dict[str, Any]:
         """
-        从数据库获取最新的Interview结果
+        从Database获取最新的Interview结果
 
         Args:
             agent_id: Agent ID
-            db_name: 数据库文件名（如 "twitter_simulation.db"）
+            db_name: Database文件名（如 "twitter_simulation.db"）
         """
         from oasis import ActionType
 
@@ -326,13 +326,13 @@ class IPCHandlerBase:
                         result["response"] = info_json
 
         except Exception as e:
-            print(f"  读取Interview结果失败: {e}")
+            print(f"  读取Interview结果failed: {e}")
 
         return result
 
     async def process_commands(self) -> bool:
         """
-        处理所有待处理命令
+        处理所有待Processing command
 
         Returns:
             True 表示继续运行，False 表示应该退出
@@ -356,7 +356,7 @@ class IPCHandlerBase:
             return True
 
         elif command_type == CommandType.CLOSE_ENV:
-            print("收到关闭环境命令")
+            print("收到Closing environment命令")
             self.send_response(command_id, "completed", result={"message": "环境即将关闭"})
             return False
 
@@ -365,9 +365,9 @@ class IPCHandlerBase:
             return True
 
     async def handle_interview(self, command_id: str, args: Dict[str, Any]) -> bool:
-        """处理单个Agent采访命令 - 子类必须实现"""
+        """处理单个AgentInterview command - 子类必须实现"""
         raise NotImplementedError
 
     async def handle_batch_interview(self, command_id: str, args: Dict[str, Any]) -> bool:
-        """处理批量采访命令 - 子类必须实现"""
+        """处理批量Interview command - 子类必须实现"""
         raise NotImplementedError
