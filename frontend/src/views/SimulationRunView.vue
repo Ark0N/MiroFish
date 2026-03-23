@@ -26,12 +26,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import WorkflowLayout from '../components/WorkflowLayout.vue'
-import Step3Simulation from '../components/Step3Simulation.vue'
+const Step3Simulation = defineAsyncComponent(() => import('../components/Step3Simulation.vue'))
 import { getProject, getGraphData } from '../api/graph'
 import { getSimulation, getSimulationConfig, stopSimulation, closeSimulationEnv, getEnvStatus } from '../api/simulation'
+import { useSystemLog } from '../composables/useSystemLog'
 
 const route = useRoute()
 const router = useRouter()
@@ -47,7 +48,7 @@ const minutesPerRound = ref(30)
 const projectData = ref(null)
 const graphData = ref(null)
 const graphLoading = ref(false)
-const systemLogs = ref([])
+const { systemLogs, addLog } = useSystemLog(200)
 const currentStatus = ref('processing')
 
 // --- Status Computed ---
@@ -62,14 +63,6 @@ const statusText = computed(() => {
 const isSimulating = computed(() => currentStatus.value === 'processing')
 
 // --- Helpers ---
-const addLog = (msg) => {
-  const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '.' + new Date().getMilliseconds().toString().padStart(3, '0')
-  systemLogs.value.push({ time, msg })
-  if (systemLogs.value.length > 200) {
-    systemLogs.value.shift()
-  }
-}
-
 const updateStatus = (status) => {
   currentStatus.value = status
 }

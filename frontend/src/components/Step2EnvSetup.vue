@@ -83,9 +83,9 @@
               <span class="preview-title">Generated Agent Personas</span>
             </div>
             <div class="profiles-list">
-              <div 
-                v-for="(profile, idx) in profiles" 
-                :key="idx" 
+              <div
+                v-for="(profile, idx) in profiles"
+                :key="profile.name"
                 class="profile-card"
                 @click="selectProfile(profile)"
               >
@@ -333,9 +333,9 @@
                 <span class="config-block-title">LLM Configuration Reasoning</span>
               </div>
               <div class="reasoning-content">
-                <div 
-                  v-for="(reason, idx) in simulationConfig.generation_reasoning.split('|').slice(0, 2)" 
-                  :key="idx" 
+                <div
+                  v-for="(reason, idx) in simulationConfig.generation_reasoning.split('|').slice(0, 2)"
+                  :key="reason"
                   class="reasoning-item"
                 >
                   <p class="reasoning-text">{{ reason.trim() }}</p>
@@ -901,7 +901,7 @@ const pollPrepareStatus = async () => {
       }
     }
   } catch (err) {
-    console.warn('轮询状态失败:', err)
+    // polling is resilient, retries automatically
   }
 }
 
@@ -945,7 +945,7 @@ const fetchProfilesRealtime = async () => {
       }
     }
   } catch (err) {
-    console.warn('获取 Profiles 失败:', err)
+    // polling is resilient, retries automatically
   }
 }
 
@@ -1013,7 +1013,7 @@ const fetchConfigRealtime = async () => {
       }
     }
   } catch (err) {
-    console.warn('获取 Config 失败:', err)
+    // polling is resilient, retries automatically
   }
 }
 

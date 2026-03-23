@@ -19,6 +19,7 @@
       :graphData="graphData"
       :systemLogs="systemLogs"
       @next-step="handleNextStep"
+      @add-log="addLog"
     />
     <!-- Step 2: 环境搭建 -->
     <Step2EnvSetup
@@ -34,13 +35,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import WorkflowLayout from '../components/WorkflowLayout.vue'
 import Step1GraphBuild from '../components/Step1GraphBuild.vue'
-import Step2EnvSetup from '../components/Step2EnvSetup.vue'
+const Step2EnvSetup = defineAsyncComponent(() => import('../components/Step2EnvSetup.vue'))
 import { generateOntology, getProject, buildGraph, getTaskStatus, getGraphData } from '../api/graph'
 import { getPendingUpload, clearPendingUpload } from '../store/pendingUpload'
+import { useSystemLog } from '../composables/useSystemLog'
 
 const route = useRoute()
 const router = useRouter()
@@ -59,7 +61,7 @@ const graphData = ref(null)
 const currentPhase = ref(-1) // -1: Upload, 0: Ontology, 1: Build, 2: Complete
 const ontologyProgress = ref(null)
 const buildProgress = ref(null)
-const systemLogs = ref([])
+const { systemLogs, addLog } = useSystemLog(100)
 
 // Polling timers
 let pollTimer = null
@@ -81,14 +83,6 @@ const statusText = computed(() => {
 })
 
 // --- Helpers ---
-const addLog = (msg) => {
-  const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '.' + new Date().getMilliseconds().toString().padStart(3, '0')
-  systemLogs.value.push({ time, msg })
-  if (systemLogs.value.length > 100) {
-    systemLogs.value.shift()
-  }
-}
-
 const handleNextStep = (params = {}) => {
   if (currentStep.value < 5) {
     currentStep.value++
@@ -240,7 +234,7 @@ const fetchGraphData = async () => {
       }
     }
   } catch (err) {
-    console.warn('Graph fetch error:', err)
+    addLog('Failed to refresh graph: ' + err.message)
   }
 }
 
@@ -279,7 +273,7 @@ const pollTaskStatus = async (taskId) => {
       }
     }
   } catch (e) {
-    console.error(e)
+    addLog('Graph build task error: ' + e.message)
   }
 }
 
