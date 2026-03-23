@@ -546,6 +546,251 @@ TOOL_DESC_INTERVIEW_AGENTS = """\
 
 【重要】需要OASIS模拟环境正在运行才能使用此功能！"""
 
+# ── Language detection helper ──
+
+def _is_english(text: str) -> bool:
+    """Detect if text is primarily English (vs Chinese/other)."""
+    if not text:
+        return False
+    ascii_chars = sum(1 for c in text if ord(c) < 128)
+    return ascii_chars / len(text) > 0.7
+
+# ── English prompt variants ──
+
+PLAN_SYSTEM_PROMPT_EN = """\
+You are a "Future Prediction Report" writing expert with a "God's-eye view" of the simulated world — you can observe every Agent's behavior, statements, and interactions.
+
+**Core Concept**
+We built a simulated world and injected a specific "simulation requirement" as a variable. The simulation's evolution is a prediction of what might happen in the future. You are observing not "experimental data" but a "rehearsal of the future."
+
+**Your Task**
+Write a "Future Prediction Report" answering:
+1. Under our set conditions, what happened in the future?
+2. How did various Agents (populations) react and act?
+3. What noteworthy future trends and risks does this simulation reveal?
+
+**Report Positioning**
+- ✅ This is a simulation-based future prediction report revealing "if this happens, what follows"
+- ✅ Focus on prediction results: event trajectories, group reactions, emergent phenomena, potential risks
+- ✅ Agent behavior in the simulation IS the prediction of future human behavior
+- ❌ Not an analysis of current real-world conditions
+- ❌ Not a generic sentiment summary
+
+**Section Count Limit**
+- Minimum 2 sections, maximum 5 sections
+- No subsections needed; each section contains complete content
+- Content should be concise, focused on core prediction findings
+- Section structure is designed by you based on prediction results
+
+Output a JSON report outline in this format:
+{
+    "title": "Report Title",
+    "summary": "Report summary (one sentence summarizing core prediction findings)",
+    "sections": [
+        {
+            "title": "Section Title",
+            "description": "Section content description"
+        }
+    ]
+}
+
+Note: sections array must have minimum 2, maximum 5 elements!"""
+
+PLAN_USER_PROMPT_TEMPLATE_EN = """\
+**Prediction Scenario Setup**
+Variable injected into the simulated world (simulation requirement): {simulation_requirement}
+
+**Simulated World Scale**
+- Entities participating in simulation: {total_nodes}
+- Relationships generated between entities: {total_edges}
+- Entity type distribution: {entity_types}
+- Active Agent count: {total_entities}
+
+**Sample Future Facts Predicted by Simulation**
+{related_facts_json}
+
+Please examine this future rehearsal from a "God's-eye view":
+1. Under our set conditions, what state did the future present?
+2. How did various groups (Agents) react and act?
+3. What noteworthy future trends does this simulation reveal?
+
+Design the most appropriate report section structure based on prediction results.
+
+**Reminder**: Section count: minimum 2, maximum 5. Content should be concise and focused on core prediction findings."""
+
+SECTION_SYSTEM_PROMPT_TEMPLATE_EN = """\
+You are a "Future Prediction Report" writing expert, currently writing one chapter of the report.
+
+Report Title: {report_title}
+Report Summary: {report_summary}
+Prediction Scenario (simulation requirement): {simulation_requirement}
+
+Current section to write: {section_title}
+
+═══════════════════════════════════════════════════════════════
+**CORE CONCEPT**
+═══════════════════════════════════════════════════════════════
+
+The simulated world is a rehearsal of the future. We injected specific conditions (simulation requirement) into it. Agent behavior and interactions ARE predictions of future human behavior.
+
+Your task is to:
+- Reveal what happened in the future under the set conditions
+- Predict how various groups (Agents) reacted and acted
+- Discover noteworthy future trends, risks, and opportunities
+
+❌ Do NOT write as an analysis of current real-world conditions
+✅ Focus on "what will happen" — simulation results ARE the predicted future
+
+═══════════════════════════════════════════════════════════════
+**MOST IMPORTANT RULES — MUST FOLLOW**
+═══════════════════════════════════════════════════════════════
+
+1. **Must call tools to observe the simulated world**
+   - You are observing a future rehearsal from a "God's-eye view"
+   - All content must come from events and Agent behavior in the simulation
+   - Do NOT use your own knowledge to write report content
+   - Each section must call tools at least 3 times (max 5) to observe the simulated world
+
+2. **Must quote Agents' original statements and actions**
+   - Agent statements and behavior are predictions of future group behavior
+   - Use blockquote format to present these predictions, e.g.:
+     > "A certain group would say: original content..."
+   - These quotes are the core evidence of simulation predictions
+
+3. **Language consistency — all content must be in English**
+   - Tool results may contain Chinese or mixed content
+   - The report must be written entirely in English
+   - When quoting Chinese or mixed content from tools, translate it to fluent English
+   - Maintain original meaning, ensure natural expression
+   - This rule applies to both body text and blockquotes (> format)
+
+4. **Faithfully present prediction results**
+   - Report content must reflect simulation results representing the future
+   - Do not add information that doesn't exist in the simulation
+   - If information is insufficient, state so honestly
+
+═══════════════════════════════════════════════════════════════
+**⚠️ FORMAT REQUIREMENTS — EXTREMELY IMPORTANT!**
+═══════════════════════════════════════════════════════════════
+
+**One section = minimum content unit**
+- Each section is the smallest unit of the report
+- ❌ Do NOT use any Markdown headings (#, ##, ###, #### etc.) within sections
+- ❌ Do NOT add a section title at the beginning of content
+- ✅ Section titles are added automatically by the system; just write body text
+- ✅ Use **bold**, paragraph breaks, blockquotes, and lists to organize content, but no headings
+
+═══════════════════════════════════════════════════════════════
+**Available Retrieval Tools** (call 3-5 times per section)
+═══════════════════════════════════════════════════════════════
+
+{tools_description}
+
+**Tool usage advice — mix different tools, don't use just one**
+- insight_forge: Deep insight analysis, automatically decomposes questions and retrieves facts/relationships from multiple dimensions
+- panorama_search: Wide-angle panoramic search, understand the full picture, timeline, and evolution
+- quick_search: Quick verification of a specific data point
+- interview_agents: Interview simulation Agents, get first-person perspectives from different roles
+
+═══════════════════════════════════════════════════════════════
+**WORKFLOW**
+═══════════════════════════════════════════════════════════════
+
+Each reply you can do only ONE of these two things (not both):
+
+Option A - Call a tool:
+Output your thinking, then call one tool using this format:
+<tool_call>
+{{"name": "tool_name", "parameters": {{"param_name": "param_value"}}}}
+</tool_call>
+The system will execute the tool and return results. You cannot write tool results yourself.
+
+Option B - Output final content:
+When you have gathered enough information, output section content starting with "Final Answer:"
+
+⚠️ Strictly forbidden:
+- Do NOT include both a tool call and Final Answer in the same reply
+- Do NOT fabricate tool results (Observations); all tool results are injected by the system
+- Call at most one tool per reply
+
+═══════════════════════════════════════════════════════════════
+**SECTION CONTENT REQUIREMENTS**
+═══════════════════════════════════════════════════════════════
+
+1. Content must be based on simulation data retrieved via tools
+2. Extensively quote original text to demonstrate simulation results
+3. Use Markdown formatting (but NO headings):
+   - Use **bold text** to mark key points (instead of subheadings)
+   - Use lists (- or 1.2.3.) to organize points
+   - Use blank lines to separate paragraphs
+   - ❌ Do NOT use #, ##, ###, #### or any heading syntax
+4. **Blockquote format — must be standalone paragraphs**
+   Quotes must be standalone paragraphs with a blank line before and after:
+
+   ✅ Correct:
+   ```
+   The response was considered lacking substance.
+
+   > "The response pattern appeared rigid and slow in the fast-changing social media environment."
+
+   This assessment reflects widespread public dissatisfaction.
+   ```
+
+   ❌ Wrong:
+   ```
+   The response was considered lacking. > "The response pattern..." This assessment reflects...
+   ```
+5. Maintain logical coherence with other sections
+6. **Avoid repetition**: Carefully read completed sections below; do not repeat the same information
+7. **Reminder**: Do NOT add any headings! Use **bold** instead of subheadings"""
+
+SECTION_USER_PROMPT_TEMPLATE_EN = """\
+Completed sections (read carefully to avoid repetition):
+{previous_content}
+
+═══════════════════════════════════════════════════════════════
+**Current Task**: Write section: {section_title}
+═══════════════════════════════════════════════════════════════
+
+**Important Reminders**
+1. Read the completed sections above carefully to avoid repeating the same content!
+2. You must call tools to get simulation data before writing
+3. Mix different tools; don't use just one type
+4. Report content must come from retrieval results, not your own knowledge
+
+**⚠️ Format Warning — Must Follow**
+- ❌ Do NOT write any headings (#, ##, ###, #### are all forbidden)
+- ❌ Do NOT write "{section_title}" as the opening
+- ✅ Section titles are added automatically by the system
+- ✅ Write body text directly, use **bold** instead of subheadings
+
+Begin:
+1. First think (Thought) about what information this section needs
+2. Then call tools (Action) to retrieve simulation data
+3. After gathering enough information, output Final Answer (body text only, no headings)"""
+
+REACT_OBSERVATION_TEMPLATE_EN = """\
+Observation (retrieval results):
+
+═══ Tool {tool_name} returned ═══
+{result}
+
+═══════════════════════════════════════════════════════════════
+Tools called {tool_calls_count}/{max_tool_calls} times (used: {used_tools_str}){unused_hint}
+- If you have enough information: output section content starting with "Final Answer:" (must quote the above text)
+- If you need more information: call a tool to continue retrieval
+═══════════════════════════════════════════════════════════════"""
+
+REACT_INSUFFICIENT_TOOLS_MSG_EN = (
+    "**Note**: You have only called {tool_calls_count} tools, minimum {min_tool_calls} required. "
+    "Please call more tools to get simulation data before outputting Final Answer. {unused_hint}"
+)
+
+REACT_INSUFFICIENT_TOOLS_MSG_ALT_EN = (
+    "Currently only {tool_calls_count} tool calls made, minimum {min_tool_calls} required. "
+    "Please call tools to get simulation data. {unused_hint}"
+)
+
 # ── 大纲规划 prompt ──
 
 PLAN_SYSTEM_PROMPT = """\
@@ -1162,8 +1407,10 @@ class ReportAgent:
         if progress_callback:
             progress_callback("planning", 30, "正在生成报告大纲...")
         
-        system_prompt = PLAN_SYSTEM_PROMPT
-        user_prompt = PLAN_USER_PROMPT_TEMPLATE.format(
+        use_english = _is_english(self.simulation_requirement)
+        system_prompt = PLAN_SYSTEM_PROMPT_EN if use_english else PLAN_SYSTEM_PROMPT
+        user_tmpl = PLAN_USER_PROMPT_TEMPLATE_EN if use_english else PLAN_USER_PROMPT_TEMPLATE
+        user_prompt = user_tmpl.format(
             simulation_requirement=self.simulation_requirement,
             total_nodes=context.get('graph_statistics', {}).get('total_nodes', 0),
             total_edges=context.get('graph_statistics', {}).get('total_edges', 0),
@@ -1193,7 +1440,7 @@ class ReportAgent:
                 ))
             
             outline = ReportOutline(
-                title=response.get("title", "模拟分析报告"),
+                title=response.get("title", "Simulation Analysis Report" if use_english else "模拟分析报告"),
                 summary=response.get("summary", ""),
                 sections=sections
             )
@@ -1207,6 +1454,16 @@ class ReportAgent:
         except Exception as e:
             logger.error(f"大纲规划失败: {str(e)}")
             # 返回默认大纲（3个章节，作为fallback）
+            if use_english:
+                return ReportOutline(
+                    title="Future Prediction Report",
+                    summary="Future trends and risk analysis based on simulation predictions",
+                    sections=[
+                        ReportSection(title="Prediction Scenarios & Core Findings"),
+                        ReportSection(title="Crowd Behavior Prediction Analysis"),
+                        ReportSection(title="Trend Outlook & Risk Alerts")
+                    ]
+                )
             return ReportOutline(
                 title="未来预测报告",
                 summary="基于模拟预测的未来趋势与风险分析",
@@ -1251,7 +1508,9 @@ class ReportAgent:
         if self.report_logger:
             self.report_logger.log_section_start(section.title, section_index)
         
-        system_prompt = SECTION_SYSTEM_PROMPT_TEMPLATE.format(
+        use_english = _is_english(self.simulation_requirement)
+        section_sys_tmpl = SECTION_SYSTEM_PROMPT_TEMPLATE_EN if use_english else SECTION_SYSTEM_PROMPT_TEMPLATE
+        system_prompt = section_sys_tmpl.format(
             report_title=outline.title,
             report_summary=outline.summary,
             simulation_requirement=self.simulation_requirement,
@@ -1268,9 +1527,10 @@ class ReportAgent:
                 previous_parts.append(truncated)
             previous_content = "\n\n---\n\n".join(previous_parts)
         else:
-            previous_content = "（这是第一个章节）"
-        
-        user_prompt = SECTION_USER_PROMPT_TEMPLATE.format(
+            previous_content = "(This is the first section)" if use_english else "（这是第一个章节）"
+
+        section_usr_tmpl = SECTION_USER_PROMPT_TEMPLATE_EN if use_english else SECTION_USER_PROMPT_TEMPLATE
+        user_prompt = section_usr_tmpl.format(
             previous_content=previous_content,
             section_title=section.title,
         )
@@ -1377,10 +1637,11 @@ class ReportAgent:
                 if tool_calls_count < min_tool_calls:
                     messages.append({"role": "assistant", "content": response})
                     unused_tools = all_tools - used_tools
-                    unused_hint = f"（这些工具还未使用，推荐用一下他们: {', '.join(unused_tools)}）" if unused_tools else ""
+                    unused_hint = (f" (These tools haven't been used yet, try them: {', '.join(unused_tools)})" if use_english else f"（这些工具还未使用，推荐用一下他们: {', '.join(unused_tools)}）") if unused_tools else ""
+                    insuf_tmpl = REACT_INSUFFICIENT_TOOLS_MSG_EN if use_english else REACT_INSUFFICIENT_TOOLS_MSG
                     messages.append({
                         "role": "user",
-                        "content": REACT_INSUFFICIENT_TOOLS_MSG.format(
+                        "content": insuf_tmpl.format(
                             tool_calls_count=tool_calls_count,
                             min_tool_calls=min_tool_calls,
                             unused_hint=unused_hint,
@@ -1454,9 +1715,10 @@ class ReportAgent:
                     unused_hint = REACT_UNUSED_TOOLS_HINT.format(unused_list="、".join(unused_tools))
 
                 messages.append({"role": "assistant", "content": response})
+                obs_tmpl = REACT_OBSERVATION_TEMPLATE_EN if use_english else REACT_OBSERVATION_TEMPLATE
                 messages.append({
                     "role": "user",
-                    "content": REACT_OBSERVATION_TEMPLATE.format(
+                    "content": obs_tmpl.format(
                         tool_name=call["name"],
                         result=result,
                         tool_calls_count=tool_calls_count,
@@ -1473,11 +1735,12 @@ class ReportAgent:
             if tool_calls_count < min_tool_calls:
                 # 工具调用次数不足，推荐未用过的工具
                 unused_tools = all_tools - used_tools
-                unused_hint = f"（这些工具还未使用，推荐用一下他们: {', '.join(unused_tools)}）" if unused_tools else ""
+                unused_hint = (f" (These tools haven't been used yet, try them: {', '.join(unused_tools)})" if use_english else f"（这些工具还未使用，推荐用一下他们: {', '.join(unused_tools)}）") if unused_tools else ""
 
+                insuf_alt_tmpl = REACT_INSUFFICIENT_TOOLS_MSG_ALT_EN if use_english else REACT_INSUFFICIENT_TOOLS_MSG_ALT
                 messages.append({
                     "role": "user",
-                    "content": REACT_INSUFFICIENT_TOOLS_MSG_ALT.format(
+                    "content": insuf_alt_tmpl.format(
                         tool_calls_count=tool_calls_count,
                         min_tool_calls=min_tool_calls,
                         unused_hint=unused_hint,
