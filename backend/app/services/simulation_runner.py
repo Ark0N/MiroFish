@@ -12,6 +12,7 @@ import threading
 import subprocess
 import signal
 import atexit
+from collections import deque
 from typing import Dict, Any, List, Optional, Union
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -129,8 +130,7 @@ class SimulationRunState:
     rounds: List[RoundSummary] = field(default_factory=list)
     
     # 最近动作（用于前端实时展示）
-    recent_actions: List[AgentAction] = field(default_factory=list)
-    max_recent_actions: int = 50
+    recent_actions: deque = field(default_factory=lambda: deque(maxlen=50))
     
     # 时间戳
     started_at: Optional[str] = None
@@ -145,10 +145,8 @@ class SimulationRunState:
     
     def add_action(self, action: AgentAction):
         """添加动作到最近动作列表"""
-        self.recent_actions.insert(0, action)
-        if len(self.recent_actions) > self.max_recent_actions:
-            self.recent_actions = self.recent_actions[:self.max_recent_actions]
-        
+        self.recent_actions.appendleft(action)
+
         if action.platform == "twitter":
             self.twitter_actions_count += 1
         else:
@@ -187,7 +185,7 @@ class SimulationRunState:
     def to_detail_dict(self) -> Dict[str, Any]:
         """包含最近动作的详细信息"""
         result = self.to_dict()
-        result["recent_actions"] = [a.to_dict() for a in self.recent_actions]
+        result["recent_actions"] = [a.to_dict() for a in list(self.recent_actions)]
         result["rounds_count"] = len(self.rounds)
         return result
 
@@ -279,7 +277,7 @@ class SimulationRunner:
                 process_pid=data.get("process_pid"),
             )
             
-            # 加载最近动作
+            # 加载最近动作（data is already in newest-first order）
             actions_data = data.get("recent_actions", [])
             for a in actions_data:
                 state.recent_actions.append(AgentAction(

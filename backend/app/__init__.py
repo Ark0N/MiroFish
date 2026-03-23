@@ -28,7 +28,14 @@ def create_app(config_class=Config):
     """Flask应用工厂函数"""
     app = Flask(__name__)
     app.config.from_object(config_class)
-    
+
+    # Validate configuration (warn only — don't exit, so gunicorn/tests still work)
+    errors = config_class.validate()
+    if errors:
+        _config_logger = get_logger('mirofish.config')
+        for err in errors:
+            _config_logger.warning(f"Config warning: {err}")
+
     # 设置JSON编码：确保中文直接显示（而不是 \uXXXX 格式）
     # Flask >= 2.3 使用 app.json.ensure_ascii，旧版本使用 JSON_AS_ASCII 配置
     if hasattr(app, 'json') and hasattr(app.json, 'ensure_ascii'):
