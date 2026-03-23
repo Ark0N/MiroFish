@@ -254,7 +254,8 @@ class SimulationManager:
         defined_entity_types: Optional[List[str]] = None,
         use_llm_for_profiles: bool = True,
         progress_callback: Optional[callable] = None,
-        parallel_profile_count: int = 3
+        parallel_profile_count: int = 3,
+        model_name: Optional[str] = None
     ) -> SimulationState:
         """
         准备模拟环境（全程自动化）
@@ -332,7 +333,10 @@ class SimulationManager:
                 )
             
             # 传入graph_id以启用Zep检索功能，获取更丰富的上下文
-            generator = OasisProfileGenerator(graph_id=state.graph_id)
+            generator = OasisProfileGenerator(
+                graph_id=state.graph_id,
+                model_name=model_name
+            )
             
             def profile_progress(current, total, msg):
                 if progress_callback:
@@ -409,7 +413,7 @@ class SimulationManager:
                     total=3
                 )
             
-            config_generator = SimulationConfigGenerator()
+            config_generator = SimulationConfigGenerator(model_name=model_name)
             
             if progress_callback:
                 progress_callback(

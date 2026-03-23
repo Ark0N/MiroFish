@@ -1,4 +1,5 @@
 import service, { requestWithRetry } from './index'
+import { getSelectedModel } from '../store/settings'
 
 /**
  * 生成本体（上传文档和模拟需求）
@@ -6,7 +7,9 @@ import service, { requestWithRetry } from './index'
  * @returns {Promise}
  */
 export function generateOntology(formData) {
-  return requestWithRetry(() => 
+  const model = getSelectedModel()
+  if (model) formData.append('model_name', model)
+  return requestWithRetry(() =>
     service({
       url: '/api/graph/ontology/generate',
       method: 'post',

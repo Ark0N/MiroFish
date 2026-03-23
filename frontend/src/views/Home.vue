@@ -4,11 +4,14 @@
     <nav class="navbar">
       <div class="nav-brand">MIROFISH</div>
       <div class="nav-links">
+        <button class="settings-btn" @click="showSettings = true">Settings</button>
         <a href="https://github.com/666ghj/MiroFish" target="_blank" class="github-link">
           Visit our GitHub <span class="arrow">↗</span>
         </a>
       </div>
     </nav>
+
+    <SettingsModal :visible="showSettings" @close="showSettings = false" />
 
     <div class="main-content">
       <!-- 上半部分：Hero 区域 -->
@@ -180,7 +183,7 @@
                   rows="6"
                   :disabled="loading"
                 ></textarea>
-                <div class="model-badge">Engine: MiroFish-V1.0</div>
+                <div class="model-badge">{{ selectedModelLabel }}</div>
               </div>
             </div>
 
@@ -210,8 +213,21 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import HistoryDatabase from '../components/HistoryDatabase.vue'
+import SettingsModal from '../components/SettingsModal.vue'
+import settingsState from '../store/settings'
 
 const router = useRouter()
+
+const showSettings = ref(false)
+const selectedModelLabel = computed(() => {
+  const m = settingsState.modelName
+  if (!m) return 'Engine: MiroFish-V1.0'
+  // Show a short label from the model ID
+  if (m.includes('haiku')) return 'Model: Haiku 4.5'
+  if (m.includes('sonnet')) return 'Model: Sonnet 4'
+  if (m.includes('opus')) return 'Model: Opus 4'
+  return 'Model: ' + m
+})
 
 // 表单数据
 const formData = ref({
@@ -351,6 +367,23 @@ const startSimulation = () => {
 .nav-links {
   display: flex;
   align-items: center;
+  gap: 20px;
+}
+
+.settings-btn {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 5px 14px;
+  cursor: pointer;
+  transition: border-color 0.2s, opacity 0.2s;
+}
+
+.settings-btn:hover {
+  border-color: rgba(255, 255, 255, 0.7);
 }
 
 .github-link {

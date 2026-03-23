@@ -1,4 +1,10 @@
 import service, { requestWithRetry } from './index'
+import { getSelectedModel } from '../store/settings'
+
+function _withModel(data) {
+  const model = getSelectedModel()
+  return model ? { ...data, model_name: model } : data
+}
 
 /**
  * 创建模拟
@@ -13,7 +19,7 @@ export const createSimulation = (data) => {
  * @param {Object} data - { simulation_id, entity_types?, use_llm_for_profiles?, parallel_profile_count?, force_regenerate? }
  */
 export const prepareSimulation = (data) => {
-  return requestWithRetry(() => service.post('/api/simulation/prepare', data), 3, 1000)
+  return requestWithRetry(() => service.post('/api/simulation/prepare', _withModel(data)), 3, 1000)
 }
 
 /**

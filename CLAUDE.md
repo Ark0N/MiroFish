@@ -10,6 +10,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **LLM**: Hybrid setup — Claude (Anthropic) for quality-critical phases (ontology, graph, reports), local Ollama on GPU for simulation agents (zero API cost). Auto-detected from `sk-ant-` key prefix. Upstream uses Qwen/OpenAI.
 - **License**: AGPL-3.0
 
+## Prerequisites
+
+- Node.js >= 18, Python 3.11–3.12, [uv](https://docs.astral.sh/uv/) (Python package manager)
+- Neo4j 5.x (or use `docker compose up` which includes it)
+- Ollama with `nomic-embed-text` pulled locally (for embeddings)
+- Copy `.env.example` → `.env` and fill in required values
+
 ## Build & Run Commands
 
 ```bash
@@ -71,7 +78,7 @@ docker compose up --build
 - `utils/` — `llm_client.py` (unified LLM client, auto-detects Anthropic vs OpenAI), `validation.py` (path traversal prevention), `retry.py` (exponential backoff decorator), `file_parser.py`/`file_utils.py` (multi-stage encoding fallback: UTF-8 → charset_normalizer → chardet → replace mode), `logger.py`, `graphiti_manager.py` (thread-safe Graphiti singleton + async bridge + embedder factory: Voyage AI or local Ollama), `ontology_store.py` (thread-safe ontology cache), `graph_paging.py`
 - `models/` — File-based persistence (JSON on disk under `backend/uploads/projects/`). Atomic writes (temp file + `os.replace()`). No database. Project states: `CREATED` → `ONTOLOGY_GENERATED` → `GRAPH_BUILDING` → `GRAPH_COMPLETED`
 - `scripts/` (at `backend/scripts/`, not `backend/app/scripts/`) — Standalone OASIS simulation runners (`run_twitter_simulation.py`, `run_reddit_simulation.py`, `run_parallel_simulation.py`) launched as subprocesses by `SimulationRunner`. Also `action_logger.py` (JSONL logging per platform) and `simulation_utils.py` (dual LLM config, model creation, signal handlers).
-- `tests/` — 157 unit and integration tests: `test_llm_client.py` (52), `test_api.py` (40), `test_project.py` (39), `test_retry.py` (25)
+- `tests/` — ~156 unit tests across 4 files: `test_llm_client.py`, `test_api.py`, `test_project.py`, `test_retry.py`. No `conftest.py` or pytest config — tests are self-contained with `unittest.mock` (no real API/DB calls)
 
 ### Frontend (`frontend/src/`)
 
@@ -94,7 +101,7 @@ docker compose up --build
 - **Thread safety**: `SimulationRunner` uses `threading.Lock` for class-level state; `GraphMemoryUpdater` uses `_counter_lock` for counter atomicity
 - **Atomic persistence**: All JSON file writes use temp file + `os.replace()` to prevent corruption
 - **JSONL action logging**: Agent actions stream to platform-specific `actions.jsonl` files via `PlatformActionLogger`; report agent uses `agent_log.jsonl`
-- **Platform action whitelists**: Hardcoded in `config.py` — Twitter: `CREATE_POST`, `LIKE_POST`, `REPOST`, `FOLLOW`, `DO_NOTHING`, `QUOTE_POST`; Reddit: `LIKE_POST`, `DISLIKE_POST`, `CREATE_POST`, `CREATE_COMMENT`, `LIKE_COMMENT`, `DISLIKE_COMMENT`, `SEARCH_POSTS`, `SEARCH_USER`, `TREND`, `REFRESH`, `DO_NOTHING`, `FOLLOW`, `MUTE`
+- **Platform action whitelists**: Per-platform allowed actions hardcoded in `config.py` (Twitter: 6 actions, Reddit: 13 actions)
 - **Process cleanup**: `atexit` handlers kill orphaned simulation subprocesses on Flask shutdown; simulation scripts handle `SIGINT`/`SIGTERM` for graceful closure; frontend calls `checkAndStopRunningSimulation()` on mount to terminate orphans
 - **Simulation state files**: `run_state.json` (recovery after restart), `state.json` (metadata + entity counts) in project upload directory
 - **Input validation**: `validate_safe_id()` prevents path traversal; API params have bounds checking
@@ -145,6 +152,7 @@ Embeddings for Graphiti semantic search use a configurable backend via `_create_
 | `OASIS_DEFAULT_MAX_ROUNDS` | No | Simulation rounds (default: 10) |
 | `REPORT_AGENT_MAX_TOOL_CALLS` | No | Max tool calls per report generation (default: 5) |
 | `REPORT_AGENT_MAX_REFLECTION_ROUNDS` | No | Max reflection rounds (default: 2) |
+| `REPORT_AGENT_TEMPERATURE` | No | Report agent LLM temperature (default: 0.5) |
 
 ## API Endpoints
 
@@ -162,6 +170,11 @@ Embeddings for Graphiti semantic search use a configurable backend via `_create_
 - **With local simulation LLM** (`LLM_BOOST_*` configured): Simulation runs at $0 API cost. Only ontology/graph/reports use Claude (~$0.50-1.50/run).
 - **Without local LLM**: All calls go through Claude API. A 45-agent, 15-round simulation costs ~$3-4 on Haiku. Start with <40 rounds.
 - **Local Ollama setup**: Requires `ollama pull nomic-embed-text` on the local machine (embeddings) and a GPU machine running Ollama with `qwen3-sim` (simulation agents, created from `qwen3:32b` with thinking disabled and 16K context via custom Modelfile).
+
+## CI/CD
+
+- GitHub Actions workflow (`.github/workflows/docker-image.yml`): Builds multi-platform Docker image on tag pushes using QEMU
+- Docker production setup: multi-stage build (Node for frontend → Python 3.11-slim with gunicorn), non-root user, 300s request timeout
 
 ---
 

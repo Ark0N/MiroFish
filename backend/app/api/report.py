@@ -143,10 +143,15 @@ def generate_report():
                 )
                 
                 # 创建Report Agent
+                llm_client = None
+                if data.get('model_name'):
+                    from ..utils.llm_client import LLMClient
+                    llm_client = LLMClient(model=data['model_name'])
                 agent = ReportAgent(
                     graph_id=graph_id,
                     simulation_id=simulation_id,
-                    simulation_requirement=simulation_requirement
+                    simulation_requirement=simulation_requirement,
+                    llm_client=llm_client
                 )
                 
                 # 进度回调
@@ -574,12 +579,17 @@ def chat_with_report_agent():
         simulation_requirement = project.simulation_requirement or ""
         
         # 创建Agent并进行对话
+        llm_client = None
+        if data.get('model_name'):
+            from ..utils.llm_client import LLMClient
+            llm_client = LLMClient(model=data['model_name'])
         agent = ReportAgent(
             graph_id=graph_id,
             simulation_id=simulation_id,
-            simulation_requirement=simulation_requirement
+            simulation_requirement=simulation_requirement,
+            llm_client=llm_client
         )
-        
+
         result = agent.chat(message=message, chat_history=chat_history)
         
         return jsonify({

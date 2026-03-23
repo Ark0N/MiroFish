@@ -231,7 +231,12 @@ def generate_ontology():
         
         # 生成本体
         logger.info("调用 LLM 生成本体定义...")
-        generator = OntologyGenerator()
+        model_name = request.form.get('model_name')
+        llm_client = None
+        if model_name:
+            from ..utils.llm_client import LLMClient
+            llm_client = LLMClient(model=model_name)
+        generator = OntologyGenerator(llm_client=llm_client)
         ontology = generator.generate(
             document_texts=document_texts,
             simulation_requirement=simulation_requirement,
