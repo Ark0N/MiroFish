@@ -617,7 +617,7 @@ const parseInsightForge = (text) => {
       }).filter(Boolean)
     }
   } catch (e) {
-    console.warn('Parse insight_forge failed:', e)
+    // graceful degradation, fallback values used
   }
   
   return result
@@ -679,7 +679,7 @@ const parsePanorama = (text) => {
       }).filter(Boolean)
     }
   } catch (e) {
-    console.warn('Parse panorama failed:', e)
+    // graceful degradation, fallback values used
   }
   
   return result
@@ -894,7 +894,7 @@ const parseInterview = (text) => {
       result.summary = summaryMatch[1].trim()
     }
   } catch (e) {
-    console.warn('Parse interview failed:', e)
+    // graceful degradation, fallback values used
   }
   
   return result
@@ -951,7 +951,7 @@ const parseQuickSearch = (text) => {
       }).filter(Boolean)
     }
   } catch (e) {
-    console.warn('Parse quick_search failed:', e)
+    // graceful degradation, fallback values used
   }
   
   return result
@@ -1971,7 +1971,7 @@ const fetchAgentLog = async () => {
       }
     }
   } catch (err) {
-    console.warn('Failed to fetch agent log:', err)
+    emit('add-log', 'Failed to fetch agent log: ' + err.message)
   }
 }
 
@@ -2041,7 +2041,7 @@ const fetchConsoleLog = async () => {
       }
     }
   } catch (err) {
-    console.warn('Failed to fetch console log:', err)
+    emit('add-log', 'Failed to fetch console log: ' + err.message)
   }
 }
 

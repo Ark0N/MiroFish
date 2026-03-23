@@ -443,7 +443,6 @@ const loadHistory = async () => {
       projects.value = response.data || []
     }
   } catch (error) {
-    console.error('Failed to load project history:', error)
     projects.value = []
   } finally {
     loading.value = false

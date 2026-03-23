@@ -205,7 +205,7 @@ const props = defineProps({
   systemLogs: { type: Array, default: () => [] }
 })
 
-defineEmits(['next-step'])
+const emit = defineEmits(['next-step', 'add-log'])
 
 const selectedOntologyItem = ref(null)
 const logContent = ref(null)
@@ -214,7 +214,7 @@ const creatingSimulation = ref(false)
 // 进入环境搭建 - 创建 simulation 并跳转
 const handleEnterEnvSetup = async () => {
   if (!props.projectData?.project_id || !props.projectData?.graph_id) {
-    console.error('Missing project or graph information')
+    emit('add-log', 'Missing project or graph information')
     return
   }
   
@@ -235,11 +235,9 @@ const handleEnterEnvSetup = async () => {
         params: { simulationId: res.data.simulation_id }
       })
     } else {
-      console.error('Failed to create simulation:', res.error)
       toast.error('Failed to create simulation: ' + (res.error || 'Unknown error'))
     }
   } catch (err) {
-    console.error('Simulation creation error:', err)
     toast.error('Simulation creation error: ' + err.message)
   } finally {
     creatingSimulation.value = false

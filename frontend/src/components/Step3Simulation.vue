@@ -526,7 +526,7 @@ const fetchRunStatus = async () => {
       }
     }
   } catch (err) {
-    console.warn('Failed to fetch run status:', err)
+    // polling is resilient, retries automatically
   }
 }
 
@@ -584,7 +584,7 @@ const fetchRunStatusDetail = async () => {
       // 新动作会在底部追加
     }
   } catch (err) {
-    console.warn('Failed to fetch detailed status:', err)
+    // polling is resilient, retries automatically
   }
 }
 

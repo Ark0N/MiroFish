@@ -19,6 +19,7 @@
       :graphData="graphData"
       :systemLogs="systemLogs"
       @next-step="handleNextStep"
+      @add-log="addLog"
     />
     <!-- Step 2: 环境搭建 -->
     <Step2EnvSetup
@@ -233,7 +234,7 @@ const fetchGraphData = async () => {
       }
     }
   } catch (err) {
-    console.warn('Graph fetch error:', err)
+    addLog('Failed to refresh graph: ' + err.message)
   }
 }
 
@@ -272,7 +273,7 @@ const pollTaskStatus = async (taskId) => {
       }
     }
   } catch (e) {
-    console.error(e)
+    addLog('Graph build task error: ' + e.message)
   }
 }
 

@@ -124,7 +124,7 @@ const checkAndStopRunningSimulation = async () => {
       }
     }
   } catch (err) {
-    console.warn('Failed to check simulation status:', err)
+    addLog('Failed to check simulation status')
   }
 }
 

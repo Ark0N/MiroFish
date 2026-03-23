@@ -901,7 +901,7 @@ const pollPrepareStatus = async () => {
       }
     }
   } catch (err) {
-    console.warn('轮询状态失败:', err)
+    // polling is resilient, retries automatically
   }
 }
 
@@ -945,7 +945,7 @@ const fetchProfilesRealtime = async () => {
       }
     }
   } catch (err) {
-    console.warn('获取 Profiles 失败:', err)
+    // polling is resilient, retries automatically
   }
 }
 
@@ -1013,7 +1013,7 @@ const fetchConfigRealtime = async () => {
       }
     }
   } catch (err) {
-    console.warn('获取 Config 失败:', err)
+    // polling is resilient, retries automatically
   }
 }
 
