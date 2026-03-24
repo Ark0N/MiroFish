@@ -1070,7 +1070,7 @@ REACT_FORCE_FINAL_MSG = "已达到工具调用限制，请直接输出 Final Ans
 
 # ── Chat prompt ──
 
-CHAT_SYSTEM_PROMPT_TEMPLATE = """\
+CHAT_SYSTEM_PROMPT_TEMPLATE_ZH = """\
 你是一个简洁高效的模拟预测助手。
 
 【背景】
@@ -1097,6 +1097,34 @@ CHAT_SYSTEM_PROMPT_TEMPLATE = """\
 - 简洁直接，不要长篇大论
 - 使用 > 格式引用关键内容
 - 优先给出结论，再解释原因"""
+
+CHAT_SYSTEM_PROMPT_TEMPLATE = """\
+You are a concise and efficient simulation prediction assistant. Always respond in English.
+
+**Background**
+Prediction scenario: {simulation_requirement}
+
+**Generated Analysis Report**
+{report_content}
+
+**Rules**
+1. Answer questions based on the report content above first
+2. Answer directly — avoid lengthy reasoning
+3. Only call tools when the report content is insufficient to answer
+4. Keep answers concise, clear, and well-structured
+
+**Available Tools** (use only when needed, max 1-2 calls)
+{tools_description}
+
+**Tool Call Format**
+<tool_call>
+{{"name": "tool_name", "parameters": {{"param_name": "param_value"}}}}
+</tool_call>
+
+**Response Style**
+- Concise and direct
+- Use > format to quote key findings
+- Lead with the conclusion, then explain"""
 
 CHAT_OBSERVATION_SUFFIX = "\n\nPlease answer the question concisely."
 
@@ -2065,7 +2093,7 @@ class ReportAgent:
         
         system_prompt = CHAT_SYSTEM_PROMPT_TEMPLATE.format(
             simulation_requirement=self.simulation_requirement,
-            report_content=report_content if report_content else "（暂无报告）",
+            report_content=report_content if report_content else "(No report available)",
             tools_description=self._get_tools_description(),
         )
 
@@ -2120,7 +2148,7 @@ class ReportAgent:
             
             # 将结果添加到消息
             messages.append({"role": "assistant", "content": response})
-            observation = "\n".join([f"[{r['tool']}结果]\n{r['result']}" for r in tool_results])
+            observation = "\n".join([f"[{r['tool']} result]\n{r['result']}" for r in tool_results])
             messages.append({
                 "role": "user",
                 "content": observation + CHAT_OBSERVATION_SUFFIX
