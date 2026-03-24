@@ -415,6 +415,7 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { chatWithReport, getReport, getAgentLog } from '../api/report'
 import { interviewAgents, getSimulationProfilesRealtime } from '../api/simulation'
 import { renderMarkdown } from '../utils/markdown'
+import { loadChatHistory, saveChatHistory as persistChatHistory } from '../store/chatHistory'
 
 const props = defineProps({
   reportId: String,
@@ -488,11 +489,16 @@ const selectChatTarget = (target) => {
 // 保存当前对话记录到缓存
 const saveChatHistory = () => {
   if (chatHistory.value.length === 0) return
-  
+
   if (chatTarget.value === 'report_agent') {
     chatHistoryCache.value['report_agent'] = [...chatHistory.value]
   } else if (selectedAgentIndex.value !== null) {
     chatHistoryCache.value[`agent_${selectedAgentIndex.value}`] = [...chatHistory.value]
+  }
+
+  // Persist to localStorage
+  if (props.simulationId) {
+    persistChatHistory(props.simulationId, chatHistoryCache.value)
   }
 }
 
@@ -857,6 +863,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
+  saveChatHistory()
 })
 
 watch(() => props.reportId, (newId) => {
@@ -868,6 +875,12 @@ watch(() => props.reportId, (newId) => {
 watch(() => props.simulationId, (newId) => {
   if (newId) {
     loadProfiles()
+    // Restore persisted chat history
+    const saved = loadChatHistory(newId)
+    if (saved && Object.keys(saved).length > 0) {
+      chatHistoryCache.value = saved
+      chatHistory.value = saved['report_agent'] || []
+    }
   }
 }, { immediate: true })
 </script>
