@@ -1710,3 +1710,85 @@ class TestPredictionDedup:
         assert d.compute_similarity("hello world", "hello world") == 1.0
         # Completely different should be low
         assert d.compute_similarity("cats dogs animals", "programming javascript code") < 0.1
+
+
+# ---------------------------------------------------------------------------
+# Prediction dependency graph tests
+# ---------------------------------------------------------------------------
+
+
+class TestPredictionDependencies:
+    """Tests for prediction dependency graph."""
+
+    def _make_manager(self):
+        from app.services.prediction_dependencies import PredictionDependencyManager
+        return PredictionDependencyManager()
+
+    def test_detect_dependencies(self):
+        mgr = self._make_manager()
+        preds = [
+            {"event": "Trade war escalation between major economies", "evidence": ["tariffs increased"], "risk_factors": []},
+            {"event": "Supply chain disruption due to trade war tariffs", "evidence": ["trade war causes delays"], "risk_factors": []},
+        ]
+        graph = mgr.detect_dependencies(preds)
+        assert len(graph.edges) >= 1
+
+    def test_no_self_dependencies(self):
+        mgr = self._make_manager()
+        preds = [{"event": "Event A happening", "evidence": [], "risk_factors": []}]
+        graph = mgr.detect_dependencies(preds)
+        for edge in graph.edges:
+            assert edge.source_idx != edge.target_idx
+
+    def test_propagate_change(self):
+        from app.services.prediction_dependencies import DependencyGraph, DependencyEdge
+        mgr = self._make_manager()
+        preds = [
+            {"event": "A", "probability": 0.5},
+            {"event": "B", "probability": 0.5},
+        ]
+        graph = DependencyGraph(edges=[
+            DependencyEdge(source_idx=0, target_idx=1, strength=0.8, relationship="causes"),
+        ])
+        result = mgr.propagate_change(preds, graph, changed_idx=0, probability_delta=0.2)
+        # B should increase since A causes B and A went up
+        assert result[1]["probability"] > 0.5
+
+    def test_prevents_relationship_inverts(self):
+        from app.services.prediction_dependencies import DependencyGraph, DependencyEdge
+        mgr = self._make_manager()
+        preds = [
+            {"event": "A", "probability": 0.5},
+            {"event": "B", "probability": 0.5},
+        ]
+        graph = DependencyGraph(edges=[
+            DependencyEdge(source_idx=0, target_idx=1, strength=0.8, relationship="prevents"),
+        ])
+        result = mgr.propagate_change(preds, graph, changed_idx=0, probability_delta=0.2)
+        # B should decrease since A prevents B and A went up
+        assert result[1]["probability"] < 0.5
+
+    def test_no_infinite_loops(self):
+        from app.services.prediction_dependencies import DependencyGraph, DependencyEdge
+        mgr = self._make_manager()
+        preds = [
+            {"event": "A", "probability": 0.5},
+            {"event": "B", "probability": 0.5},
+        ]
+        # Circular dependency
+        graph = DependencyGraph(edges=[
+            DependencyEdge(source_idx=0, target_idx=1, strength=0.5, relationship="causes"),
+            DependencyEdge(source_idx=1, target_idx=0, strength=0.5, relationship="causes"),
+        ])
+        # Should not hang
+        result = mgr.propagate_change(preds, graph, changed_idx=0, probability_delta=0.1)
+        assert len(result) == 2
+
+    def test_graph_to_dict(self):
+        from app.services.prediction_dependencies import DependencyGraph, DependencyEdge
+        graph = DependencyGraph(edges=[
+            DependencyEdge(source_idx=0, target_idx=1, strength=0.5, relationship="causes"),
+        ])
+        d = graph.to_dict()
+        assert d["num_edges"] == 1
+        assert d["edges"][0]["relationship"] == "causes"

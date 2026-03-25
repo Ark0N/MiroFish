@@ -98,9 +98,9 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 ## Phase 10: Prediction Quality & Reliability
 
-- [~] **10.1 Prediction deduplication** — Detect and merge duplicate/near-duplicate predictions across reports using semantic similarity. Prevents the same event from appearing multiple times with different probabilities in ensemble views.
+- [x] **10.1 Prediction deduplication** — Detect and merge duplicate/near-duplicate predictions across reports using semantic similarity. Prevents the same event from appearing multiple times with different probabilities in ensemble views.
 
-- [ ] **10.2 Prediction dependency graph** — Model causal dependencies between predictions. If Prediction A ("trade war") causes Prediction B ("supply chain disruption"), a change in A's probability should propagate to B. Store as a directed graph in predictions.json.
+- [~] **10.2 Prediction dependency graph** — Model causal dependencies between predictions. If Prediction A ("trade war") causes Prediction B ("supply chain disruption"), a change in A's probability should propagate to B. Store as a directed graph in predictions.json.
 
 - [ ] **10.3 Minority opinion amplification** — Weight contrarian/minority agent opinions more heavily when they provide unique information not captured by the majority. Use information-theoretic measures (surprise/entropy) to identify high-value dissenting signals.
 
