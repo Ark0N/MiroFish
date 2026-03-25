@@ -948,3 +948,86 @@ class TestPatternMatcher:
         assert len(fp.sentiment_trajectory) == 2
         assert fp.sentiment_trajectory[0] == 0.2
         assert fp.total_rounds == 2
+
+
+# ---------------------------------------------------------------------------
+# Backtesting tests
+# ---------------------------------------------------------------------------
+
+
+class TestPredictionBacktester:
+    """Tests for prediction backtesting framework."""
+
+    def _make_backtester(self, tmp_path):
+        from app.services.prediction_backtester import PredictionBacktester
+        bt = PredictionBacktester()
+        bt.OUTCOMES_DIR = str(tmp_path / "outcomes")
+        os.makedirs(bt.OUTCOMES_DIR, exist_ok=True)
+        return bt
+
+    def test_resolve_prediction(self, tmp_path):
+        bt = self._make_backtester(tmp_path)
+        outcome = bt.resolve_prediction(
+            project_id="p1", report_id="r1", prediction_idx=0,
+            event="Market crash", predicted_probability=0.8,
+            actual_outcome=True, resolution_notes="It happened"
+        )
+        assert outcome.actual_outcome is True
+        assert outcome.predicted_probability == 0.8
+
+    def test_outcomes_persisted(self, tmp_path):
+        bt = self._make_backtester(tmp_path)
+        bt.resolve_prediction("p1", "r1", 0, "Event A", 0.7, True)
+        bt.resolve_prediction("p1", "r1", 1, "Event B", 0.3, False)
+        outcomes = bt.get_outcomes("p1")
+        assert len(outcomes) == 2
+
+    def test_calibration_accuracy(self, tmp_path):
+        bt = self._make_backtester(tmp_path)
+        # 3 correct predictions (high prob, happened)
+        bt.resolve_prediction("p1", "r1", 0, "A", 0.8, True)
+        bt.resolve_prediction("p1", "r1", 1, "B", 0.9, True)
+        bt.resolve_prediction("p1", "r1", 2, "C", 0.7, True)
+        # 1 incorrect
+        bt.resolve_prediction("p1", "r1", 3, "D", 0.6, False)
+
+        cal = bt.compute_calibration("p1")
+        assert cal.total_predictions == 4
+        assert cal.accuracy == 0.75  # 3 of 4 correct
+
+    def test_brier_score_perfect(self, tmp_path):
+        bt = self._make_backtester(tmp_path)
+        bt.resolve_prediction("p1", "r1", 0, "A", 1.0, True)
+        bt.resolve_prediction("p1", "r1", 1, "B", 0.0, False)
+        cal = bt.compute_calibration("p1")
+        assert cal.brier_score == 0.0  # Perfect calibration
+
+    def test_brier_score_worst(self, tmp_path):
+        bt = self._make_backtester(tmp_path)
+        bt.resolve_prediction("p1", "r1", 0, "A", 1.0, False)
+        bt.resolve_prediction("p1", "r1", 1, "B", 0.0, True)
+        cal = bt.compute_calibration("p1")
+        assert cal.brier_score == 1.0  # Worst calibration
+
+    def test_calibration_bins(self, tmp_path):
+        bt = self._make_backtester(tmp_path)
+        bt.resolve_prediction("p1", "r1", 0, "A", 0.85, True)
+        bt.resolve_prediction("p1", "r1", 1, "B", 0.15, False)
+        cal = bt.compute_calibration("p1", num_bins=10)
+        assert len(cal.bins) == 10
+        # Bin 8 (0.8-0.9) should have 1 prediction
+        assert cal.bins[8].count == 1
+
+    def test_empty_project_calibration(self, tmp_path):
+        bt = self._make_backtester(tmp_path)
+        cal = bt.compute_calibration("nonexistent")
+        assert cal.total_predictions == 0
+
+    def test_calibration_to_dict(self, tmp_path):
+        bt = self._make_backtester(tmp_path)
+        bt.resolve_prediction("p1", "r1", 0, "A", 0.7, True)
+        cal = bt.compute_calibration("p1")
+        d = cal.to_dict()
+        assert "bins" in d
+        assert "accuracy" in d
+        assert "brier_score" in d
