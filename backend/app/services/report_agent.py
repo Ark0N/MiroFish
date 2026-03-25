@@ -2235,6 +2235,31 @@ Format your response as a markdown section that can be appended to the report:
                 atomic_write_text(full_report_path, report.markdown_content)
                 logger.info(f"Structured predictions appended to report: {report_id}")
             if prediction_set:
+                # Calibrate predictions using consensus and contrarian signals
+                try:
+                    from .prediction_calibrator import PredictionCalibrator
+                    from .simulation_manager import SimulationManager
+                    calibrator = PredictionCalibrator()
+                    sim_dir = SimulationManager()._get_simulation_dir(self.simulation_id)
+                    # Run consensus analysis for calibration context
+                    consensus = self.graph_tools.consensus_analysis(
+                        query=self.simulation_requirement,
+                        simulation_dir=sim_dir
+                    )
+                    calibrated_preds = calibrator.calibrate(
+                        predictions=[p.to_dict() for p in prediction_set.predictions],
+                        consensus_data=consensus.to_dict(),
+                        simulation_dir=sim_dir,
+                    )
+                    # Update prediction set with calibrated values
+                    for i, cp in enumerate(calibrated_preds):
+                        if i < len(prediction_set.predictions):
+                            prediction_set.predictions[i].probability = cp["probability"]
+                            prediction_set.predictions[i].confidence_interval = cp["confidence_interval"]
+                    logger.info("Prediction confidence calibrated with consensus/contrarian data")
+                except Exception as e:
+                    logger.warning(f"Prediction calibration skipped: {e}")
+
                 report.predictions = prediction_set
                 ReportManager.save_predictions(report_id, prediction_set)
                 logger.info(f"Predictions JSON saved: {report_id}/predictions.json")

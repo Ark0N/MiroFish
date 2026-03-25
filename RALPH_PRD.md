@@ -12,9 +12,9 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **1.2 Consensus strength scoring** — Enhance `ConsensusAnalysis` in `graph_tools.py` to compute a weighted consensus score that factors in agent diversity (persona type spread), conviction intensity (sentiment magnitude), and temporal stability (did consensus hold across rounds or flip-flop?). Surface this in the report.
 
-- [~] **1.3 Contrarian agent injection** — Add a "Devil's Advocate" persona type in `oasis_profile_generator.py` that deliberately challenges emerging consensus. 5-10% of agents should be contrarians. Track whether contrarian arguments shift group opinion (a signal of weak consensus).
+- [x] **1.3 Contrarian agent injection** — Add a "Devil's Advocate" persona type in `oasis_profile_generator.py` that deliberately challenges emerging consensus. 5-10% of agents should be contrarians. Track whether contrarian arguments shift group opinion (a signal of weak consensus).
 
-- [ ] **1.4 Prediction confidence calibration** — Add a `PredictionCalibrator` service that compares agent consensus distribution to confidence bands. If 90% of agents agree → high confidence, but if contrarians successfully shifted opinion → downgrade. Wire into `report_agent.py` structured predictions.
+- [~] **1.4 Prediction confidence calibration** — Add a `PredictionCalibrator` service that compares agent consensus distribution to confidence bands. If 90% of agents agree → high confidence, but if contrarians successfully shifted opinion → downgrade. Wire into `report_agent.py` structured predictions.
 
 ## Phase 2: Real-Time & Temporal Intelligence
 

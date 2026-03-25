@@ -338,3 +338,159 @@ class TestPredictionsApiEndpoint:
         assert data['success'] is True
         assert len(data['data']['predictions']) == 1
         assert data['data']['predictions'][0]['event'] == "Test prediction"
+
+
+# ---------------------------------------------------------------------------
+# PredictionCalibrator tests
+# ---------------------------------------------------------------------------
+
+
+class TestPredictionCalibrator:
+    """Tests for PredictionCalibrator confidence calibration."""
+
+    def _make_calibrator(self):
+        from app.services.prediction_calibrator import PredictionCalibrator
+        return PredictionCalibrator()
+
+    def _make_prediction(self, prob=0.7, agreement=0.6):
+        return {
+            "event": "Test prediction",
+            "probability": prob,
+            "confidence_interval": [prob - 0.15, prob + 0.15],
+            "timeframe": "short-term",
+            "reasoning": "Test",
+            "evidence": ["e1"],
+            "risk_factors": ["r1"],
+            "agent_agreement": agreement,
+        }
+
+    def test_empty_predictions(self):
+        cal = self._make_calibrator()
+        assert cal.calibrate([]) == []
+
+    def test_no_consensus_data_returns_calibrated(self):
+        cal = self._make_calibrator()
+        preds = [self._make_prediction(0.7)]
+        result = cal.calibrate(preds)
+        assert len(result) == 1
+        assert "calibration" in result[0]
+        assert result[0]["calibration"]["original_probability"] == 0.7
+
+    def test_high_agreement_boosts_confidence(self):
+        cal = self._make_calibrator()
+        pred = self._make_prediction(0.6, agreement=0.9)
+        consensus = {
+            "agreement_score": 0.95,
+            "consensus_strength": {
+                "diversity_score": 0.8,
+                "conviction_score": 0.8,
+                "stability_score": 0.9,
+                "weighted_score": 0.84,
+            },
+        }
+        result = cal.calibrate([pred], consensus_data=consensus)
+        # High agreement + high strength should boost probability
+        assert result[0]["probability"] > 0.6
+
+    def test_low_agreement_reduces_confidence(self):
+        cal = self._make_calibrator()
+        pred = self._make_prediction(0.7, agreement=0.2)
+        consensus = {
+            "agreement_score": 0.3,
+            "consensus_strength": {
+                "diversity_score": 0.2,
+                "conviction_score": 0.2,
+                "stability_score": 0.3,
+                "weighted_score": 0.24,
+            },
+        }
+        result = cal.calibrate([pred], consensus_data=consensus)
+        # Low agreement + low strength should reduce probability
+        assert result[0]["probability"] < 0.7
+
+    def test_confidence_interval_widens_on_downgrade(self):
+        cal = self._make_calibrator()
+        pred = self._make_prediction(0.7, agreement=0.2)
+        consensus = {"agreement_score": 0.2}
+        result = cal.calibrate([pred], consensus_data=consensus)
+        orig_width = 0.3  # 0.55 to 0.85
+        new_width = result[0]["confidence_interval"][1] - result[0]["confidence_interval"][0]
+        assert new_width >= orig_width  # interval should widen or stay same
+
+    def test_calibration_metadata_present(self):
+        cal = self._make_calibrator()
+        pred = self._make_prediction()
+        result = cal.calibrate([pred])
+        cal_data = result[0]["calibration"]
+        assert "original_probability" in cal_data
+        assert "agreement_factor" in cal_data
+        assert "strength_factor" in cal_data
+        assert "contrarian_factor" in cal_data
+        assert "adjustment" in cal_data
+
+    def test_probability_bounded(self):
+        """Probability should never go below 0.05 or above 0.99."""
+        cal = self._make_calibrator()
+        # Very low probability with penalty
+        pred_low = self._make_prediction(0.05, agreement=0.1)
+        consensus = {"agreement_score": 0.1}
+        result = cal.calibrate([pred_low], consensus_data=consensus)
+        assert result[0]["probability"] >= 0.05
+
+        # Very high probability with boost
+        pred_high = self._make_prediction(0.99, agreement=0.99)
+        consensus_high = {
+            "agreement_score": 0.99,
+            "consensus_strength": {
+                "diversity_score": 1.0,
+                "conviction_score": 1.0,
+                "stability_score": 1.0,
+                "weighted_score": 1.0,
+            },
+        }
+        result_high = cal.calibrate([pred_high], consensus_data=consensus_high)
+        assert result_high[0]["probability"] <= 0.99
+
+    def test_multiple_predictions_calibrated(self):
+        cal = self._make_calibrator()
+        preds = [
+            self._make_prediction(0.8, 0.9),
+            self._make_prediction(0.3, 0.2),
+        ]
+        result = cal.calibrate(preds)
+        assert len(result) == 2
+        # Both should have calibration data
+        assert all("calibration" in r for r in result)
+
+    def test_contrarian_impact_measurement(self, tmp_path):
+        """_measure_contrarian_impact should detect contrarian influence."""
+        cal = self._make_calibrator()
+
+        # Create simulation dir with contrarian posts
+        twitter_dir = tmp_path / "twitter"
+        twitter_dir.mkdir()
+        actions = [
+            {"action_type": "CREATE_POST", "agent_name": "user_1", "content": "great progress excellent", "round": 1},
+            {"action_type": "CREATE_POST", "agent_name": "contrarian_123", "content": "terrible awful danger crisis", "round": 1},
+            {"action_type": "CREATE_POST", "agent_name": "user_1", "content": "maybe it is bad actually danger", "round": 2},
+        ]
+        with open(twitter_dir / "actions.jsonl", "w") as f:
+            for a in actions:
+                f.write(json.dumps(a) + "\n")
+
+        shift = cal._measure_contrarian_impact(str(tmp_path))
+        assert shift >= 0.0
+
+    def test_no_contrarian_returns_zero_shift(self, tmp_path):
+        cal = self._make_calibrator()
+        twitter_dir = tmp_path / "twitter"
+        twitter_dir.mkdir()
+        actions = [
+            {"action_type": "CREATE_POST", "agent_name": "user_1", "content": "great progress", "round": 1},
+        ]
+        with open(twitter_dir / "actions.jsonl", "w") as f:
+            for a in actions:
+                f.write(json.dumps(a) + "\n")
+
+        shift = cal._measure_contrarian_impact(str(tmp_path))
+        assert shift == 0.0
