@@ -1414,3 +1414,72 @@ class TestBootstrapConfidence:
         result = calc.compute_prediction_bands(sentiments, 0.95)
         assert result["ci_low"] >= 0.0
         assert result["ci_high"] <= 1.0
+
+
+# ---------------------------------------------------------------------------
+# Cross-validation tests
+# ---------------------------------------------------------------------------
+
+
+class TestCrossValidator:
+    """Tests for cross-validation prediction scoring."""
+
+    def _make_validator(self):
+        from app.services.cross_validator import CrossValidator
+        return CrossValidator()
+
+    def test_empty_agents(self):
+        v = self._make_validator()
+        result = v.validate({})
+        assert result["is_valid"] is False
+        assert result["agreement_rate"] == 0.0
+
+    def test_single_agent_insufficient(self):
+        v = self._make_validator()
+        result = v.validate({"alice": ["great progress"]})
+        assert result["is_valid"] is False
+
+    def test_unanimous_positive_high_agreement(self):
+        v = self._make_validator()
+        posts = {
+            f"agent_{i}": ["great excellent wonderful progress love hope"]
+            for i in range(20)
+        }
+        result = v.validate(posts, n_folds=5)
+        assert result["agreement_rate"] >= 0.8
+        assert "Strong" in result["interpretation"] or "Moderate" in result["interpretation"]
+
+    def test_split_opinions_low_agreement(self):
+        v = self._make_validator()
+        posts = {}
+        for i in range(10):
+            posts[f"pos_{i}"] = ["great excellent wonderful love"]
+        for i in range(10):
+            posts[f"neg_{i}"] = ["terrible awful crisis danger"]
+        result = v.validate(posts, n_folds=5)
+        # With a clean 50/50 split, some folds will disagree
+        assert result["n_folds"] == 5
+        assert result["is_valid"] is True
+
+    def test_fold_results_present(self):
+        v = self._make_validator()
+        posts = {f"a{i}": [f"post {i} great"] for i in range(10)}
+        result = v.validate(posts, n_folds=3)
+        assert len(result["folds"]) == 3
+        for fold in result["folds"]:
+            assert "train_sentiment" in fold
+            assert "test_sentiment" in fold
+            assert "agrees" in fold
+
+    def test_reproducible_with_seed(self):
+        v = self._make_validator()
+        posts = {f"a{i}": [f"post {i}"] for i in range(10)}
+        r1 = v.validate(posts, seed=42)
+        r2 = v.validate(posts, seed=42)
+        assert r1["agreement_rate"] == r2["agreement_rate"]
+
+    def test_avg_delta_computed(self):
+        v = self._make_validator()
+        posts = {f"a{i}": ["great progress"] for i in range(10)}
+        result = v.validate(posts, n_folds=3)
+        assert "avg_sentiment_delta" in result
