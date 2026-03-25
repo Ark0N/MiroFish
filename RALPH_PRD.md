@@ -54,11 +54,11 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **5.3 Historical pattern matching** — Add a `PatternMatcher` service that compares current simulation dynamics (sentiment trajectory, faction evolution, momentum) against previously completed simulations. Identify similar historical patterns and use their outcomes to adjust current predictions.
 
-- [~] **5.4 Prediction backtesting framework** — Add ability to mark predictions as "resolved" (correct/incorrect) with actual outcomes. Compute calibration curves (predicted vs actual probability) across resolved predictions. Store in `prediction_outcomes.json` per project.
+- [x] **5.4 Prediction backtesting framework** — Add ability to mark predictions as "resolved" (correct/incorrect) with actual outcomes. Compute calibration curves (predicted vs actual probability) across resolved predictions. Store in `prediction_outcomes.json` per project.
 
 ## Phase 6: External Data Integration
 
-- [ ] **6.1 RSS feed monitor** — Add a background service that periodically checks configured RSS feeds for new articles. When new content is detected, automatically extract text and queue it for graph enrichment. Store feed config in project settings.
+- [~] **6.1 RSS feed monitor** — Add a background service that periodically checks configured RSS feeds for new articles. When new content is detected, automatically extract text and queue it for graph enrichment. Store feed config in project settings.
 
 - [ ] **6.2 Trend detection from ingested data** — Add a `TrendDetector` that analyzes temporal patterns in ingested content. Identify emerging topics, sentiment shifts in source material, and new entity appearances. Surface as alerts in the prediction pipeline.
 
