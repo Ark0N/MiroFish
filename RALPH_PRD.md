@@ -100,11 +100,11 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **10.1 Prediction deduplication** — Detect and merge duplicate/near-duplicate predictions across reports using semantic similarity. Prevents the same event from appearing multiple times with different probabilities in ensemble views.
 
-- [~] **10.2 Prediction dependency graph** — Model causal dependencies between predictions. If Prediction A ("trade war") causes Prediction B ("supply chain disruption"), a change in A's probability should propagate to B. Store as a directed graph in predictions.json.
+- [x] **10.2 Prediction dependency graph** — Model causal dependencies between predictions. If Prediction A ("trade war") causes Prediction B ("supply chain disruption"), a change in A's probability should propagate to B. Store as a directed graph in predictions.json.
 
-- [ ] **10.3 Minority opinion amplification** — Weight contrarian/minority agent opinions more heavily when they provide unique information not captured by the majority. Use information-theoretic measures (surprise/entropy) to identify high-value dissenting signals.
+- [x] **10.3 Minority opinion amplification** — Weight contrarian/minority agent opinions more heavily when they provide unique information not captured by the majority. Use information-theoretic measures (surprise/entropy) to identify high-value dissenting signals.
 
-- [ ] **10.4 Prediction uncertainty decomposition** — Decompose total prediction uncertainty into epistemic (model/data uncertainty) and aleatoric (inherent randomness). Epistemic uncertainty should decrease with more data; aleatoric cannot. Report both to users.
+- [x] **10.4 Prediction uncertainty decomposition** — Decompose total prediction uncertainty into epistemic (model/data uncertainty) and aleatoric (inherent randomness). Epistemic uncertainty should decrease with more data; aleatoric cannot. Report both to users.
 
 ## Phase 11: Integration & Scale
 

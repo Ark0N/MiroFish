@@ -1792,3 +1792,121 @@ class TestPredictionDependencies:
         d = graph.to_dict()
         assert d["num_edges"] == 1
         assert d["edges"][0]["relationship"] == "causes"
+
+
+# ---------------------------------------------------------------------------
+# Minority amplification tests
+# ---------------------------------------------------------------------------
+
+
+class TestMinorityAmplifier:
+    """Tests for minority opinion amplification."""
+
+    def _make_amplifier(self):
+        from app.services.minority_amplifier import MinorityAmplifier
+        return MinorityAmplifier()
+
+    def test_empty_input(self):
+        amp = self._make_amplifier()
+        assert amp.compute_information_value({}, {}) == {}
+
+    def test_minority_gets_higher_info_value(self):
+        amp = self._make_amplifier()
+        sentiments = {}
+        posts = {}
+        # 9 positive agents
+        for i in range(9):
+            sentiments[f"pos_{i}"] = 0.7
+            posts[f"pos_{i}"] = ["great wonderful excellent progress"]
+        # 1 negative agent (minority)
+        sentiments["minority"] = -0.8
+        posts["minority"] = ["terrible crisis awful danger unprecedented"]
+
+        values = amp.compute_information_value(sentiments, posts)
+        assert values["minority"]["is_minority"] is True
+        assert values["minority"]["info_value"] > values["pos_0"]["info_value"]
+
+    def test_amplification_weight_for_minority(self):
+        amp = self._make_amplifier()
+        sentiments = {f"pos_{i}": 0.5 for i in range(8)}
+        sentiments["lone_wolf"] = -0.5
+        posts = {a: ["some content words here"] for a in sentiments}
+
+        values = amp.compute_information_value(sentiments, posts)
+        assert values["lone_wolf"]["amplification_weight"] > 1.0
+        # Majority agents get weight 1.0
+        assert values["pos_0"]["amplification_weight"] == 1.0
+
+    def test_amplified_consensus_shifts_toward_minority(self):
+        amp = self._make_amplifier()
+        sentiments = {f"pos_{i}": 0.5 for i in range(9)}
+        sentiments["dissenter"] = -0.8
+        posts = {a: ["content words enough text"] for a in sentiments}
+
+        result = amp.get_amplified_consensus(sentiments, posts)
+        # Standard consensus is positive (9:1 ratio)
+        assert result["standard_consensus"] > 0
+        # Amplified should be shifted toward the minority (less positive)
+        assert result["amplified_consensus"] < result["standard_consensus"]
+        assert result["minority_count"] >= 1
+
+    def test_no_minority_no_amplification(self):
+        amp = self._make_amplifier()
+        sentiments = {f"a{i}": 0.5 for i in range(10)}
+        posts = {a: ["text"] for a in sentiments}
+
+        result = amp.get_amplified_consensus(sentiments, posts)
+        # No minority → amplified ≈ standard
+        assert abs(result["delta"]) < 0.01
+
+
+# ---------------------------------------------------------------------------
+# Uncertainty decomposition tests
+# ---------------------------------------------------------------------------
+
+
+class TestUncertaintyDecomposer:
+    """Tests for uncertainty decomposition."""
+
+    def _make_decomposer(self):
+        from app.services.uncertainty_decomposer import UncertaintyDecomposer
+        return UncertaintyDecomposer()
+
+    def test_high_certainty_prediction(self):
+        d = self._make_decomposer()
+        result = d.decompose(0.95, [0.9] * 100, n_simulations=5)
+        assert result["aleatoric"] < 0.5  # Low entropy at p=0.95
+        assert result["epistemic"] < 0.3  # Many agents + simulations
+
+    def test_uncertain_prediction_high_aleatoric(self):
+        d = self._make_decomposer()
+        result = d.decompose(0.5, [0.5, -0.5, 0.3, -0.3], n_simulations=1)
+        assert result["aleatoric"] > 0.5  # p=0.5 = max entropy
+
+    def test_few_agents_high_epistemic(self):
+        d = self._make_decomposer()
+        result = d.decompose(0.7, [0.5, 0.6], n_simulations=1)
+        assert result["epistemic"] > 0.3  # Very few agents
+
+    def test_many_agents_low_epistemic(self):
+        d = self._make_decomposer()
+        result = d.decompose(0.7, [0.5] * 200, n_simulations=5)
+        assert result["epistemic"] < 0.25
+
+    def test_total_uncertainty_bounded(self):
+        d = self._make_decomposer()
+        result = d.decompose(0.5, [0.5, -0.5])
+        assert 0 <= result["total_uncertainty"] <= 1.0
+        assert 0 <= result["epistemic"] <= 1.0
+        assert 0 <= result["aleatoric"] <= 1.0
+
+    def test_recommendation_present(self):
+        d = self._make_decomposer()
+        result = d.decompose(0.5, [0.1, -0.1])
+        assert "recommendation" in result
+        assert len(result["recommendation"]) > 0
+
+    def test_empty_sentiments(self):
+        d = self._make_decomposer()
+        result = d.decompose(0.7, [], n_agents=0)
+        assert result["epistemic"] > 0  # High epistemic with no data
