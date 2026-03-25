@@ -38,13 +38,13 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 ## Phase 4: Report & Output Quality
 
-- [~] **4.1 Prediction comparison view** — Add frontend component in Step 4 that renders structured predictions as a sortable table with probability bars, confidence indicators, and faction breakdown per prediction.
+- [x] **4.1 Prediction comparison view** — Add frontend component in Step 4 that renders structured predictions as a sortable table with probability bars, confidence indicators, and faction breakdown per prediction.
 
-- [ ] **4.2 Prediction diff across runs** — When multiple simulations exist for a project, add a comparison view showing how predictions shifted between runs. Helps users see prediction stability.
+- [x] **4.2 Prediction diff across runs** — When multiple simulations exist for a project, add a comparison view showing how predictions shifted between runs. Helps users see prediction stability.
 
-- [ ] **4.3 Evidence chain linking** — Each prediction in the report should link back to specific agent posts, consensus moments, and graph entities that support it. Add citation IDs to structured predictions that reference action log entries.
+- [x] **4.3 Evidence chain linking** — Each prediction in the report should link back to specific agent posts, consensus moments, and graph entities that support it. Add citation IDs to structured predictions that reference action log entries.
 
-- [ ] **4.4 Executive summary with risk matrix** — Auto-generate a 1-page executive summary with a 2x2 risk matrix (probability vs impact) from structured predictions. Add as first section of report.
+- [x] **4.4 Executive summary with risk matrix** — Auto-generate a 1-page executive summary with a 2x2 risk matrix (probability vs impact) from structured predictions. Add as first section of report.
 
 ---
 

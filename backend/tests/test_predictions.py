@@ -546,3 +546,85 @@ class TestUrlExtractor:
         results = extract_text_from_urls(["https://a.com", "https://b.com"])
         assert len(results) == 2
         assert all(r["success"] for r in results)
+
+
+# ---------------------------------------------------------------------------
+# Executive summary / risk matrix tests
+# ---------------------------------------------------------------------------
+
+
+class TestExecutiveSummary:
+    """Tests for executive summary generation with risk matrix."""
+
+    def _make_agent(self):
+        with patch('app.services.report_agent.GraphToolsService'), \
+             patch('app.services.report_agent.LLMClient'):
+            agent = ReportAgent.__new__(ReportAgent)
+            agent.llm = MagicMock()
+            agent.tools_service = MagicMock()
+            agent.report_logger = None
+            agent.console_logger = None
+        return agent
+
+    def test_generates_summary_with_predictions(self):
+        agent = self._make_agent()
+        ps = PredictionSet(
+            predictions=[
+                StructuredPrediction(event="Market crash", probability=0.8, impact_level="high"),
+                StructuredPrediction(event="Minor policy change", probability=0.6, impact_level="low"),
+            ],
+            overall_confidence="Moderate confidence",
+        )
+        result = agent._generate_executive_summary(ps)
+        assert "Executive Summary" in result
+        assert "Risk Matrix" in result
+        assert "Market crash" in result
+
+    def test_empty_predictions_returns_empty(self):
+        agent = self._make_agent()
+        assert agent._generate_executive_summary(PredictionSet()) == ""
+        assert agent._generate_executive_summary(None) == ""
+
+    def test_risk_matrix_quadrants(self):
+        agent = self._make_agent()
+        ps = PredictionSet(predictions=[
+            StructuredPrediction(event="A", probability=0.8, impact_level="high"),
+            StructuredPrediction(event="B", probability=0.8, impact_level="low"),
+            StructuredPrediction(event="C", probability=0.2, impact_level="high"),
+            StructuredPrediction(event="D", probability=0.2, impact_level="low"),
+        ])
+        result = agent._generate_executive_summary(ps)
+        assert "Critical Risks" in result
+        assert "Watch List" in result
+        assert "Likely Developments" in result
+        assert "Background Signals" in result
+
+
+class TestPredictionDiffEndpoint:
+    """Tests for prediction comparison API endpoint."""
+
+    @pytest.fixture
+    def app(self):
+        from app import create_app
+        app = create_app()
+        app.config['TESTING'] = True
+        return app
+
+    @pytest.fixture
+    def client(self, app):
+        return app.test_client()
+
+    def test_missing_report_ids_returns_400(self, client):
+        response = client.post('/api/report/compare-predictions', json={})
+        assert response.status_code == 400
+
+    def test_single_report_returns_400(self, client):
+        response = client.post('/api/report/compare-predictions',
+                               json={"report_ids": ["r1"]})
+        assert response.status_code == 400
+
+    def test_too_many_reports_returns_400(self, client):
+        ids = [f"r{i}" for i in range(15)]
+        response = client.post('/api/report/compare-predictions',
+                               json={"report_ids": ids})
+        assert response.status_code == 400

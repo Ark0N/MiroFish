@@ -449,6 +449,8 @@ class StructuredPrediction:
     evidence: List[str] = field(default_factory=list)
     risk_factors: List[str] = field(default_factory=list)
     agent_agreement: float = 0.0  # 0.0 - 1.0, fraction of agents supporting this
+    citation_ids: List[str] = field(default_factory=list)  # references to action log entries
+    impact_level: str = "medium"  # low, medium, high — for risk matrix
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -459,7 +461,9 @@ class StructuredPrediction:
             "reasoning": self.reasoning,
             "evidence": self.evidence,
             "risk_factors": self.risk_factors,
-            "agent_agreement": self.agent_agreement
+            "agent_agreement": self.agent_agreement,
+            "citation_ids": self.citation_ids,
+            "impact_level": self.impact_level,
         }
 
 
@@ -2042,8 +2046,69 @@ Format your response as a markdown section that can be appended to the report:
             logger.warning(f"Failed to parse prediction JSON: {e}")
             return None
 
+    def _generate_executive_summary(self, prediction_set: 'PredictionSet') -> str:
+        """Generate an executive summary with a risk matrix from predictions.
+
+        Creates a 1-page summary with a 2x2 risk matrix (probability vs impact)
+        that can be prepended to the report.
+        """
+        if not prediction_set or not prediction_set.predictions:
+            return ""
+
+        # Classify predictions into risk matrix quadrants
+        high_prob_high_impact = []
+        high_prob_low_impact = []
+        low_prob_high_impact = []
+        low_prob_low_impact = []
+
+        for p in prediction_set.predictions:
+            is_high_prob = p.probability >= 0.5
+            is_high_impact = p.impact_level == "high"
+
+            if is_high_prob and is_high_impact:
+                high_prob_high_impact.append(p)
+            elif is_high_prob and not is_high_impact:
+                high_prob_low_impact.append(p)
+            elif not is_high_prob and is_high_impact:
+                low_prob_high_impact.append(p)
+            else:
+                low_prob_low_impact.append(p)
+
+        def format_list(preds):
+            if not preds:
+                return "- None identified\n"
+            return "".join(f"- {p.event} ({p.probability*100:.0f}%)\n" for p in preds)
+
+        summary = f"""## Executive Summary
+
+### Risk Matrix
+
+| | **High Impact** | **Low Impact** |
+|---|---|---|
+| **High Probability (>50%)** | {len(high_prob_high_impact)} predictions | {len(high_prob_low_impact)} predictions |
+| **Low Probability (<50%)** | {len(low_prob_high_impact)} predictions | {len(low_prob_low_impact)} predictions |
+
+#### Critical Risks (High Probability + High Impact)
+{format_list(high_prob_high_impact)}
+#### Watch List (Low Probability + High Impact)
+{format_list(low_prob_high_impact)}
+#### Likely Developments (High Probability + Low Impact)
+{format_list(high_prob_low_impact)}
+#### Background Signals (Low Probability + Low Impact)
+{format_list(low_prob_low_impact)}
+### Key Findings
+
+- **Total predictions**: {len(prediction_set.predictions)}
+- **Average confidence**: {sum(p.probability for p in prediction_set.predictions) / len(prediction_set.predictions) * 100:.0f}%
+- **{prediction_set.overall_confidence}**
+
+---
+
+"""
+        return summary
+
     def generate_report(
-        self, 
+        self,
         progress_callback: Optional[Callable[[str, int, str], None]] = None,
         report_id: Optional[str] = None
     ) -> Report:
@@ -2263,6 +2328,15 @@ Format your response as a markdown section that can be appended to the report:
                 report.predictions = prediction_set
                 ReportManager.save_predictions(report_id, prediction_set)
                 logger.info(f"Predictions JSON saved: {report_id}/predictions.json")
+
+                # Generate and prepend executive summary with risk matrix
+                exec_summary = self._generate_executive_summary(prediction_set)
+                if exec_summary:
+                    report.markdown_content = exec_summary + report.markdown_content
+                    from ..utils.file_utils import atomic_write_text
+                    full_report_path = ReportManager._get_report_markdown_path(report_id)
+                    atomic_write_text(full_report_path, report.markdown_content)
+                    logger.info("Executive summary with risk matrix prepended to report")
 
             report.status = ReportStatus.COMPLETED
             report.completed_at = datetime.now().isoformat()

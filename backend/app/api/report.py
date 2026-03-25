@@ -515,6 +515,100 @@ def get_predictions(report_id: str):
         }), 500
 
 
+@report_bp.route('/compare-predictions', methods=['POST'])
+def compare_predictions():
+    """
+    Compare predictions across multiple reports.
+
+    Request JSON:
+        { "report_ids": ["report_1", "report_2", ...] }
+
+    Returns prediction diffs showing how predictions shifted between reports.
+    """
+    data = request.get_json(silent=True)
+    if not data or not data.get("report_ids"):
+        return jsonify({"success": False, "error": "report_ids array required"}), 400
+
+    report_ids = data["report_ids"]
+    if len(report_ids) < 2:
+        return jsonify({"success": False, "error": "At least 2 report_ids required"}), 400
+    if len(report_ids) > 10:
+        return jsonify({"success": False, "error": "Maximum 10 report_ids"}), 400
+
+    try:
+        comparisons = []
+        all_predictions = {}
+
+        for rid in report_ids:
+            preds = ReportManager.load_predictions(rid)
+            if preds:
+                all_predictions[rid] = preds.to_dict()
+
+        if len(all_predictions) < 2:
+            return jsonify({"success": False, "error": "Need predictions from at least 2 reports"}), 404
+
+        # Build comparison: match predictions by event text similarity
+        report_list = list(all_predictions.keys())
+        base_id = report_list[0]
+        base_preds = all_predictions[base_id]["predictions"]
+
+        for compare_id in report_list[1:]:
+            compare_preds = all_predictions[compare_id]["predictions"]
+            diffs = []
+
+            for bp in base_preds:
+                # Find best matching prediction in comparison set
+                best_match = None
+                best_score = 0
+                bp_words = set(bp["event"].lower().split())
+
+                for cp in compare_preds:
+                    cp_words = set(cp["event"].lower().split())
+                    overlap = len(bp_words & cp_words)
+                    total = len(bp_words | cp_words)
+                    score = overlap / total if total > 0 else 0
+                    if score > best_score and score > 0.3:
+                        best_score = score
+                        best_match = cp
+
+                if best_match:
+                    prob_delta = best_match["probability"] - bp["probability"]
+                    agreement_delta = best_match["agent_agreement"] - bp["agent_agreement"]
+                    diffs.append({
+                        "event": bp["event"],
+                        "base_probability": bp["probability"],
+                        "compare_probability": best_match["probability"],
+                        "probability_delta": round(prob_delta, 3),
+                        "base_agreement": bp["agent_agreement"],
+                        "compare_agreement": best_match["agent_agreement"],
+                        "agreement_delta": round(agreement_delta, 3),
+                        "match_score": round(best_score, 3),
+                    })
+
+            comparisons.append({
+                "base_report": base_id,
+                "compare_report": compare_id,
+                "diffs": diffs,
+                "new_in_compare": [
+                    cp for cp in compare_preds
+                    if not any(d["match_score"] > 0.3 for d in diffs
+                               if set(d["event"].lower().split()) & set(cp["event"].lower().split()))
+                ],
+            })
+
+        return jsonify({
+            "success": True,
+            "data": {
+                "comparisons": comparisons,
+                "report_ids": report_list,
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Failed to compare predictions: {str(e)}")
+        return jsonify({"success": False, "error": "Comparison failed"}), 500
+
+
 @report_bp.route('/<report_id>', methods=['DELETE'])
 @limiter.limit("30 per minute")
 def delete_report(report_id: str):
