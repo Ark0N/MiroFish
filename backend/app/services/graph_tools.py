@@ -494,6 +494,85 @@ class GraphToolsService:
                     logger.error(f"Graph {operation_name} failed after {max_retries} attempts: {str(e)}")
         raise last_exception
 
+    @staticmethod
+    def _apply_time_decay(
+        edges: List[Dict[str, Any]],
+        decay_half_life_days: float = 30.0
+    ) -> List[Dict[str, Any]]:
+        """Re-rank edges by recency using exponential time-decay.
+
+        More recently created/valid edges get higher scores. Edges without
+        timestamps keep their original order (positioned after dated entries).
+
+        Args:
+            edges: List of edge dicts with optional 'created_at' or 'valid_at' fields
+            decay_half_life_days: Half-life in days — after this many days, score halves
+
+        Returns:
+            Edges sorted by time-decay score (most recent first), with a
+            'recency_score' field added (0.0-1.0).
+        """
+        from datetime import datetime as _dt
+        import math
+
+        now = _dt.now()
+
+        def parse_timestamp(ts_str: Optional[str]) -> Optional[_dt]:
+            if not ts_str:
+                return None
+            try:
+                # Strip timezone suffix for naive datetime comparison
+                # Remove Z or +HH:MM or +HHMM suffix
+                clean = ts_str.replace("Z", "")
+                # Remove timezone offset like +00:00 or -05:00
+                if "+" in clean and clean.index("+") > 10:
+                    clean = clean[:clean.rindex("+")]
+                # Also handle negative offset after the date portion
+                # Only strip if there's a timezone-like suffix after seconds
+                parts = clean.split("T")
+                if len(parts) == 2 and len(parts[1]) > 8:
+                    # Check for timezone offset embedded in time part
+                    time_part = parts[1]
+                    for sep_idx in range(8, len(time_part)):
+                        if time_part[sep_idx] in "+-":
+                            parts[1] = time_part[:sep_idx]
+                            break
+                    clean = "T".join(parts)
+
+                for fmt in ("%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S",
+                            "%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S",
+                            "%Y-%m-%d"):
+                    try:
+                        return _dt.strptime(clean, fmt)
+                    except ValueError:
+                        continue
+                return None
+            except Exception:
+                return None
+
+        dated_edges = []
+        undated_edges = []
+
+        for edge in edges:
+            # Prefer valid_at over created_at for recency
+            ts = parse_timestamp(edge.get("valid_at")) or parse_timestamp(edge.get("created_at"))
+            if ts:
+                age_days = max(0.0, (now - ts).total_seconds() / 86400.0)
+                # Exponential decay: score = 2^(-age/half_life)
+                recency_score = math.pow(2, -age_days / decay_half_life_days)
+                edge_copy = dict(edge)
+                edge_copy["recency_score"] = round(recency_score, 4)
+                dated_edges.append((recency_score, edge_copy))
+            else:
+                edge_copy = dict(edge)
+                edge_copy["recency_score"] = 0.5  # neutral score for undated
+                undated_edges.append(edge_copy)
+
+        # Sort dated edges by recency (highest first)
+        dated_edges.sort(key=lambda x: x[0], reverse=True)
+
+        return [e for _, e in dated_edges] + undated_edges
+
     def search_graph(
         self,
         graph_id: str,
@@ -525,18 +604,29 @@ class GraphToolsService:
             edges = []
 
             # Graphiti search returns list[EntityEdge]
+            # Collect edges with timestamps for time-decay scoring
+            edge_entries = []
             for edge in search_results:
-                if edge.fact:
-                    facts.append(edge.fact)
-                edges.append({
+                entry = {
                     "uuid": edge.uuid,
                     "name": edge.name or "",
                     "fact": edge.fact or "",
                     "source_node_uuid": edge.source_node_uuid,
                     "target_node_uuid": edge.target_node_uuid,
-                })
+                    "created_at": str(edge.created_at) if edge.created_at else None,
+                    "valid_at": str(edge.valid_at) if edge.valid_at else None,
+                }
+                edge_entries.append(entry)
 
-            logger.info(f"Search complete: found {len(facts)} related facts")
+            # Apply time-decay re-ranking: more recent entries rank higher
+            edge_entries = self._apply_time_decay(edge_entries)
+
+            for entry in edge_entries:
+                if entry["fact"]:
+                    facts.append(entry["fact"])
+                edges.append(entry)
+
+            logger.info(f"Search complete: found {len(facts)} related facts (time-decay ranked)")
 
             return SearchResult(
                 facts=facts,

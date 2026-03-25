@@ -421,6 +421,93 @@ class TestConsensusStrength:
 
 
 # ---------------------------------------------------------------------------
+# Time-decay relevance scoring tests
+# ---------------------------------------------------------------------------
+
+
+class TestTimeDecayScoring:
+    """Tests for time-decay recency-weighted search ranking."""
+
+    def _get_cls(self):
+        from app.services.graph_tools import GraphToolsService
+        return GraphToolsService
+
+    def test_empty_edges_returns_empty(self):
+        cls = self._get_cls()
+        result = cls._apply_time_decay([])
+        assert result == []
+
+    def test_recent_edges_rank_higher(self):
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        recent = (now - timedelta(days=1)).isoformat()
+        old = (now - timedelta(days=60)).isoformat()
+
+        edges = [
+            {"fact": "old fact", "created_at": old},
+            {"fact": "recent fact", "created_at": recent},
+        ]
+        result = self._get_cls()._apply_time_decay(edges)
+        assert result[0]["fact"] == "recent fact"
+        assert result[1]["fact"] == "old fact"
+        assert result[0]["recency_score"] > result[1]["recency_score"]
+
+    def test_valid_at_preferred_over_created_at(self):
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        old_created = (now - timedelta(days=100)).isoformat()
+        recent_valid = (now - timedelta(days=2)).isoformat()
+
+        edges = [
+            {"fact": "fact", "created_at": old_created, "valid_at": recent_valid},
+        ]
+        result = self._get_cls()._apply_time_decay(edges)
+        # Should use valid_at (2 days ago) not created_at (100 days ago)
+        assert result[0]["recency_score"] > 0.8
+
+    def test_undated_edges_get_neutral_score(self):
+        edges = [
+            {"fact": "no date"},
+            {"fact": "also no date", "created_at": None},
+        ]
+        result = self._get_cls()._apply_time_decay(edges)
+        assert all(e["recency_score"] == 0.5 for e in result)
+
+    def test_dated_before_undated(self):
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        recent = (now - timedelta(days=1)).isoformat()
+
+        edges = [
+            {"fact": "undated"},
+            {"fact": "dated", "created_at": recent},
+        ]
+        result = self._get_cls()._apply_time_decay(edges)
+        # Dated edges should come before undated
+        assert result[0]["fact"] == "dated"
+        assert result[1]["fact"] == "undated"
+
+    def test_half_life_decay(self):
+        """After half_life_days, score should be approximately 0.5."""
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        half_life = 30.0
+        at_half_life = (now - timedelta(days=half_life)).isoformat()
+
+        edges = [{"fact": "half-life", "created_at": at_half_life}]
+        result = self._get_cls()._apply_time_decay(edges, decay_half_life_days=half_life)
+        assert 0.45 <= result[0]["recency_score"] <= 0.55
+
+    def test_preserves_edge_fields(self):
+        from datetime import datetime
+        edges = [{"fact": "test", "uuid": "abc", "name": "edge1", "created_at": datetime.now().isoformat()}]
+        result = self._get_cls()._apply_time_decay(edges)
+        assert result[0]["uuid"] == "abc"
+        assert result[0]["name"] == "edge1"
+        assert "recency_score" in result[0]
+
+
+# ---------------------------------------------------------------------------
 # RoundMetricsTracker tests
 # ---------------------------------------------------------------------------
 
