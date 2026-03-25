@@ -49,6 +49,14 @@ export const getReport = (reportId) => {
 }
 
 /**
+ * Get structured predictions for a report
+ * @param {string} reportId
+ */
+export const getPredictions = (reportId) => {
+  return service.get(`/api/report/${reportId}/predictions`)
+}
+
+/**
  * 与 Report Agent 对话
  * @param {Object} data - { simulation_id, message, chat_history? }
  */

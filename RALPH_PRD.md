@@ -34,11 +34,11 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **3.3 Sentiment momentum indicators** — Compute rate-of-change of sentiment per round in `RoundMetricsTracker`. If sentiment is accelerating in one direction, flag as "strong momentum". If decelerating, flag as "potential reversal". Include in round metrics.
 
-- [~] **3.4 Agent memory & learning** — Extend simulation scripts to give agents a short memory of their last 3-5 posts and interactions. Currently agents are stateless per round. Memory enables opinion evolution and more realistic prediction dynamics.
+- [x] **3.4 Agent memory & learning** — Extend simulation scripts to give agents a short memory of their last 3-5 posts and interactions. Currently agents are stateless per round. Memory enables opinion evolution and more realistic prediction dynamics.
 
 ## Phase 4: Report & Output Quality
 
-- [ ] **4.1 Prediction comparison view** — Add frontend component in Step 4 that renders structured predictions as a sortable table with probability bars, confidence indicators, and faction breakdown per prediction.
+- [~] **4.1 Prediction comparison view** — Add frontend component in Step 4 that renders structured predictions as a sortable table with probability bars, confidence indicators, and faction breakdown per prediction.
 
 - [ ] **4.2 Prediction diff across runs** — When multiple simulations exist for a project, add a comparison view showing how predictions shifted between runs. Helps users see prediction stability.
 
