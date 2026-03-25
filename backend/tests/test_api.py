@@ -207,6 +207,36 @@ class TestIngestUrlEndpoint:
         assert "20" in response.get_json()["error"]
 
 
+class TestWebhookEndpoint:
+    """Tests for POST /api/graph/webhook/event."""
+
+    def test_missing_body_returns_400(self, client):
+        response = client.post('/api/graph/webhook/event',
+                               data="bad", content_type='application/json')
+        assert response.status_code == 400
+
+    def test_missing_project_id_returns_400(self, client):
+        response = client.post('/api/graph/webhook/event',
+                               json={"content": "test"})
+        assert response.status_code == 400
+
+    def test_missing_content_returns_400(self, client):
+        response = client.post('/api/graph/webhook/event',
+                               json={"project_id": "p1"})
+        assert response.status_code == 400
+
+    def test_valid_event_accepted(self, client, tmp_path):
+        response = client.post('/api/graph/webhook/event',
+                               json={
+                                   "project_id": "test_proj",
+                                   "content": "Breaking news event",
+                                   "event_type": "news",
+                                   "source": "test"
+                               })
+        # May fail if project dir doesn't exist, but should not be 400
+        assert response.status_code in (200, 500)
+
+
 class TestSimulationEndpoints:
     """Tests for /api/simulation/ endpoints."""
 

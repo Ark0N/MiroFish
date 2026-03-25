@@ -438,6 +438,92 @@ def ingest_url():
         return jsonify({"success": False, "error": "URL ingestion failed"}), 500
 
 
+# ============== Endpoint 1c: Event webhook ==============
+
+@graph_bp.route('/webhook/event', methods=['POST'])
+@limiter.limit("30 per minute")
+def webhook_event():
+    """
+    Receive external event notifications for graph enrichment and
+    mid-simulation injection.
+
+    Request JSON:
+        {
+            "project_id": "proj_xxxx",
+            "event_type": "news" | "alert" | "update",
+            "title": "Event title",
+            "content": "Event description/content",
+            "source": "external system name",
+            "simulation_id": "sim_xxxx (optional, for live injection)",
+            "metadata": {} (optional)
+        }
+
+    If simulation_id is provided and the simulation is running, the event
+    is also injected into the live simulation via IPC.
+    """
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"success": False, "error": "JSON body required"}), 400
+
+    project_id = data.get("project_id")
+    content = data.get("content", "")
+    title = data.get("title", "")
+    event_type = data.get("event_type", "update")
+    source = data.get("source", "webhook")
+    simulation_id = data.get("simulation_id")
+
+    if not project_id:
+        return jsonify({"success": False, "error": "project_id required"}), 400
+    if not content and not title:
+        return jsonify({"success": False, "error": "content or title required"}), 400
+
+    err = validate_id_param(project_id, "project_id")
+    if err:
+        return err
+
+    try:
+        # Store the event for graph enrichment
+        event_record = {
+            "event_type": event_type,
+            "title": title,
+            "content": content[:5000],
+            "source": source,
+            "received_at": __import__('datetime').datetime.now().isoformat(),
+            "metadata": data.get("metadata", {}),
+        }
+
+        # Append to project's event log
+        import json as _json
+        events_dir = os.path.join(Config.UPLOAD_FOLDER, 'projects', project_id, 'events')
+        os.makedirs(events_dir, exist_ok=True)
+        events_file = os.path.join(events_dir, 'webhook_events.jsonl')
+        with open(events_file, 'a', encoding='utf-8') as f:
+            f.write(_json.dumps(event_record, ensure_ascii=False) + '\n')
+
+        result = {"event_stored": True, "event_type": event_type}
+
+        # If simulation_id provided, try to inject into running simulation
+        if simulation_id:
+            try:
+                from ..services.simulation_ipc import SimulationIPCClient, CommandType
+                ipc = SimulationIPCClient(simulation_id)
+                inject_content = f"[{event_type.upper()}] {title}: {content[:500]}" if title else content[:500]
+                ipc.send_inject_event(inject_content)
+                result["injected_to_simulation"] = simulation_id
+                logger.info(f"Webhook event injected into simulation {simulation_id}")
+            except Exception as e:
+                result["injection_error"] = str(e)
+                logger.warning(f"Failed to inject webhook event: {e}")
+
+        logger.info(f"Webhook event received for project {project_id}: {event_type} from {source}")
+
+        return jsonify({"success": True, "data": result})
+
+    except Exception as e:
+        logger.error(f"Webhook event failed: {str(e)}")
+        return jsonify({"success": False, "error": "Event processing failed"}), 500
+
+
 # ============== Endpoint 2: Build graph ==============
 
 @graph_bp.route('/build', methods=['POST'])

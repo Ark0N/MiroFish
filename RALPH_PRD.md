@@ -60,9 +60,9 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **6.1 RSS feed monitor** — Add a background service that periodically checks configured RSS feeds for new articles. When new content is detected, automatically extract text and queue it for graph enrichment. Store feed config in project settings.
 
-- [~] **6.2 Trend detection from ingested data** — Add a `TrendDetector` that analyzes temporal patterns in ingested content. Identify emerging topics, sentiment shifts in source material, and new entity appearances. Surface as alerts in the prediction pipeline.
+- [x] **6.2 Trend detection from ingested data** — Add a `TrendDetector` that analyzes temporal patterns in ingested content. Identify emerging topics, sentiment shifts in source material, and new entity appearances. Surface as alerts in the prediction pipeline.
 
-- [ ] **6.3 Real-time event webhook** — Add `POST /api/graph/webhook/event` that accepts structured event notifications from external systems. Events flow through the cascade engine and can trigger mid-simulation injections.
+- [~] **6.3 Real-time event webhook** — Add `POST /api/graph/webhook/event` that accepts structured event notifications from external systems. Events flow through the cascade engine and can trigger mid-simulation injections.
 
 - [ ] **6.4 Source credibility scoring** — Track source reliability based on prediction accuracy. Sources that consistently provide information leading to accurate predictions get higher credibility weights. Apply credibility to graph entity episode weighting.
 
