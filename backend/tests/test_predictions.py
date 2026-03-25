@@ -841,3 +841,110 @@ class TestEnsemblePredictor:
         d = result.to_dict()
         assert d["project_id"] == "proj_x"
         assert len(d["predictions"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# Pattern matcher tests
+# ---------------------------------------------------------------------------
+
+
+class TestPatternMatcher:
+    """Tests for historical pattern matching."""
+
+    def _make_matcher(self):
+        from app.services.pattern_matcher import PatternMatcher
+        return PatternMatcher()
+
+    def _make_fingerprint(self, sim_id, sentiments, momenta=None, factions=None):
+        from app.services.pattern_matcher import SimulationFingerprint
+        return SimulationFingerprint(
+            simulation_id=sim_id,
+            sentiment_trajectory=sentiments,
+            momentum_trajectory=momenta or [0.0] * len(sentiments),
+            faction_sizes=factions or {"supportive": [], "opposing": [], "neutral": []},
+            final_agreement=abs(sentiments[-1]) if sentiments else 0,
+            total_rounds=len(sentiments),
+        )
+
+    def test_identical_trajectories_high_similarity(self):
+        matcher = self._make_matcher()
+        fp1 = self._make_fingerprint("s1", [0.1, 0.2, 0.3, 0.4, 0.5])
+        fp2 = self._make_fingerprint("s2", [0.1, 0.2, 0.3, 0.4, 0.5])
+        match = matcher.compare(fp1, fp2)
+        assert match.similarity_score > 0.8
+
+    def test_opposite_trajectories_low_similarity(self):
+        matcher = self._make_matcher()
+        fp1 = self._make_fingerprint("s1", [0.5, 0.4, 0.3, 0.2, 0.1])
+        fp2 = self._make_fingerprint("s2", [-0.5, -0.4, -0.3, -0.2, -0.1])
+        match = matcher.compare(fp1, fp2)
+        assert match.similarity_score < 0.5
+
+    def test_different_lengths_handled(self):
+        matcher = self._make_matcher()
+        fp1 = self._make_fingerprint("s1", [0.1, 0.2, 0.3])
+        fp2 = self._make_fingerprint("s2", [0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
+        match = matcher.compare(fp1, fp2)
+        # Should still work by truncating to shorter length
+        assert 0.0 <= match.similarity_score <= 1.0
+
+    def test_empty_trajectories(self):
+        matcher = self._make_matcher()
+        fp1 = self._make_fingerprint("s1", [])
+        fp2 = self._make_fingerprint("s2", [0.1, 0.2])
+        match = matcher.compare(fp1, fp2)
+        assert 0.0 <= match.similarity_score <= 1.0
+
+    def test_find_similar_top_k(self):
+        matcher = self._make_matcher()
+        current = self._make_fingerprint("current", [0.1, 0.2, 0.3, 0.4])
+        historical = [
+            self._make_fingerprint("h1", [0.1, 0.2, 0.3, 0.4]),  # very similar
+            self._make_fingerprint("h2", [-0.5, -0.4, -0.3, -0.2]),  # different
+            self._make_fingerprint("h3", [0.15, 0.22, 0.28, 0.38]),  # similar
+        ]
+        matches = matcher.find_similar(current, historical, top_k=2)
+        assert len(matches) <= 2
+        if matches:
+            assert matches[0].matched_simulation_id == "h1"
+
+    def test_self_excluded_from_matches(self):
+        matcher = self._make_matcher()
+        fp = self._make_fingerprint("s1", [0.1, 0.2, 0.3])
+        matches = matcher.find_similar(fp, [fp], top_k=5)
+        assert len(matches) == 0
+
+    def test_faction_similarity(self):
+        matcher = self._make_matcher()
+        fp1 = self._make_fingerprint("s1", [0.1], factions={
+            "supportive": [10, 12, 14],
+            "opposing": [5, 4, 3],
+            "neutral": [5, 4, 3],
+        })
+        fp2 = self._make_fingerprint("s2", [0.1], factions={
+            "supportive": [11, 13, 15],
+            "opposing": [4, 3, 2],
+            "neutral": [5, 4, 3],
+        })
+        match = matcher.compare(fp1, fp2)
+        assert match.faction_similarity > 0.7
+
+    def test_extract_fingerprint(self, tmp_path):
+        matcher = self._make_matcher()
+        twitter_dir = tmp_path / "twitter"
+        twitter_dir.mkdir()
+        metrics = [
+            {"round": 1, "sentiment": {"average": 0.2}, "momentum": {"velocity": 0.0},
+             "factions": {"supportive": {"count": 5}, "opposing": {"count": 3}, "neutral": {"count": 2}}},
+            {"round": 2, "sentiment": {"average": 0.4}, "momentum": {"velocity": 0.2},
+             "factions": {"supportive": {"count": 7}, "opposing": {"count": 2}, "neutral": {"count": 1}}},
+        ]
+        with open(twitter_dir / "round_metrics.jsonl", "w") as f:
+            for m in metrics:
+                f.write(json.dumps(m) + "\n")
+
+        fp = matcher.extract_fingerprint(str(tmp_path), "sim_test")
+        assert fp.simulation_id == "sim_test"
+        assert len(fp.sentiment_trajectory) == 2
+        assert fp.sentiment_trajectory[0] == 0.2
+        assert fp.total_rounds == 2

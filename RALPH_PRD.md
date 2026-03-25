@@ -50,9 +50,9 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **5.1 Bayesian prediction updating** — Add a `BayesianUpdater` service that adjusts prediction probabilities as new evidence arrives. When a new simulation wave completes or new data is ingested, update prior probabilities using Bayes' theorem with the new consensus data as likelihood. Store update history for transparency.
 
-- [~] **5.2 Ensemble prediction aggregation** — When multiple simulations exist for the same project, automatically aggregate predictions across all simulations using weighted averaging. Weight by simulation recency, agent count, and consensus strength. Expose via `GET /api/report/ensemble/<project_id>`.
+- [x] **5.2 Ensemble prediction aggregation** — When multiple simulations exist for the same project, automatically aggregate predictions across all simulations using weighted averaging. Weight by simulation recency, agent count, and consensus strength. Expose via `GET /api/report/ensemble/<project_id>`.
 
-- [ ] **5.3 Historical pattern matching** — Add a `PatternMatcher` service that compares current simulation dynamics (sentiment trajectory, faction evolution, momentum) against previously completed simulations. Identify similar historical patterns and use their outcomes to adjust current predictions.
+- [~] **5.3 Historical pattern matching** — Add a `PatternMatcher` service that compares current simulation dynamics (sentiment trajectory, faction evolution, momentum) against previously completed simulations. Identify similar historical patterns and use their outcomes to adjust current predictions.
 
 - [ ] **5.4 Prediction backtesting framework** — Add ability to mark predictions as "resolved" (correct/incorrect) with actual outcomes. Compute calibration curves (predicted vs actual probability) across resolved predictions. Store in `prediction_outcomes.json` per project.
 
