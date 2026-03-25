@@ -439,6 +439,46 @@ class ReportOutline:
 
 
 @dataclass
+class StructuredPrediction:
+    """A single machine-readable prediction extracted from the report."""
+    event: str
+    probability: float  # 0.0 - 1.0
+    confidence_interval: List[float] = field(default_factory=lambda: [0.0, 1.0])  # [low, high]
+    timeframe: str = ""
+    reasoning: str = ""
+    evidence: List[str] = field(default_factory=list)
+    risk_factors: List[str] = field(default_factory=list)
+    agent_agreement: float = 0.0  # 0.0 - 1.0, fraction of agents supporting this
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "event": self.event,
+            "probability": self.probability,
+            "confidence_interval": self.confidence_interval,
+            "timeframe": self.timeframe,
+            "reasoning": self.reasoning,
+            "evidence": self.evidence,
+            "risk_factors": self.risk_factors,
+            "agent_agreement": self.agent_agreement
+        }
+
+
+@dataclass
+class PredictionSet:
+    """Collection of structured predictions from a report."""
+    predictions: List[StructuredPrediction] = field(default_factory=list)
+    overall_confidence: str = ""
+    generated_at: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "predictions": [p.to_dict() for p in self.predictions],
+            "overall_confidence": self.overall_confidence,
+            "generated_at": self.generated_at
+        }
+
+
+@dataclass
 class Report:
     """Complete report."""
     report_id: str
@@ -451,7 +491,8 @@ class Report:
     created_at: str = ""
     completed_at: str = ""
     error: Optional[str] = None
-    
+    predictions: Optional[PredictionSet] = None
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "report_id": self.report_id,
@@ -463,7 +504,8 @@ class Report:
             "markdown_content": self.markdown_content,
             "created_at": self.created_at,
             "completed_at": self.completed_at,
-            "error": self.error
+            "error": self.error,
+            "predictions": self.predictions.to_dict() if self.predictions else None
         }
 
 
@@ -1847,11 +1889,11 @@ class ReportAgent:
         
         return final_answer
 
-    def _extract_structured_predictions(self, report_content: str, consensus_data: Optional[Dict] = None) -> str:
+    def _extract_structured_predictions(self, report_content: str, consensus_data: Optional[Dict] = None) -> tuple:
         """Extract structured predictions with confidence levels from the generated report.
 
-        Makes one additional LLM call to analyze the report and produce a structured
-        predictions summary with confidence scores.
+        Makes two LLM calls: one for machine-readable JSON predictions, one for the
+        markdown section appended to the report. Returns (markdown_section, PredictionSet).
         """
         consensus_context = ""
         if consensus_data:
@@ -1862,7 +1904,52 @@ Consensus Analysis Data:
 - Total Agents Analyzed: {consensus_data.get('total_agents_analyzed', 0)}
 """
 
-        prompt = f"""Based on the following simulation report and agent consensus data, extract the key predictions with confidence levels.
+        # --- Step 1: Extract JSON predictions ---
+        json_prompt = f"""Based on the following simulation report and agent consensus data, extract the key predictions as JSON.
+
+{consensus_context}
+
+Report Content:
+{report_content[:8000]}
+
+Extract 3-7 key predictions. Return ONLY a JSON object (no markdown, no code fences) with this exact schema:
+{{
+  "predictions": [
+    {{
+      "event": "clear prediction statement",
+      "probability": 0.75,
+      "confidence_interval": [0.60, 0.90],
+      "timeframe": "short-term / medium-term / long-term or specific",
+      "reasoning": "brief reasoning",
+      "evidence": ["evidence point 1", "evidence point 2"],
+      "risk_factors": ["risk 1", "risk 2"],
+      "agent_agreement": 0.82
+    }}
+  ],
+  "overall_confidence": "1-2 sentence summary of prediction reliability"
+}}
+
+Probability and agent_agreement are 0.0-1.0 floats. confidence_interval is [low, high] around probability."""
+
+        json_system = "You are an expert analyst extracting structured predictions from simulation reports. Output valid JSON only. Be precise — confidence levels must reflect actual agent behavior patterns."
+
+        prediction_set = None
+        try:
+            json_response = self.llm.chat(
+                messages=[
+                    {"role": "system", "content": json_system},
+                    {"role": "user", "content": json_prompt}
+                ],
+                temperature=0.2,
+                max_tokens=4096
+            )
+            if json_response:
+                prediction_set = self._parse_prediction_json(json_response)
+        except Exception as e:
+            logger.warning(f"JSON prediction extraction failed: {e}")
+
+        # --- Step 2: Extract markdown predictions (existing behavior) ---
+        md_prompt = f"""Based on the following simulation report and agent consensus data, extract the key predictions with confidence levels.
 
 {consensus_context}
 
@@ -1901,22 +1988,59 @@ Format your response as a markdown section that can be appended to the report:
 [1-2 sentence summary of overall prediction reliability based on agent consensus and simulation dynamics]
 """
 
-        system_prompt = "You are an expert analyst extracting structured predictions from simulation reports. Be precise about confidence levels — they should reflect actual agent behavior patterns, not speculation."
+        md_system = "You are an expert analyst extracting structured predictions from simulation reports. Be precise about confidence levels — they should reflect actual agent behavior patterns, not speculation."
 
+        markdown_section = ""
         try:
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt}
-            ]
-            response = self.llm.chat(
-                messages=messages,
+            md_response = self.llm.chat(
+                messages=[
+                    {"role": "system", "content": md_system},
+                    {"role": "user", "content": md_prompt}
+                ],
                 temperature=0.3,
                 max_tokens=4096
             )
-            return response if response else ""
+            markdown_section = md_response if md_response else ""
         except Exception as e:
-            logger.warning(f"Structured prediction extraction failed: {e}")
-            return ""
+            logger.warning(f"Markdown prediction extraction failed: {e}")
+
+        return markdown_section, prediction_set
+
+    def _parse_prediction_json(self, raw_response: str) -> Optional[PredictionSet]:
+        """Parse LLM JSON response into a PredictionSet."""
+        try:
+            # Strip potential markdown code fences
+            text = raw_response.strip()
+            if text.startswith("```"):
+                text = re.sub(r'^```(?:json)?\s*', '', text)
+                text = re.sub(r'\s*```$', '', text)
+
+            data = json.loads(text)
+
+            predictions = []
+            for p in data.get("predictions", []):
+                ci = p.get("confidence_interval", [0.0, 1.0])
+                if not isinstance(ci, list) or len(ci) != 2:
+                    ci = [0.0, 1.0]
+                predictions.append(StructuredPrediction(
+                    event=str(p.get("event", "")),
+                    probability=float(p.get("probability", 0.5)),
+                    confidence_interval=[float(ci[0]), float(ci[1])],
+                    timeframe=str(p.get("timeframe", "")),
+                    reasoning=str(p.get("reasoning", "")),
+                    evidence=[str(e) for e in p.get("evidence", [])],
+                    risk_factors=[str(r) for r in p.get("risk_factors", [])],
+                    agent_agreement=float(p.get("agent_agreement", 0.0))
+                ))
+
+            return PredictionSet(
+                predictions=predictions,
+                overall_confidence=str(data.get("overall_confidence", "")),
+                generated_at=datetime.now().isoformat()
+            )
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
+            logger.warning(f"Failed to parse prediction JSON: {e}")
+            return None
 
     def generate_report(
         self, 
@@ -2102,14 +2226,18 @@ Format your response as a markdown section that can be appended to the report:
                 report_id, "generating", 97, "Extracting structured predictions...",
                 completed_sections=completed_section_titles
             )
-            predictions_section = self._extract_structured_predictions(report.markdown_content)
-            if predictions_section:
-                report.markdown_content += "\n\n" + predictions_section
+            predictions_md, prediction_set = self._extract_structured_predictions(report.markdown_content)
+            if predictions_md:
+                report.markdown_content += "\n\n" + predictions_md
                 # Re-save the full report with predictions appended
                 from ..utils.file_utils import atomic_write_text
                 full_report_path = ReportManager._get_report_markdown_path(report_id)
                 atomic_write_text(full_report_path, report.markdown_content)
                 logger.info(f"Structured predictions appended to report: {report_id}")
+            if prediction_set:
+                report.predictions = prediction_set
+                ReportManager.save_predictions(report_id, prediction_set)
+                logger.info(f"Predictions JSON saved: {report_id}/predictions.json")
 
             report.status = ReportStatus.COMPLETED
             report.completed_at = datetime.now().isoformat()
@@ -2354,6 +2482,51 @@ class ReportManager:
         """获取 Agent 日志文件路径"""
         return os.path.join(cls._get_report_folder(report_id), "agent_log.jsonl")
     
+    @classmethod
+    def _get_predictions_path(cls, report_id: str) -> str:
+        """Get predictions JSON file path."""
+        return os.path.join(cls._get_report_folder(report_id), "predictions.json")
+
+    @classmethod
+    def save_predictions(cls, report_id: str, prediction_set: 'PredictionSet') -> None:
+        """Save structured predictions to predictions.json."""
+        from ..utils.file_utils import atomic_write_json
+        cls._ensure_report_folder(report_id)
+        atomic_write_json(cls._get_predictions_path(report_id), prediction_set.to_dict())
+
+    @classmethod
+    def load_predictions(cls, report_id: str) -> Optional['PredictionSet']:
+        """Load structured predictions from predictions.json if it exists."""
+        path = cls._get_predictions_path(report_id)
+        if not os.path.exists(path):
+            return None
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            predictions = []
+            for p in data.get("predictions", []):
+                ci = p.get("confidence_interval", [0.0, 1.0])
+                if not isinstance(ci, list) or len(ci) != 2:
+                    ci = [0.0, 1.0]
+                predictions.append(StructuredPrediction(
+                    event=str(p.get("event", "")),
+                    probability=float(p.get("probability", 0.5)),
+                    confidence_interval=[float(ci[0]), float(ci[1])],
+                    timeframe=str(p.get("timeframe", "")),
+                    reasoning=str(p.get("reasoning", "")),
+                    evidence=[str(e) for e in p.get("evidence", [])],
+                    risk_factors=[str(r) for r in p.get("risk_factors", [])],
+                    agent_agreement=float(p.get("agent_agreement", 0.0))
+                ))
+            return PredictionSet(
+                predictions=predictions,
+                overall_confidence=str(data.get("overall_confidence", "")),
+                generated_at=str(data.get("generated_at", ""))
+            )
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
+            logger.warning(f"Failed to load predictions for {report_id}: {e}")
+            return None
+
     @classmethod
     def _get_console_log_path(cls, report_id: str) -> str:
         """获取控制台日志文件路径"""
@@ -2894,6 +3067,9 @@ class ReportManager:
                 with open(full_report_path, 'r', encoding='utf-8') as f:
                     markdown_content = f.read()
         
+        # Load structured predictions from predictions.json
+        predictions = cls.load_predictions(report_id)
+
         return Report(
             report_id=data['report_id'],
             simulation_id=data['simulation_id'],
@@ -2904,9 +3080,10 @@ class ReportManager:
             markdown_content=markdown_content,
             created_at=data.get('created_at', ''),
             completed_at=data.get('completed_at', ''),
-            error=data.get('error')
+            error=data.get('error'),
+            predictions=predictions
         )
-    
+
     @classmethod
     def get_report_by_simulation(cls, simulation_id: str) -> Optional[Report]:
         """根据模拟ID获取报告"""

@@ -475,6 +475,46 @@ def download_report(report_id: str):
         }), 500
 
 
+@report_bp.route('/<report_id>/predictions', methods=['GET'])
+def get_predictions(report_id: str):
+    """
+    Get structured predictions JSON for a report.
+
+    Returns:
+        {
+            "success": true,
+            "data": {
+                "predictions": [...],
+                "overall_confidence": "...",
+                "generated_at": "..."
+            }
+        }
+    """
+    err = validate_id_param(report_id, "report_id")
+    if err:
+        return err
+
+    try:
+        predictions = ReportManager.load_predictions(report_id)
+        if not predictions:
+            return jsonify({
+                "success": False,
+                "error": f"No predictions found for report: {report_id}"
+            }), 404
+
+        return jsonify({
+            "success": True,
+            "data": predictions.to_dict()
+        })
+
+    except Exception as e:
+        logger.error(f"Failed to get predictions: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": "Failed to get predictions"
+        }), 500
+
+
 @report_bp.route('/<report_id>', methods=['DELETE'])
 @limiter.limit("30 per minute")
 def delete_report(report_id: str):
