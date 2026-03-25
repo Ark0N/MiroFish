@@ -1091,3 +1091,74 @@ class TestRSSMonitor:
         item = FeedItem(title="Test", url="http://a.com", content="hello", content_hash="abc123")
         assert item.content_hash == "abc123"
         assert "abc123" in ["abc123"]  # Would be filtered
+
+
+# ---------------------------------------------------------------------------
+# Trend detector tests
+# ---------------------------------------------------------------------------
+
+
+class TestTrendDetector:
+    """Tests for trend detection in ingested content."""
+
+    def _make_detector(self):
+        from app.services.trend_detector import TrendDetector
+        return TrendDetector()
+
+    def test_empty_input(self):
+        d = self._make_detector()
+        assert d.detect_trends([]) == []
+
+    def test_emerging_topics_without_baseline(self):
+        d = self._make_detector()
+        texts = ["economy economy economy market market crash crash crash"]
+        signals = d.detect_trends(texts)
+        topics = [s.topic for s in signals]
+        assert "economy" in topics or "crash" in topics or "market" in topics
+
+    def test_growing_topic_detected(self):
+        d = self._make_detector()
+        previous = ["climate change discussion climate"]
+        current = ["climate climate climate climate climate climate climate crisis climate"]
+        signals = d.detect_trends(current, previous, min_frequency=2)
+        growing = [s for s in signals if s.trend_type == "growing"]
+        assert len(growing) >= 1
+
+    def test_emerging_topic_detected(self):
+        d = self._make_detector()
+        previous = ["economy market trade"]
+        current = ["blockchain blockchain blockchain crypto crypto"]
+        signals = d.detect_trends(current, previous, min_frequency=2)
+        emerging = [s for s in signals if s.trend_type == "emerging"]
+        assert len(emerging) >= 1
+
+    def test_declining_topic_detected(self):
+        d = self._make_detector()
+        previous = ["scandal scandal scandal scandal scandal"]
+        current = ["other topics now discussed"]
+        signals = d.detect_trends(current, previous, min_frequency=2)
+        declining = [s for s in signals if s.trend_type == "declining"]
+        assert len(declining) >= 1
+
+    def test_sentiment_shift_detected(self):
+        d = self._make_detector()
+        previous = ["terrible awful crisis danger fail"]
+        current = ["great excellent wonderful love progress hope"]
+        signals = d.detect_trends(current, previous)
+        sentiment = [s for s in signals if s.trend_type == "sentiment_shift"]
+        assert len(sentiment) >= 1
+        assert "positive" in sentiment[0].topic
+
+    def test_signals_sorted_by_strength(self):
+        d = self._make_detector()
+        texts = ["word1 " * 20 + "word2 " * 5 + "word3 " * 10]
+        signals = d.detect_trends(texts)
+        if len(signals) >= 2:
+            assert signals[0].strength >= signals[1].strength
+
+    def test_to_dict(self):
+        from app.services.trend_detector import TrendSignal
+        s = TrendSignal(topic="test", trend_type="emerging", strength=0.5)
+        d = s.to_dict()
+        assert d["topic"] == "test"
+        assert d["trend_type"] == "emerging"
