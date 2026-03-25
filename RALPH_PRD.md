@@ -78,9 +78,9 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 ## Phase 8: Prediction Pipeline Robustness
 
-- [~] **8.1 Automated prediction pipeline** — Add a `PredictionPipeline` orchestrator that chains: URL ingestion → ontology → graph build → simulation → report → prediction extraction → calibration → backtesting in a single API call. Include progress tracking and resumption on failure.
+- [x] **8.1 Automated prediction pipeline** — Add a `PredictionPipeline` orchestrator that chains: URL ingestion → ontology → graph build → simulation → report → prediction extraction → calibration → backtesting in a single API call. Include progress tracking and resumption on failure.
 
-- [ ] **8.2 Prediction confidence bands** — Enhance prediction output with statistical confidence bands using bootstrap resampling of agent opinions. Run 100 bootstrap samples of agent sentiment to compute true confidence intervals rather than LLM-estimated ones.
+- [~] **8.2 Prediction confidence bands** — Enhance prediction output with statistical confidence bands using bootstrap resampling of agent opinions. Run 100 bootstrap samples of agent sentiment to compute true confidence intervals rather than LLM-estimated ones.
 
 - [ ] **8.3 Cross-validation prediction scoring** — Split agents into train/test groups. Train group runs the simulation, test group evaluates independently. Compare train predictions vs test predictions for internal validation without waiting for real-world outcomes.
 

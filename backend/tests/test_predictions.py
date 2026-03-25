@@ -1351,3 +1351,66 @@ class TestPredictionPipeline:
         p = self._make_pipeline(tmp_path)
         assert p.get_state("nonexistent") is None
         assert p.can_resume_from("nonexistent") is None
+
+
+# ---------------------------------------------------------------------------
+# Bootstrap confidence tests
+# ---------------------------------------------------------------------------
+
+
+class TestBootstrapConfidence:
+    """Tests for bootstrap confidence band calculation."""
+
+    def _make_calculator(self):
+        from app.services.bootstrap_confidence import BootstrapConfidence
+        return BootstrapConfidence()
+
+    def test_empty_sentiments(self):
+        calc = self._make_calculator()
+        result = calc.compute_confidence_interval([])
+        assert result["mean"] == 0.0
+        assert result["n_agents"] == 0
+
+    def test_uniform_sentiments_tight_ci(self):
+        calc = self._make_calculator()
+        # All agents have same sentiment → CI should be very tight
+        sentiments = [0.5] * 50
+        result = calc.compute_confidence_interval(sentiments)
+        assert abs(result["ci_high"] - result["ci_low"]) < 0.01
+
+    def test_diverse_sentiments_wider_ci(self):
+        calc = self._make_calculator()
+        # Mixed sentiments → wider CI
+        sentiments = [0.8, -0.6, 0.3, -0.9, 0.1, -0.2, 0.7, -0.5, 0.4, -0.8]
+        result = calc.compute_confidence_interval(sentiments)
+        assert result["ci_high"] - result["ci_low"] > 0.1
+
+    def test_ci_contains_mean(self):
+        calc = self._make_calculator()
+        sentiments = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
+        result = calc.compute_confidence_interval(sentiments)
+        assert result["ci_low"] <= result["mean"] <= result["ci_high"]
+
+    def test_reproducible_with_seed(self):
+        calc = self._make_calculator()
+        sentiments = [0.1, -0.2, 0.3, -0.4, 0.5]
+        r1 = calc.compute_confidence_interval(sentiments, seed=42)
+        r2 = calc.compute_confidence_interval(sentiments, seed=42)
+        assert r1["ci_low"] == r2["ci_low"]
+        assert r1["ci_high"] == r2["ci_high"]
+
+    def test_prediction_bands(self):
+        calc = self._make_calculator()
+        sentiments = {"a": 0.5, "b": 0.3, "c": 0.4, "d": 0.6, "e": 0.2}
+        result = calc.compute_prediction_bands(sentiments, 0.7)
+        assert result["probability"] == 0.7
+        assert result["ci_low"] <= result["ci_high"]
+        assert "band_width" in result
+        assert "sentiment_stats" in result
+
+    def test_prediction_bands_bounded(self):
+        calc = self._make_calculator()
+        sentiments = {"a": -0.9, "b": 0.9, "c": -0.8, "d": 0.8}
+        result = calc.compute_prediction_bands(sentiments, 0.95)
+        assert result["ci_low"] >= 0.0
+        assert result["ci_high"] <= 1.0
