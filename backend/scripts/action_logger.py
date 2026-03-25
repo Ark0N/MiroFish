@@ -258,6 +258,42 @@ class RoundMetricsTracker:
         dislikes = sum(1 for a in actions if a.get("action_type") in ("DISLIKE_POST", "DISLIKE_COMMENT"))
         reposts = sum(1 for a in actions if a.get("action_type") == "REPOST")
 
+        # Faction detection: group agents by stance and track per round
+        agent_sentiments: Dict[str, float] = {}
+        for a in content_actions:
+            agent = a.get("agent_name", a.get("user_name", "unknown"))
+            content = str(a.get("content", "")).lower()
+            pos = sum(1 for w in positive_keywords if w in content)
+            neg = sum(1 for w in negative_keywords if w in content)
+            total_kw = pos + neg
+            score = (pos - neg) / total_kw if total_kw > 0 else 0.0
+            if agent not in agent_sentiments:
+                agent_sentiments[agent] = []
+            agent_sentiments[agent].append(score)
+
+        # Compute per-agent average for this round
+        agent_avg = {a: sum(s) / len(s) for a, s in agent_sentiments.items() if s}
+
+        factions = {"supportive": [], "opposing": [], "neutral": []}
+        for agent, avg in agent_avg.items():
+            if avg > 0.15:
+                factions["supportive"].append(agent)
+            elif avg < -0.15:
+                factions["opposing"].append(agent)
+            else:
+                factions["neutral"].append(agent)
+
+        faction_summary = {
+            stance: {
+                "count": len(members),
+                "members": members[:10],
+                "avg_sentiment": round(
+                    sum(agent_avg[m] for m in members) / len(members), 3
+                ) if members else 0.0,
+            }
+            for stance, members in factions.items()
+        }
+
         metrics = {
             "round": round_num,
             "platform": platform,
@@ -278,6 +314,7 @@ class RoundMetricsTracker:
                 "dislikes": dislikes,
                 "reposts": reposts,
             },
+            "factions": faction_summary,
             "participation_rate": round(active_agents / total_agents, 3) if total_agents > 0 else 0,
         }
 
@@ -288,6 +325,21 @@ class RoundMetricsTracker:
                 f.write(json.dumps(metrics, ensure_ascii=False) + "\n")
         except Exception as e:
             logging.getLogger("mirofish.metrics").warning(f"Failed to write round metrics: {e}")
+
+        # Write faction metrics to separate file for drift tracking
+        try:
+            faction_file = os.path.join(self.output_dir, "faction_metrics.jsonl")
+            faction_entry = {
+                "round": round_num,
+                "platform": platform,
+                "timestamp": datetime.now().isoformat(),
+                "factions": faction_summary,
+                "total_content_agents": len(agent_avg),
+            }
+            with open(faction_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(faction_entry, ensure_ascii=False) + "\n")
+        except Exception as e:
+            logging.getLogger("mirofish.metrics").warning(f"Failed to write faction metrics: {e}")
 
         # Reset buffer
         self._current_round_actions = []

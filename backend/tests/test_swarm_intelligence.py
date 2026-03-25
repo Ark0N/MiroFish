@@ -607,6 +607,71 @@ class TestRoundMetricsTracker:
 
 
 # ---------------------------------------------------------------------------
+# Faction detection tests
+# ---------------------------------------------------------------------------
+
+
+class TestFactionDetection:
+    """Tests for per-round faction detection in RoundMetricsTracker."""
+
+    def _make_tracker(self, tmpdir):
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from action_logger import RoundMetricsTracker
+        return RoundMetricsTracker(tmpdir)
+
+    def test_factions_present_in_metrics(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tracker = self._make_tracker(tmpdir)
+            tracker.add_action({"action_type": "CREATE_POST", "agent_name": "alice", "content": "great progress love"})
+            tracker.add_action({"action_type": "CREATE_POST", "agent_name": "bob", "content": "terrible crisis awful"})
+            metrics = tracker.flush_round(1, "twitter", 10, 2)
+            assert "factions" in metrics
+            assert "supportive" in metrics["factions"]
+            assert "opposing" in metrics["factions"]
+            assert "neutral" in metrics["factions"]
+
+    def test_faction_counts_correct(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tracker = self._make_tracker(tmpdir)
+            tracker.add_action({"action_type": "CREATE_POST", "agent_name": "alice", "content": "great wonderful excellent"})
+            tracker.add_action({"action_type": "CREATE_POST", "agent_name": "bob", "content": "terrible awful hate"})
+            tracker.add_action({"action_type": "CREATE_POST", "agent_name": "charlie", "content": "just sharing info today"})
+            metrics = tracker.flush_round(1, "twitter", 10, 3)
+            assert metrics["factions"]["supportive"]["count"] >= 1
+            assert metrics["factions"]["opposing"]["count"] >= 1
+
+    def test_faction_members_listed(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tracker = self._make_tracker(tmpdir)
+            tracker.add_action({"action_type": "CREATE_POST", "agent_name": "alice", "content": "great progress love it"})
+            metrics = tracker.flush_round(1, "twitter", 10, 1)
+            supportive = metrics["factions"]["supportive"]
+            assert "alice" in supportive["members"]
+
+    def test_faction_metrics_file_written(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tracker = self._make_tracker(tmpdir)
+            tracker.add_action({"action_type": "CREATE_POST", "agent_name": "a", "content": "great"})
+            tracker.flush_round(1, "twitter", 10, 1)
+
+            faction_file = os.path.join(tmpdir, "faction_metrics.jsonl")
+            assert os.path.exists(faction_file)
+            with open(faction_file) as f:
+                data = json.loads(f.readline())
+            assert data["round"] == 1
+            assert "factions" in data
+
+    def test_empty_round_has_empty_factions(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tracker = self._make_tracker(tmpdir)
+            metrics = tracker.flush_round(1, "twitter", 10, 0)
+            assert metrics["factions"]["supportive"]["count"] == 0
+            assert metrics["factions"]["opposing"]["count"] == 0
+            assert metrics["factions"]["neutral"]["count"] == 0
+
+
+# ---------------------------------------------------------------------------
 # Event injection IPC tests
 # ---------------------------------------------------------------------------
 

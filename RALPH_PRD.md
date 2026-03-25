@@ -24,11 +24,11 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **2.3 Time-decay relevance scoring** — Add recency weighting to `graph_tools.py` retrieval tools. Entities/episodes added more recently should rank higher in search results. Use episode timestamps from Graphiti.
 
-- [~] **2.4 Multi-wave simulation** — Add ability to run sequential simulation waves where wave N+1 inherits the final state (opinion positions, relationships) of wave N but injects new events. Enables modeling how predictions evolve as situations develop.
+- [x] **2.4 Multi-wave simulation** — Add ability to run sequential simulation waves where wave N+1 inherits the final state (opinion positions, relationships) of wave N but injects new events. Enables modeling how predictions evolve as situations develop.
 
 ## Phase 3: Swarm Intelligence Improvements
 
-- [ ] **3.1 Faction detection & tracking** — Enhance `RoundMetricsTracker` in `action_logger.py` to identify emergent factions (clusters of agents with similar stances) per round. Track faction size, stability, and drift. Export to `faction_metrics.jsonl`.
+- [~] **3.1 Faction detection & tracking** — Enhance `RoundMetricsTracker` in `action_logger.py` to identify emergent factions (clusters of agents with similar stances) per round. Track faction size, stability, and drift. Export to `faction_metrics.jsonl`.
 
 - [ ] **3.2 Influence propagation analysis** — Track which agents' posts get the most engagement and how opinions spread through the follow graph. Add an `InfluenceTracker` that logs opinion adoption chains. Helps identify which agent archetypes drive prediction outcomes.
 
