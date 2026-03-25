@@ -116,6 +116,26 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **11.4 Webhook notification on prediction changes** — When a prediction's probability changes significantly (>10% delta from Bayesian update, decay, or calibration), fire a webhook notification to configured URLs.
 
+## Phase 12: Simulation Quality & Realism
+
+- [ ] **12.1 Agent opinion drift model** — Add a mathematical model for how agent opinions evolve over rounds. Each agent has an opinion inertia (resistance to change) and a susceptibility (how much they're influenced by others). Compute from persona attributes.
+
+- [ ] **12.2 Network effect weighting** — Weight agent influence by their position in the follow graph. Agents with many followers have more influence on overall sentiment. Use PageRank-like scoring on the follow network.
+
+- [ ] **12.3 Echo chamber detection** — Detect when agent subgroups form echo chambers (only interacting with like-minded agents). Flag this in analytics as it reduces prediction diversity and reliability.
+
+- [ ] **12.4 Simulation quality score** — Compute an overall quality metric for each simulation based on: agent diversity, network connectivity, opinion spread, participation rate, and absence of degenerate behaviors (all agents converging to same opinion instantly).
+
+## Phase 13: Production Hardening
+
+- [ ] **13.1 Prediction versioning** — Track prediction versions when they're updated (Bayesian updates, decay, calibration). Store full version history for audit trail and regression detection.
+
+- [ ] **13.2 Rate limit middleware for analytics** — Add per-project and per-user rate limiting for expensive analytics endpoints. Prevent abuse while allowing legitimate use.
+
+- [ ] **13.3 Prediction caching layer** — Cache computed predictions, calibrations, and analytics. Invalidate cache when new simulation data or evidence arrives. Reduces recomputation for dashboard rendering.
+
+- [ ] **13.4 Health check for prediction services** — Add a `/api/health/predictions` endpoint that verifies all prediction services are operational: calibrator, Bayesian updater, ensemble, pattern matcher, etc.
+
 ---
 
 ## Ralph Loop Instructions
