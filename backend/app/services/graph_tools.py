@@ -345,6 +345,23 @@ class InterviewResult:
 
 
 @dataclass
+class ConsensusStrength:
+    """Weighted consensus strength score with sub-components."""
+    diversity_score: float  # 0-1: how many agent behavior types are in the dominant faction
+    conviction_score: float  # 0-1: average abs sentiment magnitude of agents
+    stability_score: float  # 0-1: how stable was sentiment direction across rounds
+    weighted_score: float  # 0-1: composite (diversity * 0.3 + conviction * 0.3 + stability * 0.4)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "diversity_score": round(self.diversity_score, 3),
+            "conviction_score": round(self.conviction_score, 3),
+            "stability_score": round(self.stability_score, 3),
+            "weighted_score": round(self.weighted_score, 3),
+        }
+
+
+@dataclass
 class ConsensusResult:
     """Result from consensus analysis tool."""
     query: str
@@ -355,6 +372,7 @@ class ConsensusResult:
     agreement_score: float  # 0.0 (complete disagreement) to 1.0 (full consensus)
     top_themes: List[str]  # most discussed themes
     representative_quotes: List[Dict[str, str]]  # {"agent": name, "quote": content, "stance": stance}
+    consensus_strength: Optional[ConsensusStrength] = None  # weighted consensus strength
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -365,7 +383,8 @@ class ConsensusResult:
             "key_factions": self.key_factions,
             "agreement_score": self.agreement_score,
             "top_themes": self.top_themes,
-            "representative_quotes": self.representative_quotes
+            "representative_quotes": self.representative_quotes,
+            "consensus_strength": self.consensus_strength.to_dict() if self.consensus_strength else None
         }
 
     def to_text(self) -> str:
@@ -414,6 +433,14 @@ class ConsensusResult:
             text_parts.append("\n### Representative Quotes")
             for rq in self.representative_quotes:
                 text_parts.append(f'- **{rq["agent"]}** ({rq["stance"]}): "{rq["quote"]}"')
+
+        if self.consensus_strength:
+            cs = self.consensus_strength
+            text_parts.append("\n### Consensus Strength")
+            text_parts.append(f"- **Weighted Score**: {cs.weighted_score:.3f} (0=weak, 1=strong)")
+            text_parts.append(f"- Agent diversity: {cs.diversity_score:.3f} (behavioral type spread in dominant faction)")
+            text_parts.append(f"- Conviction intensity: {cs.conviction_score:.3f} (average sentiment magnitude)")
+            text_parts.append(f"- Temporal stability: {cs.stability_score:.3f} (consistency across rounds)")
 
         return "\n".join(text_parts)
 
@@ -1372,6 +1399,139 @@ Please generate an interview summary."""
             logger.warning(f"Failed to generate interview summary: {e}")
             return f"Interviewed {len(interviews)} respondents, including: " + ", ".join([i.agent_name for i in interviews])
 
+    def _compute_consensus_strength(
+        self,
+        agent_sentiments: Dict[str, float],
+        stance_dist: Dict[str, int],
+        trajectory: List[Dict],
+        all_posts: List[Dict],
+        simulation_dir: str
+    ) -> ConsensusStrength:
+        """Compute weighted consensus strength from diversity, conviction, and stability.
+
+        Diversity: how many behavioral types (Creator/Engager/Lurker/Influencer inferred
+        from action patterns) are in the dominant faction. Higher diversity = stronger signal.
+
+        Conviction: average absolute sentiment magnitude across all agents. Strong opinions
+        (positive or negative) indicate higher conviction.
+
+        Stability: how consistent the sentiment direction is across rounds. Computed from
+        trajectory data — if sentiment sign stays the same across rounds, stability is high.
+        """
+        import os as _os
+        import math
+
+        # --- Diversity score ---
+        # Infer agent behavior types from action logs
+        agent_action_counts = {}  # agent -> {creates, likes, reposts, comments}
+        for platform in ["twitter", "reddit"]:
+            actions_file = _os.path.join(simulation_dir, platform, "actions.jsonl")
+            if not _os.path.exists(actions_file):
+                continue
+            try:
+                with open(actions_file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            action = json.loads(line)
+                            agent = action.get("agent_name", action.get("user_name", ""))
+                            atype = action.get("action_type", "")
+                            if agent not in agent_action_counts:
+                                agent_action_counts[agent] = {"creates": 0, "likes": 0, "reposts": 0, "comments": 0}
+                            if atype in ("CREATE_POST",):
+                                agent_action_counts[agent]["creates"] += 1
+                            elif atype in ("LIKE_POST", "LIKE_COMMENT"):
+                                agent_action_counts[agent]["likes"] += 1
+                            elif atype in ("REPOST",):
+                                agent_action_counts[agent]["reposts"] += 1
+                            elif atype in ("CREATE_COMMENT", "QUOTE_POST"):
+                                agent_action_counts[agent]["comments"] += 1
+                        except json.JSONDecodeError:
+                            continue
+            except Exception:
+                continue
+
+        # Classify agents into behavioral types
+        def classify_agent(counts):
+            total = sum(counts.values())
+            if total == 0:
+                return "lurker"
+            create_ratio = counts["creates"] / total
+            comment_ratio = counts["comments"] / total
+            like_ratio = counts["likes"] / total
+            if create_ratio > 0.4:
+                return "creator"
+            elif comment_ratio > 0.3:
+                return "engager"
+            elif like_ratio > 0.5:
+                return "lurker"
+            else:
+                return "influencer"
+
+        agent_types = {agent: classify_agent(c) for agent, c in agent_action_counts.items()}
+
+        # Find dominant stance
+        dominant_stance = max(stance_dist, key=stance_dist.get) if stance_dist else "neutral"
+
+        # Count unique types in dominant faction
+        dominant_types = set()
+        for agent, avg_sent in agent_sentiments.items():
+            in_dominant = (
+                (dominant_stance == "supportive" and avg_sent > 0.15) or
+                (dominant_stance == "opposing" and avg_sent < -0.15) or
+                (dominant_stance == "neutral" and -0.15 <= avg_sent <= 0.15)
+            )
+            if in_dominant and agent in agent_types:
+                dominant_types.add(agent_types[agent])
+
+        # 4 possible types, so diversity = unique_types / 4
+        diversity_score = len(dominant_types) / 4.0 if dominant_types else 0.0
+
+        # --- Conviction score ---
+        # Average absolute sentiment across all agents
+        if agent_sentiments:
+            abs_sentiments = [abs(s) for s in agent_sentiments.values()]
+            conviction_score = min(sum(abs_sentiments) / len(abs_sentiments) / 0.5, 1.0)
+        else:
+            conviction_score = 0.0
+
+        # --- Stability score ---
+        # Check if sentiment direction is consistent across rounds
+        if trajectory and len(trajectory) >= 2:
+            signs = []
+            for t in trajectory:
+                s = t.get("avg_sentiment", 0)
+                if s > 0.05:
+                    signs.append(1)
+                elif s < -0.05:
+                    signs.append(-1)
+                else:
+                    signs.append(0)
+
+            # Count direction changes
+            changes = sum(1 for i in range(1, len(signs)) if signs[i] != signs[i-1])
+            max_changes = len(signs) - 1
+            stability_score = 1.0 - (changes / max_changes) if max_changes > 0 else 1.0
+        else:
+            # No trajectory data, default to moderate stability
+            stability_score = 0.5
+
+        # --- Weighted composite ---
+        weighted_score = (
+            diversity_score * 0.3 +
+            conviction_score * 0.3 +
+            stability_score * 0.4
+        )
+
+        return ConsensusStrength(
+            diversity_score=diversity_score,
+            conviction_score=conviction_score,
+            stability_score=stability_score,
+            weighted_score=weighted_score
+        )
+
     def consensus_analysis(self, query: str, simulation_dir: str) -> ConsensusResult:
         """Analyze agreement/disagreement patterns across simulation agents.
 
@@ -1543,6 +1703,15 @@ Please generate an interview summary."""
         if trajectory:
             sentiment_summary["trajectory"] = trajectory
 
+        # Compute consensus strength (diversity, conviction, stability)
+        consensus_strength = self._compute_consensus_strength(
+            agent_sentiments=agent_sentiments,
+            stance_dist=stance_dist,
+            trajectory=trajectory,
+            all_posts=all_posts,
+            simulation_dir=simulation_dir
+        )
+
         return ConsensusResult(
             query=query,
             total_agents_analyzed=total_agents,
@@ -1551,5 +1720,6 @@ Please generate an interview summary."""
             key_factions=factions,
             agreement_score=round(agreement_score, 3),
             top_themes=top_themes,
-            representative_quotes=representative_quotes
+            representative_quotes=representative_quotes,
+            consensus_strength=consensus_strength
         )

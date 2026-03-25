@@ -275,6 +275,152 @@ class TestConsensusAnalysis:
 
 
 # ---------------------------------------------------------------------------
+# Consensus Strength tests
+# ---------------------------------------------------------------------------
+
+
+class TestConsensusStrength:
+    """Tests for the weighted consensus strength scoring."""
+
+    def _make_service(self):
+        from app.services.graph_tools import GraphToolsService
+        service = GraphToolsService.__new__(GraphToolsService)
+        service.graph_id = "test-graph"
+        service.simulation_id = "test-sim"
+        return service
+
+    def _create_actions_file(self, base_dir, platform, actions):
+        platform_dir = os.path.join(base_dir, platform)
+        os.makedirs(platform_dir, exist_ok=True)
+        path = os.path.join(platform_dir, "actions.jsonl")
+        with open(path, 'w') as f:
+            for a in actions:
+                f.write(json.dumps(a) + '\n')
+
+    def _create_metrics_file(self, base_dir, platform, rounds):
+        platform_dir = os.path.join(base_dir, platform)
+        os.makedirs(platform_dir, exist_ok=True)
+        path = os.path.join(platform_dir, "round_metrics.jsonl")
+        with open(path, 'w') as f:
+            for r in rounds:
+                f.write(json.dumps(r) + '\n')
+
+    def test_consensus_strength_present_in_result(self):
+        service = self._make_service()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._create_actions_file(tmpdir, "twitter", [
+                {"action_type": "CREATE_POST", "agent_name": "alice", "content": "great progress"},
+            ])
+            result = service.consensus_analysis("test", tmpdir)
+            assert result.consensus_strength is not None
+            assert 0.0 <= result.consensus_strength.weighted_score <= 1.0
+
+    def test_high_conviction_score(self):
+        """Agents with strong sentiments should yield high conviction."""
+        service = self._make_service()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._create_actions_file(tmpdir, "twitter", [
+                {"action_type": "CREATE_POST", "agent_name": "a1", "content": "great excellent wonderful love progress"},
+                {"action_type": "CREATE_POST", "agent_name": "a2", "content": "terrible awful crisis danger hate"},
+            ])
+            result = service.consensus_analysis("test", tmpdir)
+            assert result.consensus_strength.conviction_score > 0.3
+
+    def test_low_conviction_score(self):
+        """Agents with neutral posts should yield low conviction."""
+        service = self._make_service()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._create_actions_file(tmpdir, "twitter", [
+                {"action_type": "CREATE_POST", "agent_name": "a1", "content": "just sharing information today"},
+                {"action_type": "CREATE_POST", "agent_name": "a2", "content": "another neutral observation"},
+            ])
+            result = service.consensus_analysis("test", tmpdir)
+            assert result.consensus_strength.conviction_score < 0.3
+
+    def test_stability_with_consistent_trajectory(self):
+        """Stable sentiment direction across rounds should yield high stability."""
+        service = self._make_service()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._create_actions_file(tmpdir, "twitter", [
+                {"action_type": "CREATE_POST", "agent_name": "a1", "content": "great progress"},
+            ])
+            self._create_metrics_file(tmpdir, "twitter", [
+                {"round": 1, "sentiment": {"average": 0.3}, "content_posts": 5},
+                {"round": 2, "sentiment": {"average": 0.4}, "content_posts": 6},
+                {"round": 3, "sentiment": {"average": 0.5}, "content_posts": 4},
+            ])
+            result = service.consensus_analysis("test", tmpdir)
+            assert result.consensus_strength.stability_score >= 0.8
+
+    def test_stability_with_flipflopping_trajectory(self):
+        """Rapidly changing sentiment direction should yield low stability."""
+        service = self._make_service()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._create_actions_file(tmpdir, "twitter", [
+                {"action_type": "CREATE_POST", "agent_name": "a1", "content": "great progress"},
+            ])
+            self._create_metrics_file(tmpdir, "twitter", [
+                {"round": 1, "sentiment": {"average": 0.5}, "content_posts": 5},
+                {"round": 2, "sentiment": {"average": -0.5}, "content_posts": 6},
+                {"round": 3, "sentiment": {"average": 0.5}, "content_posts": 4},
+                {"round": 4, "sentiment": {"average": -0.5}, "content_posts": 3},
+            ])
+            result = service.consensus_analysis("test", tmpdir)
+            assert result.consensus_strength.stability_score < 0.5
+
+    def test_diversity_with_varied_agent_types(self):
+        """Multiple agent behavior types in dominant faction should raise diversity."""
+        service = self._make_service()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create agents with different action patterns but same sentiment
+            self._create_actions_file(tmpdir, "twitter", [
+                # Creator: mostly creates posts
+                {"action_type": "CREATE_POST", "agent_name": "creator1", "content": "great wonderful excellent"},
+                {"action_type": "CREATE_POST", "agent_name": "creator1", "content": "amazing progress love it"},
+                {"action_type": "CREATE_POST", "agent_name": "creator1", "content": "positive great news"},
+                # Engager: mostly comments
+                {"action_type": "CREATE_COMMENT", "agent_name": "engager1", "content": "I agree this is great"},
+                {"action_type": "CREATE_COMMENT", "agent_name": "engager1", "content": "excellent support progress"},
+                {"action_type": "LIKE_POST", "agent_name": "engager1", "content": ""},
+                # Lurker: mostly likes
+                {"action_type": "LIKE_POST", "agent_name": "lurker1", "content": ""},
+                {"action_type": "LIKE_POST", "agent_name": "lurker1", "content": ""},
+                {"action_type": "CREATE_POST", "agent_name": "lurker1", "content": "good stuff hope for more"},
+            ])
+            result = service.consensus_analysis("test", tmpdir)
+            # At least some diversity should be detected
+            assert result.consensus_strength.diversity_score > 0.0
+
+    def test_to_dict_in_result(self):
+        """consensus_strength should serialize properly in ConsensusResult.to_dict()."""
+        service = self._make_service()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._create_actions_file(tmpdir, "twitter", [
+                {"action_type": "CREATE_POST", "agent_name": "a1", "content": "great progress"},
+            ])
+            result = service.consensus_analysis("test", tmpdir)
+            d = result.to_dict()
+            assert "consensus_strength" in d
+            assert d["consensus_strength"] is not None
+            assert "weighted_score" in d["consensus_strength"]
+            assert "diversity_score" in d["consensus_strength"]
+            assert "conviction_score" in d["consensus_strength"]
+            assert "stability_score" in d["consensus_strength"]
+
+    def test_to_text_includes_strength(self):
+        """to_text should include consensus strength section."""
+        service = self._make_service()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._create_actions_file(tmpdir, "twitter", [
+                {"action_type": "CREATE_POST", "agent_name": "a1", "content": "great progress"},
+            ])
+            result = service.consensus_analysis("test", tmpdir)
+            text = result.to_text()
+            assert "Consensus Strength" in text
+            assert "Weighted Score" in text
+
+
+# ---------------------------------------------------------------------------
 # RoundMetricsTracker tests
 # ---------------------------------------------------------------------------
 

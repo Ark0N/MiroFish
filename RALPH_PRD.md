@@ -8,9 +8,9 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 ## Phase 1: Prediction Accuracy & Calibration
 
-- [~] **1.1 Structured prediction schema** — Extend `report_agent.py` predictions section to output machine-readable JSON predictions (event, probability, timeframe, confidence_interval, reasoning) alongside the Markdown report. Store in `predictions.json` per report.
+- [x] **1.1 Structured prediction schema** — Extend `report_agent.py` predictions section to output machine-readable JSON predictions (event, probability, timeframe, confidence_interval, reasoning) alongside the Markdown report. Store in `predictions.json` per report.
 
-- [ ] **1.2 Consensus strength scoring** — Enhance `ConsensusAnalysis` in `graph_tools.py` to compute a weighted consensus score that factors in agent diversity (persona type spread), conviction intensity (sentiment magnitude), and temporal stability (did consensus hold across rounds or flip-flop?). Surface this in the report.
+- [~] **1.2 Consensus strength scoring** — Enhance `ConsensusAnalysis` in `graph_tools.py` to compute a weighted consensus score that factors in agent diversity (persona type spread), conviction intensity (sentiment magnitude), and temporal stability (did consensus hold across rounds or flip-flop?). Surface this in the report.
 
 - [ ] **1.3 Contrarian agent injection** — Add a "Devil's Advocate" persona type in `oasis_profile_generator.py` that deliberately challenges emerging consensus. 5-10% of agents should be contrarians. Track whether contrarian arguments shift group opinion (a signal of weak consensus).
 
