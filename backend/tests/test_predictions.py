@@ -628,3 +628,126 @@ class TestPredictionDiffEndpoint:
         response = client.post('/api/report/compare-predictions',
                                json={"report_ids": ids})
         assert response.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Bayesian updater tests
+# ---------------------------------------------------------------------------
+
+
+class TestBayesianUpdater:
+    """Tests for Bayesian prediction updating."""
+
+    def _make_updater(self):
+        from app.services.bayesian_updater import BayesianUpdater
+        return BayesianUpdater()
+
+    def test_strong_support_increases_probability(self):
+        updater = self._make_updater()
+        posterior, _ = updater.update_from_consensus(
+            prior=0.5,
+            agreement_score=0.9,
+            stance_distribution={"supportive": 18, "opposing": 1, "neutral": 1},
+            total_agents=20,
+        )
+        assert posterior > 0.5
+
+    def test_strong_opposition_decreases_probability(self):
+        updater = self._make_updater()
+        posterior, _ = updater.update_from_consensus(
+            prior=0.5,
+            agreement_score=0.9,
+            stance_distribution={"supportive": 1, "opposing": 18, "neutral": 1},
+            total_agents=20,
+        )
+        assert posterior < 0.5
+
+    def test_neutral_consensus_minimal_change(self):
+        updater = self._make_updater()
+        posterior, _ = updater.update_from_consensus(
+            prior=0.5,
+            agreement_score=0.5,
+            stance_distribution={"supportive": 7, "opposing": 7, "neutral": 6},
+            total_agents=20,
+        )
+        assert abs(posterior - 0.5) < 0.25
+
+    def test_zero_agents_returns_prior(self):
+        updater = self._make_updater()
+        posterior, _ = updater.update_from_consensus(
+            prior=0.7,
+            agreement_score=0.5,
+            stance_distribution={},
+            total_agents=0,
+        )
+        assert posterior == 0.7
+
+    def test_positive_sentiment_shift_boosts(self):
+        updater = self._make_updater()
+        posterior, _ = updater.update_from_sentiment_shift(0.5, 0.5, "positive")
+        assert posterior > 0.5
+
+    def test_negative_sentiment_shift_reduces(self):
+        updater = self._make_updater()
+        posterior, _ = updater.update_from_sentiment_shift(0.5, -0.5, "positive")
+        assert posterior < 0.5
+
+    def test_irrelevant_data_no_change(self):
+        updater = self._make_updater()
+        posterior, _ = updater.update_from_new_data(0.6, relevance_score=0.05, alignment_score=0.9)
+        assert posterior == 0.6
+
+    def test_relevant_aligned_data_boosts(self):
+        updater = self._make_updater()
+        posterior, _ = updater.update_from_new_data(0.5, relevance_score=0.9, alignment_score=0.9)
+        assert posterior > 0.5
+
+    def test_relevant_contradicting_data_reduces(self):
+        updater = self._make_updater()
+        posterior, _ = updater.update_from_new_data(0.5, relevance_score=0.9, alignment_score=0.1)
+        assert posterior < 0.5
+
+    def test_probability_bounded(self):
+        updater = self._make_updater()
+        # Extreme support shouldn't go above MAX_PROB
+        posterior, _ = updater.update_from_consensus(
+            prior=0.99,
+            agreement_score=1.0,
+            stance_distribution={"supportive": 100, "opposing": 0, "neutral": 0},
+            total_agents=100,
+        )
+        assert posterior <= 0.99
+
+        # Extreme opposition shouldn't go below MIN_PROB
+        posterior, _ = updater.update_from_consensus(
+            prior=0.01,
+            agreement_score=1.0,
+            stance_distribution={"supportive": 0, "opposing": 100, "neutral": 0},
+            total_agents=100,
+        )
+        assert posterior >= 0.01
+
+    def test_update_record_creation(self):
+        from app.services.bayesian_updater import BayesianUpdater
+        updater = BayesianUpdater()
+        record = updater.create_update_record(
+            prior=0.5, posterior=0.7, likelihood=0.8,
+            evidence_source="consensus", evidence_summary="Strong agent support"
+        )
+        d = record.to_dict()
+        assert d["prior"] == 0.5
+        assert d["posterior"] == 0.7
+        assert d["evidence_source"] == "consensus"
+
+    def test_sequential_updates_converge(self):
+        """Multiple updates in same direction should push probability further."""
+        updater = self._make_updater()
+        prob = 0.5
+        for _ in range(3):
+            prob, _ = updater.update_from_consensus(
+                prior=prob,
+                agreement_score=0.8,
+                stance_distribution={"supportive": 16, "opposing": 2, "neutral": 2},
+                total_agents=20,
+            )
+        assert prob > 0.8  # Strong convergence after 3 updates
