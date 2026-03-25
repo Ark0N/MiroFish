@@ -96,6 +96,26 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **9.4 Prediction timeline visualization data** — Add `GET /api/analytics/prediction-timeline/<project_id>` returning time-series data of how each prediction's probability evolved across waves, backtesting outcomes, and Bayesian updates.
 
+## Phase 10: Prediction Quality & Reliability
+
+- [ ] **10.1 Prediction deduplication** — Detect and merge duplicate/near-duplicate predictions across reports using semantic similarity. Prevents the same event from appearing multiple times with different probabilities in ensemble views.
+
+- [ ] **10.2 Prediction dependency graph** — Model causal dependencies between predictions. If Prediction A ("trade war") causes Prediction B ("supply chain disruption"), a change in A's probability should propagate to B. Store as a directed graph in predictions.json.
+
+- [ ] **10.3 Minority opinion amplification** — Weight contrarian/minority agent opinions more heavily when they provide unique information not captured by the majority. Use information-theoretic measures (surprise/entropy) to identify high-value dissenting signals.
+
+- [ ] **10.4 Prediction uncertainty decomposition** — Decompose total prediction uncertainty into epistemic (model/data uncertainty) and aleatoric (inherent randomness). Epistemic uncertainty should decrease with more data; aleatoric cannot. Report both to users.
+
+## Phase 11: Integration & Scale
+
+- [ ] **11.1 Batch URL ingestion with rate limiting** — Enhance the URL ingestion endpoint to handle large batches (100+ URLs) with internal rate limiting, progress tracking, and partial failure recovery. Queue URLs and process asynchronously.
+
+- [ ] **11.2 Simulation warm-start from graph** — When starting a new simulation, pre-seed agent opinions from the knowledge graph entity sentiments rather than starting neutral. Agents connected to negative entities start with negative bias.
+
+- [ ] **11.3 Prediction export formats** — Add export endpoints for predictions in CSV, JSONL, and structured Markdown formats for integration with external tools and dashboards.
+
+- [ ] **11.4 Webhook notification on prediction changes** — When a prediction's probability changes significantly (>10% delta from Bayesian update, decay, or calibration), fire a webhook notification to configured URLs.
+
 ---
 
 ## Ralph Loop Instructions
