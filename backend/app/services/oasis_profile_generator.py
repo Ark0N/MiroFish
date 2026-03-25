@@ -57,6 +57,9 @@ class OasisAgentProfile:
     # Source entity info
     source_entity_uuid: Optional[str] = None
     source_entity_type: Optional[str] = None
+
+    # Contrarian flag
+    is_contrarian: bool = False
     
     created_at: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d"))
     
@@ -1110,12 +1113,130 @@ Important:
                      f"estimated cost=${self._total_input_tokens * 1.0 / 1_000_000 + self._total_output_tokens * 5.0 / 1_000_000:.2f} "
                      f"(Haiku @ $1/$5 per MTok)")
 
+        # Inject contrarian (Devil's Advocate) agents — 5-10% of total
+        valid_profiles = [p for p in profiles if p is not None]
+        contrarian_profiles = self._inject_contrarian_agents(valid_profiles)
+        if contrarian_profiles:
+            profiles.extend(contrarian_profiles)
+            logger.info(f"Injected {len(contrarian_profiles)} contrarian (Devil's Advocate) agents")
+
         # Generate follow relationships from knowledge graph structure
         valid_profiles = [p for p in profiles if p is not None]
         self._follow_map = self._generate_follow_relationships(valid_profiles, entities)
 
         return profiles
     
+    def _inject_contrarian_agents(
+        self,
+        existing_profiles: List[OasisAgentProfile]
+    ) -> List[OasisAgentProfile]:
+        """Inject Devil's Advocate contrarian agents (5-10% of total).
+
+        Contrarian agents deliberately challenge emerging consensus. They:
+        - Question popular opinions and present opposing viewpoints
+        - Are marked with is_contrarian=True for tracking
+        - Follow all existing agents to maximize exposure
+        - Have Creator-type action tendency (high posting frequency)
+
+        Their purpose is stress-testing predictions: if contrarians shift
+        group opinion, the consensus was weak and confidence should be lower.
+        """
+        if not existing_profiles:
+            return []
+
+        total = len(existing_profiles)
+        # 5-10% contrarians, minimum 1 if we have at least 5 agents
+        contrarian_pct = random.uniform(0.05, 0.10)
+        num_contrarians = max(1, round(total * contrarian_pct)) if total >= 5 else 0
+        if num_contrarians == 0:
+            return []
+
+        # Gather topics from existing profiles for contrarian context
+        all_topics = set()
+        for p in existing_profiles:
+            all_topics.update(p.interested_topics)
+        topics_str = ", ".join(list(all_topics)[:20]) if all_topics else "current events"
+
+        contrarian_profiles = []
+        start_id = max(p.user_id for p in existing_profiles) + 1
+
+        contrarian_archetypes = [
+            {
+                "name_prefix": "Critical Observer",
+                "profession": "Independent Analyst",
+                "mbti": "ENTP",
+                "bio_template": "Skeptic and independent thinker. Questions popular narratives and conventional wisdom. Believes robust ideas survive scrutiny.",
+                "persona_template": (
+                    "A sharp-minded contrarian who thrives on challenging groupthink. "
+                    "They systematically question popular opinions, present counter-evidence, "
+                    "and play devil's advocate to stress-test ideas. They are not opposed for "
+                    "the sake of opposition — they genuinely believe that the best ideas survive "
+                    "rigorous scrutiny. They frequently CREATE_POST with provocative counter-arguments "
+                    "and QUOTE_POST to challenge others' reasoning. They are a Creator type with high "
+                    "posting frequency, favoring analytical and confrontational language. "
+                    "Topics of interest: {topics}."
+                ),
+            },
+            {
+                "name_prefix": "Devil's Advocate",
+                "profession": "Debate Strategist",
+                "mbti": "INTJ",
+                "bio_template": "Professional contrarian. If everyone agrees, someone isn't thinking. Finding blind spots is my job.",
+                "persona_template": (
+                    "A methodical devil's advocate who deliberately takes the opposing side of any "
+                    "emerging consensus. When the majority leans positive, they highlight risks and "
+                    "downsides. When the majority is negative, they find silver linings and opportunities. "
+                    "Their goal is to expose weaknesses in prevailing arguments. They are a Creator type "
+                    "who primarily uses CREATE_POST and QUOTE_POST to present counter-arguments with "
+                    "detailed reasoning. They never use LIKE or REPOST — they only create original "
+                    "critical content. Topics of interest: {topics}."
+                ),
+            },
+            {
+                "name_prefix": "Skeptical Analyst",
+                "profession": "Risk Assessment Specialist",
+                "mbti": "ISTJ",
+                "bio_template": "Data-driven skeptic. Popular opinion ≠ correct opinion. Show me the evidence.",
+                "persona_template": (
+                    "A data-driven skeptic who demands evidence before accepting any claim. "
+                    "They systematically poke holes in arguments, ask uncomfortable questions, "
+                    "and highlight overlooked risks. They distrust emotional arguments and bandwagon "
+                    "effects. They are a Creator type with moderate posting frequency, using "
+                    "CREATE_POST for analytical critiques and QUOTE_POST to dissect others' claims. "
+                    "They focus on logical consistency and empirical evidence. "
+                    "Topics of interest: {topics}."
+                ),
+            },
+        ]
+
+        for i in range(num_contrarians):
+            archetype = contrarian_archetypes[i % len(contrarian_archetypes)]
+            user_id = start_id + i
+            suffix = random.randint(100, 999)
+            name = f"{archetype['name_prefix']} #{i + 1}"
+
+            profile = OasisAgentProfile(
+                user_id=user_id,
+                user_name=f"contrarian_{suffix}",
+                name=name,
+                bio=archetype["bio_template"],
+                persona=archetype["persona_template"].format(topics=topics_str),
+                karma=random.randint(2000, 8000),
+                friend_count=random.randint(200, 800),
+                follower_count=random.randint(500, 2000),
+                statuses_count=random.randint(1000, 5000),
+                age=random.randint(28, 55),
+                gender=random.choice(["male", "female"]),
+                mbti=archetype["mbti"],
+                country="US",
+                profession=archetype["profession"],
+                interested_topics=list(all_topics)[:10] if all_topics else ["current events"],
+                is_contrarian=True,
+            )
+            contrarian_profiles.append(profile)
+
+        return contrarian_profiles
+
     def _print_generated_profile(self, entity_name: str, entity_type: str, profile: OasisAgentProfile):
         """Output generated persona to console in real-time (full content, no truncation)."""
         separator = "-" * 70

@@ -656,6 +656,95 @@ class TestFollowRelationships:
 
 
 # ---------------------------------------------------------------------------
+# Contrarian agent injection tests
+# ---------------------------------------------------------------------------
+
+
+class TestContrarianAgentInjection:
+    """Tests for Devil's Advocate contrarian agent injection."""
+
+    def _make_generator(self):
+        from app.services.oasis_profile_generator import OasisProfileGenerator
+        gen = OasisProfileGenerator.__new__(OasisProfileGenerator)
+        gen._follow_map = {}
+        return gen
+
+    def _make_profiles(self, count):
+        from app.services.oasis_profile_generator import OasisAgentProfile
+        return [
+            OasisAgentProfile(
+                user_id=i,
+                user_name=f"user_{i}",
+                name=f"Agent {i}",
+                bio="Test bio",
+                persona="Test persona",
+                interested_topics=["politics", "economy"],
+            )
+            for i in range(count)
+        ]
+
+    def test_no_contrarians_for_small_groups(self):
+        """Groups with fewer than 5 agents get no contrarians."""
+        gen = self._make_generator()
+        profiles = self._make_profiles(3)
+        result = gen._inject_contrarian_agents(profiles)
+        assert len(result) == 0
+
+    def test_contrarians_injected_for_medium_groups(self):
+        """Groups with 5+ agents get at least 1 contrarian."""
+        gen = self._make_generator()
+        profiles = self._make_profiles(10)
+        result = gen._inject_contrarian_agents(profiles)
+        assert len(result) >= 1
+        assert all(p.is_contrarian for p in result)
+
+    def test_contrarian_count_proportional(self):
+        """5-10% of agents should be contrarians."""
+        gen = self._make_generator()
+        profiles = self._make_profiles(100)
+        result = gen._inject_contrarian_agents(profiles)
+        assert 3 <= len(result) <= 12  # 5-10% of 100 ≈ 5-10, with rounding
+
+    def test_contrarian_profiles_valid(self):
+        """Contrarian profiles should have all required fields."""
+        gen = self._make_generator()
+        profiles = self._make_profiles(20)
+        result = gen._inject_contrarian_agents(profiles)
+        for p in result:
+            assert p.is_contrarian is True
+            assert p.name
+            assert p.bio
+            assert p.persona
+            assert p.user_name.startswith("contrarian_")
+            assert p.user_id > max(pr.user_id for pr in profiles)
+
+    def test_contrarian_personas_mention_challenging(self):
+        """Contrarian personas should contain challenge/opposition language."""
+        gen = self._make_generator()
+        profiles = self._make_profiles(20)
+        result = gen._inject_contrarian_agents(profiles)
+        for p in result:
+            persona_lower = p.persona.lower()
+            assert any(word in persona_lower for word in
+                       ["challenge", "opposing", "counter", "skeptic", "devil"]), \
+                f"Contrarian persona should mention challenging behavior: {p.persona[:100]}"
+
+    def test_contrarian_inherits_topics(self):
+        """Contrarian agents should pick up topics from existing profiles."""
+        gen = self._make_generator()
+        profiles = self._make_profiles(10)
+        result = gen._inject_contrarian_agents(profiles)
+        assert len(result) >= 1
+        # Topics should be non-empty since existing profiles have topics
+        assert len(result[0].interested_topics) > 0
+
+    def test_empty_profiles_returns_empty(self):
+        gen = self._make_generator()
+        result = gen._inject_contrarian_agents([])
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
 # Scheduled events in config tests
 # ---------------------------------------------------------------------------
 
