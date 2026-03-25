@@ -76,6 +76,26 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **7.4 Feedback-driven prompt tuning** — When predictions are marked as correct/incorrect, analyze which agent prompts and persona types contributed most to accurate predictions. Automatically adjust persona generation to weight successful archetypes.
 
+## Phase 8: Prediction Pipeline Robustness
+
+- [ ] **8.1 Automated prediction pipeline** — Add a `PredictionPipeline` orchestrator that chains: URL ingestion → ontology → graph build → simulation → report → prediction extraction → calibration → backtesting in a single API call. Include progress tracking and resumption on failure.
+
+- [ ] **8.2 Prediction confidence bands** — Enhance prediction output with statistical confidence bands using bootstrap resampling of agent opinions. Run 100 bootstrap samples of agent sentiment to compute true confidence intervals rather than LLM-estimated ones.
+
+- [ ] **8.3 Cross-validation prediction scoring** — Split agents into train/test groups. Train group runs the simulation, test group evaluates independently. Compare train predictions vs test predictions for internal validation without waiting for real-world outcomes.
+
+- [ ] **8.4 Prediction decay tracking** — Track how predictions age over time. Predictions with no supporting evidence after N days get automatically downgraded. Predictions with new supporting evidence get boosted. Add `prediction_health.json` per report.
+
+## Phase 9: Advanced Analytics Dashboard
+
+- [ ] **9.1 Simulation analytics API** — Add `GET /api/analytics/simulation/<simulation_id>` returning comprehensive analytics: round-by-round sentiment curves, faction evolution charts, influence networks, momentum indicators, all in a single response for dashboard rendering.
+
+- [ ] **9.2 Project-level insights** — Add `GET /api/analytics/project/<project_id>` aggregating across all simulations: prediction accuracy trends, consensus evolution, most influential agent types, parameter effectiveness heatmap.
+
+- [ ] **9.3 Agent behavior profiling** — Add `GET /api/analytics/agents/<simulation_id>` returning per-agent analytics: posting frequency, sentiment consistency, influence score, faction membership history, opinion change events.
+
+- [ ] **9.4 Prediction timeline visualization data** — Add `GET /api/analytics/prediction-timeline/<project_id>` returning time-series data of how each prediction's probability evolved across waves, backtesting outcomes, and Bayesian updates.
+
 ---
 
 ## Ralph Loop Instructions
