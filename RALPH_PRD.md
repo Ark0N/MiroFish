@@ -124,17 +124,17 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **12.3 Echo chamber detection** — Detect when agent subgroups form echo chambers (only interacting with like-minded agents). Flag this in analytics as it reduces prediction diversity and reliability.
 
-- [~] **12.4 Simulation quality score** — Compute an overall quality metric for each simulation based on: agent diversity, network connectivity, opinion spread, participation rate, and absence of degenerate behaviors (all agents converging to same opinion instantly).
+- [x] **12.4 Simulation quality score** — Compute an overall quality metric for each simulation based on: agent diversity, network connectivity, opinion spread, participation rate, and absence of degenerate behaviors (all agents converging to same opinion instantly).
 
 ## Phase 13: Production Hardening
 
-- [ ] **13.1 Prediction versioning** — Track prediction versions when they're updated (Bayesian updates, decay, calibration). Store full version history for audit trail and regression detection.
+- [x] **13.1 Prediction versioning** — Track prediction versions when they're updated (Bayesian updates, decay, calibration). Store full version history for audit trail and regression detection.
 
-- [ ] **13.2 Rate limit middleware for analytics** — Add per-project and per-user rate limiting for expensive analytics endpoints. Prevent abuse while allowing legitimate use.
+- [x] **13.2 Rate limit middleware for analytics** — Add per-project and per-user rate limiting for expensive analytics endpoints. Prevent abuse while allowing legitimate use.
 
-- [ ] **13.3 Prediction caching layer** — Cache computed predictions, calibrations, and analytics. Invalidate cache when new simulation data or evidence arrives. Reduces recomputation for dashboard rendering.
+- [x] **13.3 Prediction caching layer** — Cache computed predictions, calibrations, and analytics. Invalidate cache when new simulation data or evidence arrives. Reduces recomputation for dashboard rendering.
 
-- [ ] **13.4 Health check for prediction services** — Add a `/api/health/predictions` endpoint that verifies all prediction services are operational: calibrator, Bayesian updater, ensemble, pattern matcher, etc.
+- [x] **13.4 Health check for prediction services** — Add a `/api/health/predictions` endpoint that verifies all prediction services are operational: calibrator, Bayesian updater, ensemble, pattern matcher, etc.
 
 ---
 

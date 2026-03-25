@@ -2248,3 +2248,71 @@ class TestSimulationQuality:
         assert scorer._grade(0.5) == "C"
         assert scorer._grade(0.4) == "D"
         assert scorer._grade(0.1) == "F"
+
+
+# ---------------------------------------------------------------------------
+# Prediction versioning tests
+# ---------------------------------------------------------------------------
+
+
+class TestPredictionVersioning:
+    """Tests for prediction versioning."""
+
+    def _make_manager(self, tmp_path):
+        from app.services.prediction_versioning import PredictionVersionManager
+        mgr = PredictionVersionManager()
+        mgr.VERSIONS_DIR = str(tmp_path / "versions")
+        os.makedirs(mgr.VERSIONS_DIR, exist_ok=True)
+        return mgr
+
+    def test_create_initial_version(self, tmp_path):
+        mgr = self._make_manager(tmp_path)
+        v = mgr.create_initial_version("r1", 0, 0.7, [0.5, 0.9])
+        assert v.version == 1
+        assert v.update_source == "initial"
+
+    def test_record_update(self, tmp_path):
+        mgr = self._make_manager(tmp_path)
+        mgr.create_initial_version("r1", 0, 0.7, [0.5, 0.9])
+        v2 = mgr.record_update("r1", 0, 0.8, [0.6, 0.95], "bayesian", "New evidence")
+        assert v2.version == 2
+
+    def test_get_history(self, tmp_path):
+        mgr = self._make_manager(tmp_path)
+        mgr.create_initial_version("r1", 0, 0.5, [0.3, 0.7])
+        mgr.record_update("r1", 0, 0.6, [0.4, 0.8], "calibration", "Calibrated")
+        mgr.record_update("r1", 0, 0.55, [0.35, 0.75], "decay", "Time decay")
+        history = mgr.get_history("r1", 0)
+        assert len(history) == 3
+        assert history[0].version == 1
+        assert history[2].version == 3
+
+    def test_get_latest(self, tmp_path):
+        mgr = self._make_manager(tmp_path)
+        mgr.create_initial_version("r1", 0, 0.5, [0.3, 0.7])
+        mgr.record_update("r1", 0, 0.8, [0.6, 0.95], "bayesian", "Updated")
+        latest = mgr.get_latest("r1", 0)
+        assert latest.probability == 0.8
+
+    def test_empty_history(self, tmp_path):
+        mgr = self._make_manager(tmp_path)
+        assert mgr.get_history("r1", 99) == []
+        assert mgr.get_latest("r1", 99) is None
+
+    def test_regression_detection(self, tmp_path):
+        mgr = self._make_manager(tmp_path)
+        mgr.create_initial_version("r1", 0, 0.5, [0.3, 0.7])
+        mgr.record_update("r1", 0, 0.7, [0.5, 0.9], "bayesian", "Up")
+        mgr.record_update("r1", 0, 0.4, [0.2, 0.6], "decay", "Down")
+        mgr.record_update("r1", 0, 0.8, [0.6, 1.0], "bayesian", "Up again")
+        mgr.record_update("r1", 0, 0.3, [0.1, 0.5], "decay", "Down again")
+        regression = mgr.detect_regression("r1", 0)
+        assert regression is not None
+        assert regression["regression_detected"] is True
+
+    def test_no_regression(self, tmp_path):
+        mgr = self._make_manager(tmp_path)
+        mgr.create_initial_version("r1", 0, 0.5, [0.3, 0.7])
+        mgr.record_update("r1", 0, 0.6, [0.4, 0.8], "bayesian", "Up")
+        mgr.record_update("r1", 0, 0.7, [0.5, 0.9], "bayesian", "Up more")
+        assert mgr.detect_regression("r1", 0) is None
