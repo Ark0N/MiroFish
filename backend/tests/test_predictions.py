@@ -1910,3 +1910,78 @@ class TestUncertaintyDecomposer:
         d = self._make_decomposer()
         result = d.decompose(0.7, [], n_agents=0)
         assert result["epistemic"] > 0  # High epistemic with no data
+
+
+# ---------------------------------------------------------------------------
+# Batch ingester tests
+# ---------------------------------------------------------------------------
+
+
+class TestBatchIngester:
+    """Tests for batch URL ingestion."""
+
+    def _make_ingester(self):
+        from app.services.batch_ingester import BatchIngester
+        return BatchIngester(rate_limit_per_second=100.0, max_retries=0)
+
+    @patch('app.services.batch_ingester.time')
+    def test_batch_ingestion(self, mock_time):
+        mock_time.sleep = MagicMock()
+        ingester = self._make_ingester()
+
+        def mock_extract(url):
+            return {"success": True, "text": "Article content here " * 20, "title": f"Title for {url}"}
+
+        with patch('app.utils.url_extractor.extract_text_from_url', side_effect=mock_extract):
+            progress = ingester.ingest_batch(["https://a.com", "https://b.com"])
+
+        assert progress.total == 2
+        assert progress.succeeded == 2
+        assert progress.status == "completed"
+
+    @patch('app.services.batch_ingester.time')
+    def test_partial_failure(self, mock_time):
+        mock_time.sleep = MagicMock()
+        ingester = self._make_ingester()
+
+        call_count = [0]
+        def mock_extract(url):
+            call_count[0] += 1
+            if call_count[0] == 2:
+                return {"success": False, "error": "Not found", "text": "", "title": "", "url": url}
+            return {"success": True, "text": "Content " * 20, "title": "Title"}
+
+        with patch('app.utils.url_extractor.extract_text_from_url', side_effect=mock_extract):
+            progress = ingester.ingest_batch(["https://a.com", "https://b.com", "https://c.com"])
+
+        assert progress.succeeded == 2
+        assert progress.failed == 1
+
+    def test_empty_batch(self):
+        ingester = self._make_ingester()
+        progress = ingester.ingest_batch([])
+        assert progress.total == 0
+        assert progress.status == "completed"
+
+    @patch('app.services.batch_ingester.time')
+    def test_progress_callback(self, mock_time):
+        mock_time.sleep = MagicMock()
+        ingester = self._make_ingester()
+        callbacks = []
+
+        def mock_extract(url):
+            return {"success": True, "text": "x" * 100, "title": "T"}
+
+        with patch('app.utils.url_extractor.extract_text_from_url', side_effect=mock_extract):
+            progress = ingester.ingest_batch(
+                ["https://a.com"],
+                progress_callback=lambda p: callbacks.append(p.to_dict())
+            )
+
+        assert len(callbacks) >= 2  # At least start + completion
+
+    def test_progress_to_dict(self):
+        from app.services.batch_ingester import BatchProgress
+        p = BatchProgress(total=10, completed=5, succeeded=4, failed=1)
+        d = p.to_dict()
+        assert d["progress_pct"] == 50.0
