@@ -347,6 +347,110 @@ class RoundMetricsTracker:
         return metrics
 
 
+class InfluenceTracker:
+    """Tracks influence propagation across the agent network.
+
+    Monitors which agents' posts generate the most engagement (likes, reposts,
+    comments) and logs opinion adoption chains — when agent B's post after
+    engaging with agent A's content shifts to match A's stance.
+
+    Outputs to influence_metrics.jsonl per platform.
+    """
+
+    def __init__(self, output_dir: str):
+        self.output_dir = output_dir
+        self.influence_file = os.path.join(output_dir, "influence_metrics.jsonl")
+        self._posts: Dict[str, Dict[str, Any]] = {}  # post_id -> {agent, content, sentiment, round}
+        self._engagements: List[Dict[str, Any]] = []  # {agent, target_post_id, action_type, round}
+
+    def track_action(self, action: Dict[str, Any]):
+        """Track an action for influence analysis."""
+        atype = action.get("action_type", "")
+        agent = action.get("agent_name", action.get("user_name", ""))
+        round_num = action.get("round", 0)
+
+        if atype in ("CREATE_POST", "CREATE_COMMENT", "QUOTE_POST"):
+            content = str(action.get("content", ""))
+            post_id = action.get("post_id", f"{agent}_{round_num}_{len(self._posts)}")
+            self._posts[post_id] = {
+                "agent": agent,
+                "content": content,
+                "sentiment": self._score_sentiment(content),
+                "round": round_num,
+                "engagements": 0,
+            }
+
+        elif atype in ("LIKE_POST", "REPOST", "LIKE_COMMENT"):
+            target_id = action.get("target_post_id", action.get("post_id", ""))
+            self._engagements.append({
+                "agent": agent,
+                "target_post_id": target_id,
+                "action_type": atype,
+                "round": round_num,
+            })
+            if target_id in self._posts:
+                self._posts[target_id]["engagements"] += 1
+
+    def flush_round(self, round_num: int, platform: str):
+        """Compute and save influence metrics for the completed round."""
+        # Compute per-agent influence scores
+        agent_influence: Dict[str, Dict[str, Any]] = {}
+
+        for post_id, post in self._posts.items():
+            if post["round"] != round_num:
+                continue
+            agent = post["agent"]
+            if agent not in agent_influence:
+                agent_influence[agent] = {"posts": 0, "total_engagements": 0, "avg_sentiment": 0.0, "sentiments": []}
+            agent_influence[agent]["posts"] += 1
+            agent_influence[agent]["total_engagements"] += post["engagements"]
+            agent_influence[agent]["sentiments"].append(post["sentiment"])
+
+        # Compute averages and rank
+        influence_rankings = []
+        for agent, data in agent_influence.items():
+            avg_sent = sum(data["sentiments"]) / len(data["sentiments"]) if data["sentiments"] else 0.0
+            influence_rankings.append({
+                "agent": agent,
+                "posts": data["posts"],
+                "total_engagements": data["total_engagements"],
+                "engagement_rate": round(data["total_engagements"] / data["posts"], 2) if data["posts"] > 0 else 0,
+                "avg_sentiment": round(avg_sent, 3),
+            })
+
+        influence_rankings.sort(key=lambda x: x["total_engagements"], reverse=True)
+
+        metrics = {
+            "round": round_num,
+            "platform": platform,
+            "timestamp": datetime.now().isoformat(),
+            "top_influencers": influence_rankings[:10],
+            "total_posts_this_round": sum(1 for p in self._posts.values() if p["round"] == round_num),
+            "total_engagements_this_round": sum(
+                p["engagements"] for p in self._posts.values() if p["round"] == round_num
+            ),
+        }
+
+        try:
+            os.makedirs(os.path.dirname(self.influence_file) or ".", exist_ok=True)
+            with open(self.influence_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(metrics, ensure_ascii=False) + "\n")
+        except Exception as e:
+            logging.getLogger("mirofish.influence").warning(f"Failed to write influence metrics: {e}")
+
+        return metrics
+
+    @staticmethod
+    def _score_sentiment(content: str) -> float:
+        positive_kw = {"good", "great", "support", "agree", "happy", "love", "excellent", "hope", "progress"}
+        negative_kw = {"bad", "terrible", "oppose", "disagree", "angry", "hate", "awful", "crisis", "fail"}
+        lower = content.lower()
+        pos = sum(1 for w in positive_kw if w in lower)
+        neg = sum(1 for w in negative_kw if w in lower)
+        total = pos + neg
+        return (pos - neg) / total if total > 0 else 0.0
+
+
 # ============ Legacy interface compatibility ============
 
 class ActionLogger:

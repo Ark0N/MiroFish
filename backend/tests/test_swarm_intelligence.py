@@ -672,6 +672,82 @@ class TestFactionDetection:
 
 
 # ---------------------------------------------------------------------------
+# Influence propagation tests
+# ---------------------------------------------------------------------------
+
+
+class TestInfluenceTracker:
+    """Tests for influence propagation tracking."""
+
+    def _make_tracker(self, tmpdir):
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from action_logger import InfluenceTracker
+        return InfluenceTracker(tmpdir)
+
+    def test_track_post_and_engagement(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tracker = self._make_tracker(tmpdir)
+            tracker.track_action({"action_type": "CREATE_POST", "agent_name": "alice", "content": "great post", "round": 1, "post_id": "p1"})
+            tracker.track_action({"action_type": "LIKE_POST", "agent_name": "bob", "target_post_id": "p1", "round": 1})
+            tracker.track_action({"action_type": "REPOST", "agent_name": "charlie", "target_post_id": "p1", "round": 1})
+
+            metrics = tracker.flush_round(1, "twitter")
+            assert metrics["total_posts_this_round"] == 1
+            assert metrics["total_engagements_this_round"] == 2
+            assert len(metrics["top_influencers"]) == 1
+            assert metrics["top_influencers"][0]["agent"] == "alice"
+            assert metrics["top_influencers"][0]["total_engagements"] == 2
+
+    def test_multiple_agents_ranked(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tracker = self._make_tracker(tmpdir)
+            # Alice gets 3 engagements
+            tracker.track_action({"action_type": "CREATE_POST", "agent_name": "alice", "content": "hello", "round": 1, "post_id": "p1"})
+            tracker.track_action({"action_type": "LIKE_POST", "agent_name": "bob", "target_post_id": "p1", "round": 1})
+            tracker.track_action({"action_type": "LIKE_POST", "agent_name": "charlie", "target_post_id": "p1", "round": 1})
+            tracker.track_action({"action_type": "REPOST", "agent_name": "dave", "target_post_id": "p1", "round": 1})
+            # Bob gets 1 engagement
+            tracker.track_action({"action_type": "CREATE_POST", "agent_name": "bob", "content": "hi", "round": 1, "post_id": "p2"})
+            tracker.track_action({"action_type": "LIKE_POST", "agent_name": "alice", "target_post_id": "p2", "round": 1})
+
+            metrics = tracker.flush_round(1, "twitter")
+            assert metrics["top_influencers"][0]["agent"] == "alice"
+            assert metrics["top_influencers"][1]["agent"] == "bob"
+
+    def test_engagement_rate_computed(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tracker = self._make_tracker(tmpdir)
+            tracker.track_action({"action_type": "CREATE_POST", "agent_name": "alice", "content": "a", "round": 1, "post_id": "p1"})
+            tracker.track_action({"action_type": "CREATE_POST", "agent_name": "alice", "content": "b", "round": 1, "post_id": "p2"})
+            tracker.track_action({"action_type": "LIKE_POST", "agent_name": "bob", "target_post_id": "p1", "round": 1})
+            tracker.track_action({"action_type": "LIKE_POST", "agent_name": "charlie", "target_post_id": "p2", "round": 1})
+
+            metrics = tracker.flush_round(1, "twitter")
+            # 2 posts, 2 engagements = 1.0 engagement rate
+            assert metrics["top_influencers"][0]["engagement_rate"] == 1.0
+
+    def test_influence_file_written(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tracker = self._make_tracker(tmpdir)
+            tracker.track_action({"action_type": "CREATE_POST", "agent_name": "alice", "content": "test", "round": 1})
+            tracker.flush_round(1, "twitter")
+
+            influence_file = os.path.join(tmpdir, "influence_metrics.jsonl")
+            assert os.path.exists(influence_file)
+            with open(influence_file) as f:
+                data = json.loads(f.readline())
+            assert data["round"] == 1
+
+    def test_empty_round(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tracker = self._make_tracker(tmpdir)
+            metrics = tracker.flush_round(1, "twitter")
+            assert metrics["total_posts_this_round"] == 0
+            assert metrics["top_influencers"] == []
+
+
+# ---------------------------------------------------------------------------
 # Event injection IPC tests
 # ---------------------------------------------------------------------------
 
