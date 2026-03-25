@@ -582,7 +582,7 @@ def chat_with_report_agent():
         llm_client = None
         if data.get('model_name'):
             from ..utils.llm_client import LLMClient
-            llm_client = LLMClient(model=data['model_name'])
+            llm_client = LLMClient(model=data['model_name'], cost_phase="report")
         agent = ReportAgent(
             graph_id=graph_id,
             simulation_id=simulation_id,

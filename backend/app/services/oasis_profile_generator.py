@@ -530,6 +530,16 @@ class OasisProfileGenerator:
                     )
                     content = response.choices[0].message.content
                     finish_reason = response.choices[0].finish_reason
+                    # Track cost (OpenAI path)
+                    if hasattr(response, 'usage') and response.usage:
+                        cost_tracker = CostTracker.get_instance()
+                        cost_tracker.record_usage(
+                            input_tokens=response.usage.prompt_tokens or 0,
+                            output_tokens=response.usage.completion_tokens or 0,
+                            model=self.model_name,
+                            phase="profiles",
+                        )
+                        cost_tracker.check_budget("profiles")
                 if finish_reason == 'length':
                     logger.warning(f"LLM output truncated (attempt {attempt+1}), attempting repair...")
                     content = self._fix_truncated_json(content)

@@ -236,7 +236,7 @@ def generate_ontology():
         llm_client = None
         if model_name:
             from ..utils.llm_client import LLMClient
-            llm_client = LLMClient(model=model_name)
+            llm_client = LLMClient(model=model_name, cost_phase="ontology")
         generator = OntologyGenerator(llm_client=llm_client)
         ontology = generator.generate(
             document_texts=document_texts,
