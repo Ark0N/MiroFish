@@ -2130,3 +2130,68 @@ class TestNetworkInfluence:
         scorer = self._make_scorer()
         result = scorer.compute_influence_weighted_sentiment({}, {})
         assert result["standard_sentiment"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Echo chamber detection tests
+# ---------------------------------------------------------------------------
+
+
+class TestEchoChamberDetector:
+    """Tests for echo chamber detection."""
+
+    def _make_detector(self):
+        from app.services.echo_chamber import EchoChamberDetector
+        return EchoChamberDetector()
+
+    def test_no_echo_chambers_diverse_network(self):
+        det = self._make_detector()
+        sentiments = {"a": 0.5, "b": -0.5, "c": 0.3, "d": -0.3}
+        graph = {"a": ["b", "c", "d"], "b": ["a", "c", "d"], "c": ["a", "b", "d"], "d": ["a", "b", "c"]}
+        chambers = det.detect(sentiments, graph)
+        # Well-connected diverse network → no echo chambers
+        assert len(chambers) == 0
+
+    def test_detects_echo_chamber(self):
+        det = self._make_detector()
+        # Two isolated clusters
+        sentiments = {f"pos_{i}": 0.8 for i in range(5)}
+        sentiments.update({f"neg_{i}": -0.8 for i in range(5)})
+        # Positive agents only follow positive, negative only follow negative
+        graph = {}
+        for i in range(5):
+            graph[f"pos_{i}"] = [f"pos_{j}" for j in range(5) if j != i]
+            graph[f"neg_{i}"] = [f"neg_{j}" for j in range(5) if j != i]
+        chambers = det.detect(sentiments, graph)
+        assert len(chambers) >= 1
+        assert chambers[0].insularity_score >= 0.7
+
+    def test_empty_input(self):
+        det = self._make_detector()
+        assert det.detect({}, {}) == []
+
+    def test_network_health_healthy(self):
+        det = self._make_detector()
+        sentiments = {"a": 0.3, "b": -0.2, "c": 0.1}
+        graph = {"a": ["b", "c"], "b": ["a", "c"], "c": ["a", "b"]}
+        health = det.compute_network_health(sentiments, graph)
+        assert health["health"] == "healthy"
+        assert health["num_chambers"] == 0
+
+    def test_network_health_unhealthy(self):
+        det = self._make_detector()
+        sentiments = {f"p{i}": 0.8 for i in range(10)}
+        graph = {f"p{i}": [f"p{j}" for j in range(10) if j != i] for i in range(10)}
+        health = det.compute_network_health(sentiments, graph)
+        # All positive agents in one insular cluster
+        assert health["num_chambers"] >= 1
+
+    def test_echo_chamber_to_dict(self):
+        from app.services.echo_chamber import EchoChamber
+        ec = EchoChamber(
+            agents=["a", "b"], avg_sentiment=0.7, sentiment_std=0.1,
+            internal_connections=4, external_connections=1, insularity_score=0.8
+        )
+        d = ec.to_dict()
+        assert d["size"] == 2
+        assert d["insularity_score"] == 0.8
