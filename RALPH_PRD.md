@@ -136,6 +136,26 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **13.4 Health check for prediction services** — Add a `/api/health/predictions` endpoint that verifies all prediction services are operational: calibrator, Bayesian updater, ensemble, pattern matcher, etc.
 
+## Phase 14: Prediction Explainability
+
+- [ ] **14.1 Prediction provenance tracker** — For each prediction, trace the full chain of evidence: which graph entities contributed, which agent posts supported it, which simulation rounds were pivotal. Store as a provenance DAG in `provenance.json` per report.
+
+- [ ] **14.2 Counterfactual analysis** — Add a service that asks "what if?" — given a prediction, compute how the probability would change if key factors were different (e.g., remove the most influential agent, flip a faction's stance). Report sensitivity to each factor.
+
+- [ ] **14.3 Prediction narrative generator** — Auto-generate a natural language narrative for each prediction explaining the causal chain in plain English: "This prediction is based on X agents who observed Y, supported by graph entity Z, and calibrated by consensus strength W."
+
+- [ ] **14.4 Disagreement analysis** — When agents disagree, identify the root cause: different information access, different persona biases, or genuine ambiguity. Classify disagreements to help users understand prediction uncertainty.
+
+## Phase 15: Advanced Simulation Dynamics
+
+- [ ] **15.1 Adaptive round count** — Instead of fixed round counts, detect when consensus has stabilized (sentiment velocity < threshold for 3+ rounds) and auto-stop the simulation. Saves compute without losing prediction quality.
+
+- [ ] **15.2 Agent coalition formation** — Detect when agents spontaneously form coalitions (coordinated posting, mutual amplification). Track coalition stability and influence on predictions.
+
+- [ ] **15.3 Information cascade detection** — Identify when a single agent's post triggers a cascade of opinion changes across the network. These cascades are critical prediction signals — rapid adoption = strong consensus, failed cascades = weak signal.
+
+- [ ] **15.4 Simulation replay engine** — Enable replaying a simulation from any round with modified parameters or injected events. Compare alternate timelines to assess prediction robustness.
+
 ---
 
 ## Ralph Loop Instructions
