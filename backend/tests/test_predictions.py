@@ -1220,3 +1220,61 @@ class TestSourceCredibility:
         t2 = self._make_tracker(tmp_path)
         t2.CREDIBILITY_DIR = t.CREDIBILITY_DIR
         assert t2.get_weight("p1", "CNN") == 2.0
+
+
+# ---------------------------------------------------------------------------
+# Parameter learner tests
+# ---------------------------------------------------------------------------
+
+
+class TestParameterLearner:
+    """Tests for simulation parameter learning."""
+
+    def _make_learner(self, tmp_path):
+        from app.services.parameter_learner import ParameterLearner
+        l = ParameterLearner()
+        l.RECORDS_DIR = str(tmp_path / "params")
+        os.makedirs(l.RECORDS_DIR, exist_ok=True)
+        return l
+
+    def _make_record(self, sim_id, accuracy, agents=50, rounds=20):
+        from app.services.parameter_learner import SimulationRecord
+        return SimulationRecord(
+            simulation_id=sim_id, project_id="p1",
+            agent_count=agents, round_count=rounds,
+            avg_temperature=0.6, contrarian_pct=0.07,
+            accuracy=accuracy, brier_score=0.2,
+        )
+
+    def test_record_simulation(self, tmp_path):
+        l = self._make_learner(tmp_path)
+        l.record_simulation(self._make_record("s1", 0.8))
+        assert len(l.get_records()) == 1
+
+    def test_default_recommendation_insufficient_data(self, tmp_path):
+        l = self._make_learner(tmp_path)
+        l.record_simulation(self._make_record("s1", 0.8))
+        rec = l.recommend_parameters(min_records=5)
+        assert rec.confidence == 0.0
+        assert rec.recommended_agent_count == 45  # defaults
+
+    def test_recommendation_with_data(self, tmp_path):
+        l = self._make_learner(tmp_path)
+        # High accuracy with 100 agents
+        l.record_simulation(self._make_record("s1", 0.9, agents=100, rounds=30))
+        l.record_simulation(self._make_record("s2", 0.85, agents=80, rounds=25))
+        l.record_simulation(self._make_record("s3", 0.3, agents=20, rounds=10))
+        rec = l.recommend_parameters(min_records=3)
+        assert rec.confidence > 0
+        # Should lean toward higher agent counts (weighted by accuracy)
+        assert rec.recommended_agent_count > 50
+        assert rec.recommended_round_count > 15
+
+    def test_recommendation_to_dict(self, tmp_path):
+        l = self._make_learner(tmp_path)
+        for i in range(3):
+            l.record_simulation(self._make_record(f"s{i}", 0.7))
+        d = l.recommend_parameters().to_dict()
+        assert "recommended_agent_count" in d
+        assert "confidence" in d
+        assert "reasoning" in d

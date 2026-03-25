@@ -72,9 +72,9 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **7.2 Analyst notes on predictions** — Allow users to attach notes to individual predictions via `POST /api/report/<report_id>/predictions/<idx>/note`. Notes persist alongside predictions and appear in comparison views.
 
-- [ ] **7.3 Simulation parameter learning** — Track which simulation configurations (agent count, round count, temperature settings) produce the most accurate predictions. Use historical accuracy data to recommend optimal simulation parameters for new projects.
+- [x] **7.3 Simulation parameter learning** — Track which simulation configurations (agent count, round count, temperature settings) produce the most accurate predictions. Use historical accuracy data to recommend optimal simulation parameters for new projects.
 
-- [ ] **7.4 Feedback-driven prompt tuning** — When predictions are marked as correct/incorrect, analyze which agent prompts and persona types contributed most to accurate predictions. Automatically adjust persona generation to weight successful archetypes.
+- [x] **7.4 Feedback-driven prompt tuning** — When predictions are marked as correct/incorrect, analyze which agent prompts and persona types contributed most to accurate predictions. Automatically adjust persona generation to weight successful archetypes.
 
 ---
 
