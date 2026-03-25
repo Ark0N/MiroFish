@@ -151,7 +151,7 @@ def init_logging_for_simulation(simulation_dir: str):
         shutil.rmtree(old_log_dir, ignore_errors=True)
 
 
-from action_logger import SimulationLogManager, PlatformActionLogger
+from action_logger import SimulationLogManager, PlatformActionLogger, RoundMetricsTracker
 
 try:
     import oasis
@@ -440,7 +440,104 @@ class ParallelIPCHandler(IPCHandlerBase):
         else:
             self.send_response(command_id, "failed", error="没有successful的采访")
             return False
-    
+
+    async def _inject_event_single_platform(self, agent_id: int, content: str, platform: str) -> Dict[str, Any]:
+        """
+        Inject a post on a single platform.
+
+        Returns:
+            Dict with result or error
+        """
+        env, agent_graph, actual_platform = self._get_env_and_graph(platform)
+
+        if not env or not agent_graph:
+            return {"platform": platform, "error": f"{platform} platform not available"}
+
+        try:
+            agent = agent_graph.get_agent(agent_id)
+            inject_action = ManualAction(
+                action_type=ActionType.CREATE_POST,
+                action_args={"content": content}
+            )
+            actions = {agent: inject_action}
+            await env.step(actions)
+
+            return {
+                "platform": actual_platform,
+                "agent_id": agent_id,
+                "content": content,
+                "status": "injected"
+            }
+        except Exception as e:
+            return {"platform": platform, "error": str(e)}
+
+    async def handle_inject_event(self, command_id: str, args: Dict[str, Any]) -> bool:
+        """
+        Handle event injection command.
+
+        Args:
+            command_id: Command ID
+            args: {"agent_id": int, "content": str, "platform": str}
+
+        Returns:
+            True on success, False on failure
+        """
+        agent_id = args.get("agent_id", 0)
+        content = args.get("content", "")
+        platform = args.get("platform", "both")
+
+        if not content:
+            self.send_response(command_id, "failed", error="Event content is empty")
+            return False
+
+        # Single platform injection
+        if platform in ("twitter", "reddit"):
+            result = await self._inject_event_single_platform(agent_id, content, platform)
+            if "error" in result:
+                self.send_response(command_id, "failed", error=result["error"])
+                print(f"  Event injection failed: agent_id={agent_id}, platform={platform}, error={result['error']}")
+                return False
+            else:
+                self.send_response(command_id, "completed", result=result)
+                print(f"  Event injected: agent_id={agent_id}, platform={platform}")
+                return True
+
+        # Both platforms
+        if not self.twitter_env and not self.reddit_env:
+            self.send_response(command_id, "failed", error="No simulation environment available")
+            return False
+
+        results = {"agent_id": agent_id, "content": content, "platforms": {}}
+        success_count = 0
+
+        tasks = []
+        platforms_to_inject = []
+
+        if self.twitter_env:
+            tasks.append(self._inject_event_single_platform(agent_id, content, "twitter"))
+            platforms_to_inject.append("twitter")
+
+        if self.reddit_env:
+            tasks.append(self._inject_event_single_platform(agent_id, content, "reddit"))
+            platforms_to_inject.append("reddit")
+
+        platform_results = await asyncio.gather(*tasks)
+
+        for platform_name, platform_result in zip(platforms_to_inject, platform_results):
+            results["platforms"][platform_name] = platform_result
+            if "error" not in platform_result:
+                success_count += 1
+
+        if success_count > 0:
+            self.send_response(command_id, "completed", result=results)
+            print(f"  Event injected: agent_id={agent_id}, successful platforms={success_count}/{len(platforms_to_inject)}")
+            return True
+        else:
+            errors = [f"{p}: {r.get('error', 'unknown error')}" for p, r in results["platforms"].items()]
+            self.send_response(command_id, "failed", error="; ".join(errors))
+            print(f"  Event injection failed: agent_id={agent_id}, all platforms failed")
+            return False
+
     # process_commands is inherited from IPCHandlerBase
     # _get_interview_result is inherited from IPCHandlerBase
 
@@ -890,21 +987,23 @@ class PlatformSimulation:
 
 
 async def run_twitter_simulation(
-    config: Dict[str, Any], 
+    config: Dict[str, Any],
     simulation_dir: str,
     action_logger: Optional[PlatformActionLogger] = None,
     main_logger: Optional[SimulationLogManager] = None,
-    max_rounds: Optional[int] = None
+    max_rounds: Optional[int] = None,
+    metrics_tracker: Optional[RoundMetricsTracker] = None
 ) -> PlatformSimulation:
     """运行Twitter模拟
-    
+
     Args:
         config: Simulation config
         simulation_dir: 模拟目录
         action_logger: 动作日志记录器
         main_logger: 主日志管理器
         max_rounds: 最大模拟轮数（可选，用于截断过长的模拟）
-        
+        metrics_tracker: 每轮指标追踪器
+
     Returns:
         PlatformSimulation: 包含env和agent_graph的结果对象
     """
@@ -958,15 +1057,17 @@ async def run_twitter_simulation(
     
     total_actions = 0
     last_rowid = 0  # 跟踪Database中最后处理的行号（使用 rowid 避免 created_at 格式差异）
-    
+    total_agents_count = len(config.get("agent_configs", []))
+
     # 执行初始事件
     event_config = config.get("event_config", {})
     initial_posts = event_config.get("initial_posts", [])
-    
+    scheduled_events = event_config.get("scheduled_events", [])
+
     # 记录 round 0 started（初始事件阶段）
     if action_logger:
         action_logger.log_round_start(0, 0)  # round 0, simulated_hour 0
-    
+
     initial_action_count = 0
     if initial_posts:
         initial_actions = {}
@@ -979,7 +1080,7 @@ async def run_twitter_simulation(
                     action_type=ActionType.CREATE_POST,
                     action_args={"content": content}
                 )
-                
+
                 if action_logger:
                     action_logger.log_action(
                         round_num=0,
@@ -990,16 +1091,22 @@ async def run_twitter_simulation(
                     )
                     total_actions += 1
                     initial_action_count += 1
+
+                if metrics_tracker:
+                    metrics_tracker.add_action({"action_type": "CREATE_POST", "content": content})
             except Exception:
                 pass
-        
+
         if initial_actions:
             await result.env.step(initial_actions)
             log_info(f"已发布 {len(initial_actions)} 条初始帖子")
-    
+
     # 记录 round 0 ended
     if action_logger:
         action_logger.log_round_end(0, initial_action_count, simulated_hours=0)
+
+    if metrics_tracker:
+        metrics_tracker.flush_round(0, "twitter", total_agents_count, initial_action_count)
 
     # 主模拟循环
     time_config = config.get("time_config", {})
@@ -1036,10 +1143,38 @@ async def run_twitter_simulation(
         if action_logger:
             action_logger.log_round_start(round_num + 1, simulated_hour)
 
+        # Inject scheduled events for this round
+        for event in scheduled_events:
+            if event.get("round") == round_num + 1:
+                event_agent_id = event.get("poster_agent_id", 0)
+                event_content = event.get("content", "")
+                if event_content:
+                    try:
+                        event_agent = result.env.agent_graph.get_agent(event_agent_id)
+                        event_action = {event_agent: ManualAction(
+                            action_type=ActionType.CREATE_POST,
+                            action_args={"content": event_content}
+                        )}
+                        await result.env.step(event_action)
+                        log_info(f"Scheduled event injected at round {round_num + 1}: agent_id={event_agent_id}")
+                        if action_logger:
+                            action_logger.log_action(
+                                round_num=round_num + 1,
+                                agent_id=event_agent_id,
+                                agent_name=agent_names.get(event_agent_id, f"Agent_{event_agent_id}"),
+                                action_type="CREATE_POST",
+                                action_args={"content": event_content}
+                            )
+                            total_actions += 1
+                    except Exception as e:
+                        log_info(f"Failed to inject scheduled event at round {round_num + 1}: {e}")
+
         if not active_agents:
             # 没有活跃agent时也记录roundended（actions_count=0）
             if action_logger:
                 action_logger.log_round_end(round_num + 1, 0, simulated_hours=current_simulated_hours)
+            if metrics_tracker:
+                metrics_tracker.flush_round(round_num + 1, "twitter", total_agents_count, 0)
             continue
 
         actions = {agent: LLMAction() for _, agent in active_agents}
@@ -1063,15 +1198,24 @@ async def run_twitter_simulation(
                 total_actions += 1
                 round_action_count += 1
 
+            if metrics_tracker:
+                metrics_tracker.add_action({
+                    "action_type": action_data["action_type"],
+                    "content": action_data["action_args"].get("content", ""),
+                })
+
         if action_logger:
             action_logger.log_round_end(round_num + 1, round_action_count, simulated_hours=current_simulated_hours)
+
+        if metrics_tracker:
+            metrics_tracker.flush_round(round_num + 1, "twitter", total_agents_count, len(active_agents))
 
         if (round_num + 1) % 20 == 0:
             progress = (round_num + 1) / total_rounds * 100
             log_info(f"Day {simulated_day}, {simulated_hour:02d}:00 - Round {round_num + 1}/{total_rounds} ({progress:.1f}%)")
 
     # 注意：不Closing environment，保留给Interview使用
-    
+
     if action_logger:
         action_logger.log_simulation_end(total_rounds, total_actions)
     
@@ -1083,21 +1227,23 @@ async def run_twitter_simulation(
 
 
 async def run_reddit_simulation(
-    config: Dict[str, Any], 
+    config: Dict[str, Any],
     simulation_dir: str,
     action_logger: Optional[PlatformActionLogger] = None,
     main_logger: Optional[SimulationLogManager] = None,
-    max_rounds: Optional[int] = None
+    max_rounds: Optional[int] = None,
+    metrics_tracker: Optional[RoundMetricsTracker] = None
 ) -> PlatformSimulation:
     """运行Reddit模拟
-    
+
     Args:
         config: Simulation config
         simulation_dir: 模拟目录
         action_logger: 动作日志记录器
         main_logger: 主日志管理器
         max_rounds: 最大模拟轮数（可选，用于截断过长的模拟）
-        
+        metrics_tracker: 每轮指标追踪器
+
     Returns:
         PlatformSimulation: 包含env和agent_graph的结果对象
     """
@@ -1150,15 +1296,17 @@ async def run_reddit_simulation(
     
     total_actions = 0
     last_rowid = 0  # 跟踪Database中最后处理的行号（使用 rowid 避免 created_at 格式差异）
-    
+    total_agents_count = len(config.get("agent_configs", []))
+
     # 执行初始事件
     event_config = config.get("event_config", {})
     initial_posts = event_config.get("initial_posts", [])
-    
+    scheduled_events = event_config.get("scheduled_events", [])
+
     # 记录 round 0 started（初始事件阶段）
     if action_logger:
         action_logger.log_round_start(0, 0)  # round 0, simulated_hour 0
-    
+
     initial_action_count = 0
     if initial_posts:
         initial_actions = {}
@@ -1179,7 +1327,7 @@ async def run_reddit_simulation(
                         action_type=ActionType.CREATE_POST,
                         action_args={"content": content}
                     )
-                
+
                 if action_logger:
                     action_logger.log_action(
                         round_num=0,
@@ -1190,16 +1338,22 @@ async def run_reddit_simulation(
                     )
                     total_actions += 1
                     initial_action_count += 1
+
+                if metrics_tracker:
+                    metrics_tracker.add_action({"action_type": "CREATE_POST", "content": content})
             except Exception:
                 pass
-        
+
         if initial_actions:
             await result.env.step(initial_actions)
             log_info(f"已发布 {len(initial_actions)} 条初始帖子")
-    
+
     # 记录 round 0 ended
     if action_logger:
         action_logger.log_round_end(0, initial_action_count, simulated_hours=0)
+
+    if metrics_tracker:
+        metrics_tracker.flush_round(0, "reddit", total_agents_count, initial_action_count)
 
     # 主模拟循环
     time_config = config.get("time_config", {})
@@ -1235,6 +1389,32 @@ async def run_reddit_simulation(
         # 无论是否有活跃agent，都记录roundstarted
         if action_logger:
             action_logger.log_round_start(round_num + 1, simulated_hour)
+
+        # Inject scheduled events for this round
+        for event in scheduled_events:
+            if event.get("round") == round_num + 1:
+                event_agent_id = event.get("poster_agent_id", 0)
+                event_content = event.get("content", "")
+                if event_content:
+                    try:
+                        event_agent = result.env.agent_graph.get_agent(event_agent_id)
+                        event_action = {event_agent: ManualAction(
+                            action_type=ActionType.CREATE_POST,
+                            action_args={"content": event_content}
+                        )}
+                        await result.env.step(event_action)
+                        log_info(f"Scheduled event injected at round {round_num + 1}: agent_id={event_agent_id}")
+                        if action_logger:
+                            action_logger.log_action(
+                                round_num=round_num + 1,
+                                agent_id=event_agent_id,
+                                agent_name=agent_names.get(event_agent_id, f"Agent_{event_agent_id}"),
+                                action_type="CREATE_POST",
+                                action_args={"content": event_content}
+                            )
+                            total_actions += 1
+                    except Exception as e:
+                        log_info(f"Failed to inject scheduled event at round {round_num + 1}: {e}")
 
         if not active_agents:
             # 没有活跃agent时也记录roundended（actions_count=0）
@@ -1390,7 +1570,7 @@ async def main():
         log_manager.info("")
         log_manager.info("=" * 60)
         log_manager.info("Entering wait-for-commands mode - 环境保持运行")
-        log_manager.info("支持的命令: interview, batch_interview, close_env")
+        log_manager.info("支持的命令: interview, batch_interview, inject_event, close_env")
         log_manager.info("=" * 60)
         
         # 创建IPC处理器

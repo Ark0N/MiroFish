@@ -208,6 +208,7 @@ class CommandType:
     INTERVIEW = "interview"
     BATCH_INTERVIEW = "batch_interview"
     CLOSE_ENV = "close_env"
+    INJECT_EVENT = "inject_event"
 
 
 class IPCHandlerBase:
@@ -355,6 +356,10 @@ class IPCHandlerBase:
             await self.handle_batch_interview(command_id, args)
             return True
 
+        elif command_type == CommandType.INJECT_EVENT:
+            await self.handle_inject_event(command_id, args)
+            return True
+
         elif command_type == CommandType.CLOSE_ENV:
             print("收到Closing environment命令")
             self.send_response(command_id, "completed", result={"message": "环境即将关闭"})
@@ -370,4 +375,8 @@ class IPCHandlerBase:
 
     async def handle_batch_interview(self, command_id: str, args: Dict[str, Any]) -> bool:
         """处理批量Interview command - 子类必须实现"""
+        raise NotImplementedError
+
+    async def handle_inject_event(self, command_id: str, args: Dict[str, Any]) -> bool:
+        """处理事件注入命令 - 子类必须实现"""
         raise NotImplementedError

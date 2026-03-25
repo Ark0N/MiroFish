@@ -27,6 +27,7 @@ class CommandType(str, Enum):
     INTERVIEW = "interview"           # Single agent interview
     BATCH_INTERVIEW = "batch_interview"  # Batch interview
     CLOSE_ENV = "close_env"           # Close environment
+    INJECT_EVENT = "inject_event"     # Inject event into running simulation
 
 
 class CommandStatus(str, Enum):
@@ -264,6 +265,25 @@ class SimulationIPCClient:
         return self.send_command(
             command_type=CommandType.CLOSE_ENV,
             args={},
+            timeout=timeout
+        )
+
+    def send_inject_event(self, agent_id: int, content: str, platform: str = "both", timeout: int = 30) -> Optional[Dict[str, Any]]:
+        """Inject a post/event into the running simulation.
+
+        Args:
+            agent_id: The agent who should post the event
+            content: The post content
+            platform: Which platform to inject on ("twitter", "reddit", or "both")
+            timeout: Timeout in seconds
+        """
+        return self.send_command(
+            command_type=CommandType.INJECT_EVENT,
+            args={
+                "agent_id": agent_id,
+                "content": content,
+                "platform": platform
+            },
             timeout=timeout
         )
 
