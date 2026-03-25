@@ -1278,3 +1278,76 @@ class TestParameterLearner:
         assert "recommended_agent_count" in d
         assert "confidence" in d
         assert "reasoning" in d
+
+
+# ---------------------------------------------------------------------------
+# Prediction pipeline tests
+# ---------------------------------------------------------------------------
+
+
+class TestPredictionPipeline:
+    """Tests for automated prediction pipeline orchestration."""
+
+    def _make_pipeline(self, tmp_path):
+        from app.services.prediction_pipeline import PredictionPipeline
+        p = PredictionPipeline()
+        p.PIPELINES_DIR = str(tmp_path / "pipelines")
+        os.makedirs(p.PIPELINES_DIR, exist_ok=True)
+        return p
+
+    def test_create_pipeline(self, tmp_path):
+        p = self._make_pipeline(tmp_path)
+        state = p.create_pipeline()
+        assert state.pipeline_id.startswith("pipe_")
+        assert state.status == "pending"
+
+    def test_get_state(self, tmp_path):
+        p = self._make_pipeline(tmp_path)
+        state = p.create_pipeline()
+        loaded = p.get_state(state.pipeline_id)
+        assert loaded is not None
+        assert loaded.pipeline_id == state.pipeline_id
+
+    def test_advance_step(self, tmp_path):
+        from app.services.prediction_pipeline import PipelineStep
+        p = self._make_pipeline(tmp_path)
+        state = p.create_pipeline()
+        updated = p.advance_step(
+            state.pipeline_id,
+            PipelineStep.INGESTION,
+            PipelineStep.ONTOLOGY,
+            project_id="proj_123",
+        )
+        assert updated.current_step == PipelineStep.ONTOLOGY
+        assert "ingestion" in updated.steps_completed
+        assert updated.project_id == "proj_123"
+
+    def test_mark_failed(self, tmp_path):
+        p = self._make_pipeline(tmp_path)
+        state = p.create_pipeline()
+        p.mark_failed(state.pipeline_id, "Test error")
+        loaded = p.get_state(state.pipeline_id)
+        assert loaded.status == "failed"
+        assert loaded.error == "Test error"
+
+    def test_mark_complete(self, tmp_path):
+        p = self._make_pipeline(tmp_path)
+        state = p.create_pipeline()
+        p.mark_complete(state.pipeline_id)
+        loaded = p.get_state(state.pipeline_id)
+        assert loaded.status == "completed"
+        assert loaded.progress == 100
+
+    def test_resume_from_failed(self, tmp_path):
+        from app.services.prediction_pipeline import PipelineStep
+        p = self._make_pipeline(tmp_path)
+        state = p.create_pipeline()
+        p.advance_step(state.pipeline_id, PipelineStep.INGESTION, PipelineStep.GRAPH_BUILD)
+        p.mark_failed(state.pipeline_id, "Graph build failed")
+        resume_step = p.can_resume_from(state.pipeline_id)
+        assert resume_step == PipelineStep.GRAPH_BUILD
+
+    def test_nonexistent_pipeline(self, tmp_path):
+        p = self._make_pipeline(tmp_path)
+        assert p.get_state("nonexistent") is None
+        assert p.can_resume_from("nonexistent") is None
