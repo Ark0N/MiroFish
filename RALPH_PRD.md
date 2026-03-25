@@ -84,17 +84,17 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **8.3 Cross-validation prediction scoring** — Split agents into train/test groups. Train group runs the simulation, test group evaluates independently. Compare train predictions vs test predictions for internal validation without waiting for real-world outcomes.
 
-- [~] **8.4 Prediction decay tracking** — Track how predictions age over time. Predictions with no supporting evidence after N days get automatically downgraded. Predictions with new supporting evidence get boosted. Add `prediction_health.json` per report.
+- [x] **8.4 Prediction decay tracking** — Track how predictions age over time. Predictions with no supporting evidence after N days get automatically downgraded. Predictions with new supporting evidence get boosted. Add `prediction_health.json` per report.
 
 ## Phase 9: Advanced Analytics Dashboard
 
-- [ ] **9.1 Simulation analytics API** — Add `GET /api/analytics/simulation/<simulation_id>` returning comprehensive analytics: round-by-round sentiment curves, faction evolution charts, influence networks, momentum indicators, all in a single response for dashboard rendering.
+- [x] **9.1 Simulation analytics API** — Add `GET /api/analytics/simulation/<simulation_id>` returning comprehensive analytics: round-by-round sentiment curves, faction evolution charts, influence networks, momentum indicators, all in a single response for dashboard rendering.
 
-- [ ] **9.2 Project-level insights** — Add `GET /api/analytics/project/<project_id>` aggregating across all simulations: prediction accuracy trends, consensus evolution, most influential agent types, parameter effectiveness heatmap.
+- [x] **9.2 Project-level insights** — Add `GET /api/analytics/project/<project_id>` aggregating across all simulations: prediction accuracy trends, consensus evolution, most influential agent types, parameter effectiveness heatmap.
 
-- [ ] **9.3 Agent behavior profiling** — Add `GET /api/analytics/agents/<simulation_id>` returning per-agent analytics: posting frequency, sentiment consistency, influence score, faction membership history, opinion change events.
+- [x] **9.3 Agent behavior profiling** — Add `GET /api/analytics/agents/<simulation_id>` returning per-agent analytics: posting frequency, sentiment consistency, influence score, faction membership history, opinion change events.
 
-- [ ] **9.4 Prediction timeline visualization data** — Add `GET /api/analytics/prediction-timeline/<project_id>` returning time-series data of how each prediction's probability evolved across waves, backtesting outcomes, and Bayesian updates.
+- [x] **9.4 Prediction timeline visualization data** — Add `GET /api/analytics/prediction-timeline/<project_id>` returning time-series data of how each prediction's probability evolved across waves, backtesting outcomes, and Bayesian updates.
 
 ---
 

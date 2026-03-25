@@ -1566,3 +1566,73 @@ class TestPredictionDecay:
         assert "health_status" in d
         assert "decay_factor" in d
         assert "current_probability" in d
+
+
+# ---------------------------------------------------------------------------
+# Analytics service tests
+# ---------------------------------------------------------------------------
+
+
+class TestAnalyticsService:
+    """Tests for simulation analytics service."""
+
+    def _make_service(self):
+        from app.services.analytics import AnalyticsService
+        return AnalyticsService()
+
+    def _create_metrics(self, sim_dir, platform, rounds):
+        platform_dir = os.path.join(sim_dir, platform)
+        os.makedirs(platform_dir, exist_ok=True)
+        with open(os.path.join(platform_dir, "round_metrics.jsonl"), "w") as f:
+            for r in rounds:
+                f.write(json.dumps(r) + "\n")
+
+    def _create_actions(self, sim_dir, platform, actions):
+        platform_dir = os.path.join(sim_dir, platform)
+        os.makedirs(platform_dir, exist_ok=True)
+        with open(os.path.join(platform_dir, "actions.jsonl"), "w") as f:
+            for a in actions:
+                f.write(json.dumps(a) + "\n")
+
+    def test_simulation_analytics_empty_dir(self, tmp_path):
+        svc = self._make_service()
+        result = svc.simulation_analytics(str(tmp_path))
+        assert result["total_rounds"] == 0
+        assert result["sentiment_curve"] == []
+
+    def test_simulation_analytics_with_data(self, tmp_path):
+        svc = self._make_service()
+        sim_dir = str(tmp_path)
+        self._create_metrics(sim_dir, "twitter", [
+            {"round": 1, "sentiment": {"average": 0.3, "positive": 5, "negative": 2, "neutral": 3},
+             "participation_rate": 0.8, "momentum": {"velocity": 0.1, "direction": "accelerating", "signal": "weak", "acceleration": 0.0}},
+            {"round": 2, "sentiment": {"average": 0.5, "positive": 7, "negative": 1, "neutral": 2},
+             "participation_rate": 0.9, "momentum": {"velocity": 0.2, "direction": "accelerating", "signal": "strong_positive", "acceleration": 0.1}},
+        ])
+        result = svc.simulation_analytics(sim_dir)
+        assert result["total_rounds"] == 2
+        assert len(result["sentiment_curve"]) == 2
+        assert len(result["momentum_indicators"]) == 2
+
+    def test_agent_profiles(self, tmp_path):
+        svc = self._make_service()
+        sim_dir = str(tmp_path)
+        self._create_actions(sim_dir, "twitter", [
+            {"action_type": "CREATE_POST", "agent_name": "alice", "content": "great progress love"},
+            {"action_type": "CREATE_POST", "agent_name": "alice", "content": "excellent wonderful"},
+            {"action_type": "LIKE_POST", "agent_name": "bob", "content": ""},
+            {"action_type": "LIKE_POST", "agent_name": "bob", "content": ""},
+            {"action_type": "LIKE_POST", "agent_name": "bob", "content": ""},
+        ])
+        profiles = svc.agent_profiles(sim_dir)
+        assert len(profiles) == 2
+        alice = next(p for p in profiles if p["agent_name"] == "alice")
+        bob = next(p for p in profiles if p["agent_name"] == "bob")
+        assert alice["behavior_type"] == "creator"
+        assert bob["behavior_type"] == "lurker"
+        assert alice["avg_sentiment"] > 0
+
+    def test_agent_profiles_empty(self, tmp_path):
+        svc = self._make_service()
+        profiles = svc.agent_profiles(str(tmp_path))
+        assert profiles == []
