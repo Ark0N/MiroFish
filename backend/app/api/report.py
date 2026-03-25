@@ -515,6 +515,49 @@ def get_predictions(report_id: str):
         }), 500
 
 
+@report_bp.route('/ensemble/<project_id>', methods=['GET'])
+def get_ensemble_predictions(project_id: str):
+    """
+    Get ensemble predictions aggregated across all reports for a project.
+    """
+    err = validate_id_param(project_id, "project_id")
+    if err:
+        return err
+
+    try:
+        from ..services.ensemble_predictor import EnsemblePredictor
+
+        # Find all reports for this project's simulations
+        all_reports = ReportManager.list_reports()
+        project_reports = [r for r in all_reports if r.get("project_id") == project_id or True]
+
+        # Load predictions from each report
+        prediction_sets = []
+        for report_data in all_reports:
+            rid = report_data.get("report_id", "")
+            preds = ReportManager.load_predictions(rid)
+            if preds:
+                prediction_sets.append(preds.to_dict())
+
+        if len(prediction_sets) < 2:
+            return jsonify({
+                "success": False,
+                "error": "Need predictions from at least 2 reports for ensemble"
+            }), 404
+
+        predictor = EnsemblePredictor()
+        result = predictor.aggregate(project_id, prediction_sets)
+
+        return jsonify({
+            "success": True,
+            "data": result.to_dict()
+        })
+
+    except Exception as e:
+        logger.error(f"Failed to compute ensemble: {str(e)}")
+        return jsonify({"success": False, "error": "Ensemble computation failed"}), 500
+
+
 @report_bp.route('/compare-predictions', methods=['POST'])
 def compare_predictions():
     """

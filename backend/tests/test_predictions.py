@@ -751,3 +751,93 @@ class TestBayesianUpdater:
                 total_agents=20,
             )
         assert prob > 0.8  # Strong convergence after 3 updates
+
+
+# ---------------------------------------------------------------------------
+# Ensemble predictor tests
+# ---------------------------------------------------------------------------
+
+
+class TestEnsemblePredictor:
+    """Tests for ensemble prediction aggregation."""
+
+    def _make_predictor(self):
+        from app.services.ensemble_predictor import EnsemblePredictor
+        return EnsemblePredictor()
+
+    def _make_prediction_set(self, predictions):
+        return {"predictions": predictions}
+
+    def test_empty_input_returns_empty(self):
+        p = self._make_predictor()
+        result = p.aggregate("proj_1", [])
+        assert len(result.predictions) == 0
+
+    def test_single_set_passthrough(self):
+        p = self._make_predictor()
+        ps = self._make_prediction_set([
+            {"event": "Test event", "probability": 0.7, "agent_agreement": 0.8}
+        ])
+        result = p.aggregate("proj_1", [ps])
+        assert len(result.predictions) == 1
+        assert abs(result.predictions[0].probability - 0.7) < 0.01
+
+    def test_two_sets_averaged(self):
+        p = self._make_predictor()
+        ps1 = self._make_prediction_set([
+            {"event": "Market crash imminent", "probability": 0.8, "agent_agreement": 0.9}
+        ])
+        ps2 = self._make_prediction_set([
+            {"event": "Market crash imminent", "probability": 0.4, "agent_agreement": 0.6}
+        ])
+        result = p.aggregate("proj_1", [ps1, ps2])
+        assert len(result.predictions) == 1
+        # Equal weights → average of 0.8 and 0.4 = 0.6
+        assert abs(result.predictions[0].probability - 0.6) < 0.01
+        assert result.predictions[0].num_simulations == 2
+
+    def test_weighted_aggregation(self):
+        p = self._make_predictor()
+        ps1 = self._make_prediction_set([
+            {"event": "Event A", "probability": 0.9}
+        ])
+        ps2 = self._make_prediction_set([
+            {"event": "Event A", "probability": 0.3}
+        ])
+        # Weight first set 3x more
+        result = p.aggregate("proj_1", [ps1, ps2], weights=[3.0, 1.0])
+        # Weighted avg: (0.9*0.75 + 0.3*0.25) = 0.75
+        assert result.predictions[0].probability > 0.7
+
+    def test_spread_computed(self):
+        p = self._make_predictor()
+        ps1 = self._make_prediction_set([{"event": "Test", "probability": 0.9}])
+        ps2 = self._make_prediction_set([{"event": "Test", "probability": 0.1}])
+        result = p.aggregate("proj_1", [ps1, ps2])
+        assert result.predictions[0].agreement_spread > 0.3  # Large disagreement
+
+    def test_unmatched_predictions_separate(self):
+        p = self._make_predictor()
+        ps1 = self._make_prediction_set([{"event": "Completely different topic A", "probability": 0.7}])
+        ps2 = self._make_prediction_set([{"event": "Totally unrelated subject B", "probability": 0.4}])
+        result = p.aggregate("proj_1", [ps1, ps2])
+        assert len(result.predictions) == 2  # Should NOT merge
+
+    def test_compute_weights(self):
+        p = self._make_predictor()
+        from datetime import datetime as dt, timedelta
+        now = dt.now()
+        metadata = [
+            {"created_at": now.isoformat(), "agent_count": 100, "consensus_strength": 0.9},
+            {"created_at": (now - timedelta(days=60)).isoformat(), "agent_count": 20, "consensus_strength": 0.3},
+        ]
+        weights = p.compute_weights(metadata)
+        assert weights[0] > weights[1]  # Recent + more agents + stronger consensus
+
+    def test_ensemble_to_dict(self):
+        p = self._make_predictor()
+        ps = self._make_prediction_set([{"event": "E", "probability": 0.5}])
+        result = p.aggregate("proj_x", [ps])
+        d = result.to_dict()
+        assert d["project_id"] == "proj_x"
+        assert len(d["predictions"]) == 1
