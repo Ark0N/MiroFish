@@ -207,6 +207,39 @@ class TestIngestUrlEndpoint:
         assert "20" in response.get_json()["error"]
 
 
+class TestPredictionRatingEndpoint:
+    """Tests for POST /api/report/<report_id>/predictions/<idx>/rate."""
+
+    def test_invalid_rating_returns_400(self, client):
+        response = client.post('/api/report/test-report/predictions/0/rate',
+                               json={"rating": 6})
+        assert response.status_code == 400
+
+    def test_missing_rating_returns_400(self, client):
+        response = client.post('/api/report/test-report/predictions/0/rate',
+                               json={"feedback": "good"})
+        assert response.status_code == 400
+
+    def test_missing_body_returns_400(self, client):
+        response = client.post('/api/report/test-report/predictions/0/rate',
+                               data="bad", content_type='application/json')
+        assert response.status_code == 400
+
+
+class TestPredictionNoteEndpoint:
+    """Tests for POST /api/report/<report_id>/predictions/<idx>/note."""
+
+    def test_missing_note_returns_400(self, client):
+        response = client.post('/api/report/test-report/predictions/0/note',
+                               json={})
+        assert response.status_code == 400
+
+    def test_missing_body_returns_400(self, client):
+        response = client.post('/api/report/test-report/predictions/0/note',
+                               data="bad", content_type='application/json')
+        assert response.status_code == 400
+
+
 class TestWebhookEndpoint:
     """Tests for POST /api/graph/webhook/event."""
 

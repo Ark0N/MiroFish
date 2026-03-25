@@ -64,13 +64,13 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **6.3 Real-time event webhook** — Add `POST /api/graph/webhook/event` that accepts structured event notifications from external systems. Events flow through the cascade engine and can trigger mid-simulation injections.
 
-- [~] **6.4 Source credibility scoring** — Track source reliability based on prediction accuracy. Sources that consistently provide information leading to accurate predictions get higher credibility weights. Apply credibility to graph entity episode weighting.
+- [x] **6.4 Source credibility scoring** — Track source reliability based on prediction accuracy. Sources that consistently provide information leading to accurate predictions get higher credibility weights. Apply credibility to graph entity episode weighting.
 
 ## Phase 7: User Feedback Loops
 
-- [ ] **7.1 Prediction rating system** — Add `POST /api/report/<report_id>/predictions/<idx>/rate` endpoint where users can rate prediction quality (1-5 stars) and provide brief feedback. Aggregate ratings influence future calibration.
+- [x] **7.1 Prediction rating system** — Add `POST /api/report/<report_id>/predictions/<idx>/rate` endpoint where users can rate prediction quality (1-5 stars) and provide brief feedback. Aggregate ratings influence future calibration.
 
-- [ ] **7.2 Analyst notes on predictions** — Allow users to attach notes to individual predictions via `POST /api/report/<report_id>/predictions/<idx>/note`. Notes persist alongside predictions and appear in comparison views.
+- [x] **7.2 Analyst notes on predictions** — Allow users to attach notes to individual predictions via `POST /api/report/<report_id>/predictions/<idx>/note`. Notes persist alongside predictions and appear in comparison views.
 
 - [ ] **7.3 Simulation parameter learning** — Track which simulation configurations (agent count, round count, temperature settings) produce the most accurate predictions. Use historical accuracy data to recommend optimal simulation parameters for new projects.
 

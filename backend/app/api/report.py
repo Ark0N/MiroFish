@@ -515,6 +515,91 @@ def get_predictions(report_id: str):
         }), 500
 
 
+@report_bp.route('/<report_id>/predictions/<int:idx>/rate', methods=['POST'])
+def rate_prediction(report_id: str, idx: int):
+    """
+    Rate a prediction's quality (1-5 stars) with optional feedback.
+
+    Request JSON:
+        { "rating": 4, "feedback": "Very accurate prediction" }
+    """
+    err = validate_id_param(report_id, "report_id")
+    if err:
+        return err
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"success": False, "error": "JSON body required"}), 400
+
+    rating = data.get("rating")
+    if not isinstance(rating, (int, float)) or rating < 1 or rating > 5:
+        return jsonify({"success": False, "error": "rating must be 1-5"}), 400
+
+    feedback = data.get("feedback", "")
+
+    try:
+        import json as _json
+        from datetime import datetime
+        ratings_path = ReportManager._get_report_folder(report_id)
+        os.makedirs(ratings_path, exist_ok=True)
+        ratings_file = os.path.join(ratings_path, "prediction_ratings.jsonl")
+
+        entry = {
+            "prediction_idx": idx,
+            "rating": int(rating),
+            "feedback": str(feedback)[:500],
+            "rated_at": datetime.now().isoformat(),
+        }
+
+        with open(ratings_file, 'a', encoding='utf-8') as f:
+            f.write(_json.dumps(entry, ensure_ascii=False) + '\n')
+
+        return jsonify({"success": True, "data": entry})
+
+    except Exception as e:
+        logger.error(f"Failed to rate prediction: {str(e)}")
+        return jsonify({"success": False, "error": "Rating failed"}), 500
+
+
+@report_bp.route('/<report_id>/predictions/<int:idx>/note', methods=['POST'])
+def add_prediction_note(report_id: str, idx: int):
+    """
+    Add analyst note to a prediction.
+
+    Request JSON:
+        { "note": "Analyst notes about this prediction" }
+    """
+    err = validate_id_param(report_id, "report_id")
+    if err:
+        return err
+
+    data = request.get_json(silent=True)
+    if not data or not data.get("note"):
+        return jsonify({"success": False, "error": "note field required"}), 400
+
+    try:
+        import json as _json
+        from datetime import datetime
+        notes_path = ReportManager._get_report_folder(report_id)
+        os.makedirs(notes_path, exist_ok=True)
+        notes_file = os.path.join(notes_path, "prediction_notes.jsonl")
+
+        entry = {
+            "prediction_idx": idx,
+            "note": str(data["note"])[:2000],
+            "added_at": datetime.now().isoformat(),
+        }
+
+        with open(notes_file, 'a', encoding='utf-8') as f:
+            f.write(_json.dumps(entry, ensure_ascii=False) + '\n')
+
+        return jsonify({"success": True, "data": entry})
+
+    except Exception as e:
+        logger.error(f"Failed to add prediction note: {str(e)}")
+        return jsonify({"success": False, "error": "Note failed"}), 500
+
+
 @report_bp.route('/ensemble/<project_id>', methods=['GET'])
 def get_ensemble_predictions(project_id: str):
     """
