@@ -784,6 +784,86 @@ class TestScheduledEvents:
 
 
 # ---------------------------------------------------------------------------
+# Event cascade tests
+# ---------------------------------------------------------------------------
+
+
+class TestEventCascades:
+    """Tests for temporal event cascade generation."""
+
+    def _make_generator(self):
+        from app.services.simulation_config_generator import SimulationConfigGenerator
+        gen = SimulationConfigGenerator.__new__(SimulationConfigGenerator)
+        return gen
+
+    def _make_entity(self, name, entity_type):
+        entity = MagicMock()
+        entity.name = name
+        entity.get_entity_type.return_value = entity_type
+        return entity
+
+    def test_empty_events_returns_empty(self):
+        gen = self._make_generator()
+        result = gen._generate_event_cascades([], [], 30)
+        assert result == []
+
+    def test_generates_cascades_from_events(self):
+        gen = self._make_generator()
+        events = [
+            {"round": 5, "content": "Official government announcement on new policy", "poster_type": "Official"},
+        ]
+        entities = [self._make_entity("Gov", "Official"), self._make_entity("CNN", "MediaOutlet")]
+        result = gen._generate_event_cascades(events, entities, max_rounds=30)
+        assert len(result) >= 1
+        # Cascades should be at rounds after the trigger
+        for c in result:
+            assert c["round"] > 5
+            assert c["is_cascade"] is True
+            assert c["trigger_round"] == 5
+
+    def test_cascades_respect_max_rounds(self):
+        gen = self._make_generator()
+        events = [{"round": 8, "content": "Crisis event", "poster_type": "Person"}]
+        entities = [self._make_entity("Alice", "Person")]
+        result = gen._generate_event_cascades(events, entities, max_rounds=9)
+        # Only delay=2 cascade fits (round 10 is at round 10, exceeds 9)
+        for c in result:
+            assert c["round"] <= 9
+
+    def test_no_duplicate_rounds(self):
+        gen = self._make_generator()
+        events = [
+            {"round": 5, "content": "Event A", "poster_type": "Person"},
+            {"round": 7, "content": "Event B", "poster_type": "Person"},  # round 7 = cascade of A at +2
+        ]
+        entities = [self._make_entity("Alice", "Person")]
+        result = gen._generate_event_cascades(events, entities, max_rounds=30)
+        # Should not generate cascade at round 7 since Event B is already there
+        cascade_rounds = [c["round"] for c in result]
+        assert 7 not in cascade_rounds
+
+    def test_crisis_event_generates_crisis_cascades(self):
+        gen = self._make_generator()
+        events = [{"round": 3, "content": "Major crisis and emergency declared", "poster_type": "Official"}]
+        entities = [self._make_entity("Gov", "Official"), self._make_entity("CNN", "MediaOutlet")]
+        result = gen._generate_event_cascades(events, entities, max_rounds=30)
+        # Crisis cascades should mention "emergency" or "response"
+        assert any("response" in c["content"].lower() or "assessment" in c["content"].lower() for c in result)
+
+    def test_cascade_has_required_fields(self):
+        gen = self._make_generator()
+        events = [{"round": 5, "content": "Test event", "poster_type": "Person"}]
+        entities = [self._make_entity("Alice", "Person")]
+        result = gen._generate_event_cascades(events, entities, max_rounds=30)
+        for c in result:
+            assert "round" in c
+            assert "content" in c
+            assert "poster_type" in c
+            assert "is_cascade" in c
+            assert "trigger_round" in c
+
+
+# ---------------------------------------------------------------------------
 # Config defaults tests
 # ---------------------------------------------------------------------------
 

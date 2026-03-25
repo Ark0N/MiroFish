@@ -314,7 +314,16 @@ class SimulationConfigGenerator:
         report_progress(2, "Generating event config and hot topics...")
         event_config_result = self._generate_event_config(context, simulation_requirement, entities)
         event_config = self._parse_event_config(event_config_result)
-        reasoning_parts.append(f"Event config: {event_config_result.get('reasoning', 'success')}")
+        # Generate cascade events from scheduled events
+        cascades = self._generate_event_cascades(
+            scheduled_events=event_config.scheduled_events,
+            entities=entities,
+            max_rounds=time_config.max_rounds
+        )
+        if cascades:
+            event_config.scheduled_events.extend(cascades)
+            event_config.scheduled_events.sort(key=lambda e: e.get("round", 0))
+        reasoning_parts.append(f"Event config: {event_config_result.get('reasoning', 'success')} (+{len(cascades)} cascades)")
         
         # ========== Step 3-N: Generate agent configs in batches ==========
         all_agent_configs = []
@@ -773,6 +782,99 @@ Return JSON format (no markdown):
                 "reasoning": "using default config"
             }
     
+    def _generate_event_cascades(
+        self,
+        scheduled_events: List[Dict[str, Any]],
+        entities: List[EntityNode],
+        max_rounds: int
+    ) -> List[Dict[str, Any]]:
+        """Generate derivative cascade events from scheduled events.
+
+        When a major event fires at round N, this generates follow-up derivative
+        events at rounds N+2 and N+5 based on entity relationships and realistic
+        cause-and-effect chains.
+
+        Args:
+            scheduled_events: Existing scheduled events from LLM
+            entities: Graph entities for relationship context
+            max_rounds: Total simulation rounds (cascades must not exceed this)
+
+        Returns:
+            List of additional cascade events to append to scheduled_events
+        """
+        if not scheduled_events:
+            return []
+
+        # Build entity type set for assigning poster types
+        entity_types = list(set(e.get_entity_type() or "Unknown" for e in entities))
+        if not entity_types:
+            entity_types = ["Person", "Organization"]
+
+        # Cascade templates: each trigger event type spawns predictable follow-ups
+        cascade_templates = {
+            "official": [
+                {"delay": 2, "template": "Public reaction intensifies following {event}. Social media debate erupts.", "poster_types": ["Person", "Student"]},
+                {"delay": 5, "template": "Media investigation reveals additional context about {event}. New details emerge.", "poster_types": ["MediaOutlet", "Organization"]},
+            ],
+            "crisis": [
+                {"delay": 2, "template": "Emergency response mobilized. Authorities issue updated guidelines following {event}.", "poster_types": ["Official", "Organization"]},
+                {"delay": 5, "template": "Long-term impact assessment begins. Experts weigh in on consequences of {event}.", "poster_types": ["Person", "MediaOutlet"]},
+            ],
+            "default": [
+                {"delay": 2, "template": "Follow-up developments emerge from {event}. Stakeholders respond.", "poster_types": ["Person", "Organization"]},
+                {"delay": 5, "template": "Broader implications of {event} become clearer. Analysis deepens.", "poster_types": ["MediaOutlet", "Person"]},
+            ],
+        }
+
+        # Classify events and generate cascades
+        cascades = []
+        for event in scheduled_events:
+            round_num = event.get("round", 0)
+            content = event.get("content", "")
+            content_lower = content.lower()
+
+            # Classify event type
+            if any(w in content_lower for w in ["official", "government", "authority", "policy", "announce"]):
+                templates = cascade_templates["official"]
+            elif any(w in content_lower for w in ["crisis", "emergency", "disaster", "collapse", "attack"]):
+                templates = cascade_templates["crisis"]
+            else:
+                templates = cascade_templates["default"]
+
+            # Short summary of the trigger event for cascade descriptions
+            event_summary = content[:80].rstrip(".")
+
+            for tmpl in templates:
+                cascade_round = round_num + tmpl["delay"]
+                if cascade_round > max_rounds:
+                    continue
+
+                # Pick a poster type that exists in our entity set
+                poster_type = "Person"
+                for pt in tmpl["poster_types"]:
+                    if pt in entity_types:
+                        poster_type = pt
+                        break
+
+                cascades.append({
+                    "round": cascade_round,
+                    "content": tmpl["template"].format(event=event_summary),
+                    "poster_type": poster_type,
+                    "is_cascade": True,
+                    "trigger_round": round_num,
+                })
+
+        # Remove duplicates at same round (keep first)
+        seen_rounds = set(e.get("round") for e in scheduled_events)
+        unique_cascades = []
+        for c in cascades:
+            if c["round"] not in seen_rounds:
+                seen_rounds.add(c["round"])
+                unique_cascades.append(c)
+
+        logger.info(f"Generated {len(unique_cascades)} cascade events from {len(scheduled_events)} scheduled events")
+        return unique_cascades
+
     def _parse_event_config(self, result: Dict[str, Any]) -> EventConfig:
         """解析Event config结果"""
         return EventConfig(
