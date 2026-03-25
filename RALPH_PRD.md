@@ -62,9 +62,9 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **6.2 Trend detection from ingested data** — Add a `TrendDetector` that analyzes temporal patterns in ingested content. Identify emerging topics, sentiment shifts in source material, and new entity appearances. Surface as alerts in the prediction pipeline.
 
-- [~] **6.3 Real-time event webhook** — Add `POST /api/graph/webhook/event` that accepts structured event notifications from external systems. Events flow through the cascade engine and can trigger mid-simulation injections.
+- [x] **6.3 Real-time event webhook** — Add `POST /api/graph/webhook/event` that accepts structured event notifications from external systems. Events flow through the cascade engine and can trigger mid-simulation injections.
 
-- [ ] **6.4 Source credibility scoring** — Track source reliability based on prediction accuracy. Sources that consistently provide information leading to accurate predictions get higher credibility weights. Apply credibility to graph entity episode weighting.
+- [~] **6.4 Source credibility scoring** — Track source reliability based on prediction accuracy. Sources that consistently provide information leading to accurate predictions get higher credibility weights. Apply credibility to graph entity episode weighting.
 
 ## Phase 7: User Feedback Loops
 

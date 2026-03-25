@@ -1162,3 +1162,61 @@ class TestTrendDetector:
         d = s.to_dict()
         assert d["topic"] == "test"
         assert d["trend_type"] == "emerging"
+
+
+# ---------------------------------------------------------------------------
+# Source credibility tests
+# ---------------------------------------------------------------------------
+
+
+class TestSourceCredibility:
+    """Tests for source credibility tracking."""
+
+    def _make_tracker(self, tmp_path):
+        from app.services.source_credibility import SourceCredibilityTracker
+        t = SourceCredibilityTracker()
+        t.CREDIBILITY_DIR = str(tmp_path / "cred")
+        os.makedirs(t.CREDIBILITY_DIR, exist_ok=True)
+        return t
+
+    def test_record_correct_outcome(self, tmp_path):
+        t = self._make_tracker(tmp_path)
+        score = t.record_outcome("p1", "Reuters", True)
+        assert score.accuracy == 1.0
+        assert score.credibility_weight == 2.0
+
+    def test_record_incorrect_outcome(self, tmp_path):
+        t = self._make_tracker(tmp_path)
+        score = t.record_outcome("p1", "UnreliableSource", False)
+        assert score.accuracy == 0.0
+        assert score.credibility_weight == 0.5
+
+    def test_mixed_outcomes(self, tmp_path):
+        t = self._make_tracker(tmp_path)
+        t.record_outcome("p1", "BBC", True)
+        t.record_outcome("p1", "BBC", True)
+        score = t.record_outcome("p1", "BBC", False)
+        assert score.total_predictions == 3
+        assert score.correct_predictions == 2
+        assert 0.9 < score.credibility_weight < 1.6
+
+    def test_unknown_source_neutral_weight(self, tmp_path):
+        t = self._make_tracker(tmp_path)
+        assert t.get_weight("p1", "unknown") == 1.0
+
+    def test_get_all_scores(self, tmp_path):
+        t = self._make_tracker(tmp_path)
+        t.record_outcome("p1", "A", True)
+        t.record_outcome("p1", "B", False)
+        scores = t.get_all_scores("p1")
+        assert len(scores) == 2
+        # A should have higher weight than B
+        assert scores[0].source_name == "A"
+
+    def test_persistence(self, tmp_path):
+        t = self._make_tracker(tmp_path)
+        t.record_outcome("p1", "CNN", True)
+        # Create new tracker instance to test loading
+        t2 = self._make_tracker(tmp_path)
+        t2.CREDIBILITY_DIR = t.CREDIBILITY_DIR
+        assert t2.get_weight("p1", "CNN") == 2.0
