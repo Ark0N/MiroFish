@@ -138,7 +138,7 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 ## Phase 14: Prediction Explainability
 
-- [ ] **14.1 Prediction provenance tracker** — For each prediction, trace the full chain of evidence: which graph entities contributed, which agent posts supported it, which simulation rounds were pivotal. Store as a provenance DAG in `provenance.json` per report.
+- [~] **14.1 Prediction provenance tracker** — For each prediction, trace the full chain of evidence: which graph entities contributed, which agent posts supported it, which simulation rounds were pivotal. Store as a provenance DAG in `provenance.json` per report.
 
 - [ ] **14.2 Counterfactual analysis** — Add a service that asks "what if?" — given a prediction, compute how the probability would change if key factors were different (e.g., remove the most influential agent, flip a faction's stance). Report sensitivity to each factor.
 

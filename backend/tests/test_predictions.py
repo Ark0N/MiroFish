@@ -2316,3 +2316,64 @@ class TestPredictionVersioning:
         mgr.record_update("r1", 0, 0.6, [0.4, 0.8], "bayesian", "Up")
         mgr.record_update("r1", 0, 0.7, [0.5, 0.9], "bayesian", "Up more")
         assert mgr.detect_regression("r1", 0) is None
+
+
+# ---------------------------------------------------------------------------
+# Provenance tracker tests
+# ---------------------------------------------------------------------------
+
+
+class TestProvenanceTracker:
+    """Tests for prediction provenance tracking."""
+
+    def _make_tracker(self):
+        from app.services.prediction_provenance import ProvenanceTracker
+        return ProvenanceTracker()
+
+    def test_basic_provenance(self):
+        tracker = self._make_tracker()
+        pred = {"event": "Market crash", "probability": 0.7, "evidence": ["Agent data", "Graph data"]}
+        prov = tracker.build_provenance(pred, 0)
+        assert prov.prediction_idx == 0
+        assert len(prov.nodes) >= 3  # prediction + 2 evidence
+        assert len(prov.edges) >= 2
+
+    def test_with_agent_posts(self):
+        tracker = self._make_tracker()
+        pred = {"event": "oil prices rise sharply", "probability": 0.6, "evidence": []}
+        posts = {"analyst": ["oil prices will rise due to supply constraints"]}
+        prov = tracker.build_provenance(pred, 0, agent_posts=posts)
+        post_nodes = [n for n in prov.nodes if n.node_type == "agent_post"]
+        assert len(post_nodes) >= 1
+
+    def test_with_consensus(self):
+        tracker = self._make_tracker()
+        pred = {"event": "Test", "probability": 0.5, "evidence": []}
+        consensus = {"agreement_score": 0.8, "total_agents_analyzed": 20}
+        prov = tracker.build_provenance(pred, 0, consensus_data=consensus)
+        cons_nodes = [n for n in prov.nodes if n.node_type == "consensus"]
+        assert len(cons_nodes) == 1
+
+    def test_with_calibration(self):
+        tracker = self._make_tracker()
+        pred = {"event": "Test", "probability": 0.5, "evidence": []}
+        cal = {"adjustment": 1.1, "agreement_factor": 1.05}
+        prov = tracker.build_provenance(pred, 0, calibration_data=cal)
+        cal_nodes = [n for n in prov.nodes if n.node_type == "calibration"]
+        assert len(cal_nodes) == 1
+
+    def test_to_dict(self):
+        tracker = self._make_tracker()
+        pred = {"event": "Test event", "probability": 0.7, "evidence": ["E1"]}
+        prov = tracker.build_provenance(pred, 0)
+        d = prov.to_dict()
+        assert d["prediction_idx"] == 0
+        assert "nodes" in d
+        assert "edges" in d
+        assert d["node_count"] >= 2
+
+    def test_empty_prediction(self):
+        tracker = self._make_tracker()
+        pred = {"event": "", "probability": 0.5, "evidence": []}
+        prov = tracker.build_provenance(pred, 0)
+        assert len(prov.nodes) >= 1  # At least the prediction node
