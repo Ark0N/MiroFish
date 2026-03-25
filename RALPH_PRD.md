@@ -46,6 +46,36 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **4.4 Executive summary with risk matrix** — Auto-generate a 1-page executive summary with a 2x2 risk matrix (probability vs impact) from structured predictions. Add as first section of report.
 
+## Phase 5: Advanced Prediction Techniques
+
+- [ ] **5.1 Bayesian prediction updating** — Add a `BayesianUpdater` service that adjusts prediction probabilities as new evidence arrives. When a new simulation wave completes or new data is ingested, update prior probabilities using Bayes' theorem with the new consensus data as likelihood. Store update history for transparency.
+
+- [ ] **5.2 Ensemble prediction aggregation** — When multiple simulations exist for the same project, automatically aggregate predictions across all simulations using weighted averaging. Weight by simulation recency, agent count, and consensus strength. Expose via `GET /api/report/ensemble/<project_id>`.
+
+- [ ] **5.3 Historical pattern matching** — Add a `PatternMatcher` service that compares current simulation dynamics (sentiment trajectory, faction evolution, momentum) against previously completed simulations. Identify similar historical patterns and use their outcomes to adjust current predictions.
+
+- [ ] **5.4 Prediction backtesting framework** — Add ability to mark predictions as "resolved" (correct/incorrect) with actual outcomes. Compute calibration curves (predicted vs actual probability) across resolved predictions. Store in `prediction_outcomes.json` per project.
+
+## Phase 6: External Data Integration
+
+- [ ] **6.1 RSS feed monitor** — Add a background service that periodically checks configured RSS feeds for new articles. When new content is detected, automatically extract text and queue it for graph enrichment. Store feed config in project settings.
+
+- [ ] **6.2 Trend detection from ingested data** — Add a `TrendDetector` that analyzes temporal patterns in ingested content. Identify emerging topics, sentiment shifts in source material, and new entity appearances. Surface as alerts in the prediction pipeline.
+
+- [ ] **6.3 Real-time event webhook** — Add `POST /api/graph/webhook/event` that accepts structured event notifications from external systems. Events flow through the cascade engine and can trigger mid-simulation injections.
+
+- [ ] **6.4 Source credibility scoring** — Track source reliability based on prediction accuracy. Sources that consistently provide information leading to accurate predictions get higher credibility weights. Apply credibility to graph entity episode weighting.
+
+## Phase 7: User Feedback Loops
+
+- [ ] **7.1 Prediction rating system** — Add `POST /api/report/<report_id>/predictions/<idx>/rate` endpoint where users can rate prediction quality (1-5 stars) and provide brief feedback. Aggregate ratings influence future calibration.
+
+- [ ] **7.2 Analyst notes on predictions** — Allow users to attach notes to individual predictions via `POST /api/report/<report_id>/predictions/<idx>/note`. Notes persist alongside predictions and appear in comparison views.
+
+- [ ] **7.3 Simulation parameter learning** — Track which simulation configurations (agent count, round count, temperature settings) produce the most accurate predictions. Use historical accuracy data to recommend optimal simulation parameters for new projects.
+
+- [ ] **7.4 Feedback-driven prompt tuning** — When predictions are marked as correct/incorrect, analyze which agent prompts and persona types contributed most to accurate predictions. Automatically adjust persona generation to weight successful archetypes.
+
 ---
 
 ## Ralph Loop Instructions
