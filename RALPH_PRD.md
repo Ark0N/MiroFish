@@ -30,9 +30,9 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **3.1 Faction detection & tracking** — Enhance `RoundMetricsTracker` in `action_logger.py` to identify emergent factions (clusters of agents with similar stances) per round. Track faction size, stability, and drift. Export to `faction_metrics.jsonl`.
 
-- [~] **3.2 Influence propagation analysis** — Track which agents' posts get the most engagement and how opinions spread through the follow graph. Add an `InfluenceTracker` that logs opinion adoption chains. Helps identify which agent archetypes drive prediction outcomes.
+- [x] **3.2 Influence propagation analysis** — Track which agents' posts get the most engagement and how opinions spread through the follow graph. Add an `InfluenceTracker` that logs opinion adoption chains. Helps identify which agent archetypes drive prediction outcomes.
 
-- [ ] **3.3 Sentiment momentum indicators** — Compute rate-of-change of sentiment per round in `RoundMetricsTracker`. If sentiment is accelerating in one direction, flag as "strong momentum". If decelerating, flag as "potential reversal". Include in round metrics.
+- [~] **3.3 Sentiment momentum indicators** — Compute rate-of-change of sentiment per round in `RoundMetricsTracker`. If sentiment is accelerating in one direction, flag as "strong momentum". If decelerating, flag as "potential reversal". Include in round metrics.
 
 - [ ] **3.4 Agent memory & learning** — Extend simulation scripts to give agents a short memory of their last 3-5 posts and interactions. Currently agents are stateless per round. Memory enables opinion evolution and more realistic prediction dynamics.
 

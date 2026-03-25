@@ -211,10 +211,71 @@ class RoundMetricsTracker:
         self.output_dir = output_dir
         self.metrics_file = os.path.join(output_dir, "round_metrics.jsonl")
         self._current_round_actions: List[Dict[str, Any]] = []
+        self._previous_sentiment: Optional[float] = None
+        self._sentiment_history: List[float] = []  # last N rounds for momentum
 
     def add_action(self, action: Dict[str, Any]):
         """Buffer an action for current round metrics computation."""
         self._current_round_actions.append(action)
+
+    def _compute_momentum(self, current_sentiment: float) -> Dict[str, Any]:
+        """Compute sentiment momentum indicators.
+
+        Returns:
+            Dict with:
+                - velocity: rate of change from previous round
+                - acceleration: change in velocity (is momentum increasing or decreasing?)
+                - direction: "accelerating", "decelerating", "reversing", or "stable"
+                - signal: "strong_positive", "strong_negative", "weak", or "neutral"
+        """
+        velocity = 0.0
+        acceleration = 0.0
+        direction = "stable"
+        signal = "neutral"
+
+        if self._previous_sentiment is not None:
+            velocity = current_sentiment - self._previous_sentiment
+
+        # Compute acceleration from last 3 data points
+        history = self._sentiment_history
+        if len(history) >= 2:
+            prev_velocity = history[-1] - history[-2]
+            acceleration = velocity - prev_velocity
+
+        # Determine direction
+        if abs(velocity) < 0.05:
+            direction = "stable"
+        elif velocity > 0 and acceleration > 0:
+            direction = "accelerating"
+        elif velocity > 0 and acceleration < 0:
+            direction = "decelerating"
+        elif velocity < 0 and acceleration < 0:
+            direction = "accelerating"  # accelerating in negative direction
+        elif velocity < 0 and acceleration > 0:
+            direction = "decelerating"  # decelerating from negative
+        else:
+            direction = "stable"
+
+        # Check for reversal (sign change in velocity)
+        if len(history) >= 2:
+            prev_vel = history[-1] - history[-2]
+            if prev_vel * velocity < 0 and abs(velocity) > 0.05:
+                direction = "reversing"
+
+        # Determine signal strength
+        if abs(velocity) > 0.15:
+            signal = "strong_positive" if velocity > 0 else "strong_negative"
+        elif abs(velocity) > 0.05:
+            signal = "weak"
+        else:
+            signal = "neutral"
+
+        return {
+            "velocity": round(velocity, 4),
+            "acceleration": round(acceleration, 4),
+            "direction": direction,
+            "signal": signal,
+        }
 
     def flush_round(self, round_num: int, platform: str, total_agents: int, active_agents: int):
         """Compute and save metrics for the completed round."""
@@ -315,8 +376,13 @@ class RoundMetricsTracker:
                 "reposts": reposts,
             },
             "factions": faction_summary,
+            "momentum": self._compute_momentum(avg_sentiment),
             "participation_rate": round(active_agents / total_agents, 3) if total_agents > 0 else 0,
         }
+
+        # Update sentiment history for next round's momentum
+        self._previous_sentiment = avg_sentiment
+        self._sentiment_history.append(avg_sentiment)
 
         # Write to JSONL
         try:

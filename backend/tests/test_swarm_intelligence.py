@@ -672,6 +672,78 @@ class TestFactionDetection:
 
 
 # ---------------------------------------------------------------------------
+# Sentiment momentum tests
+# ---------------------------------------------------------------------------
+
+
+class TestSentimentMomentum:
+    """Tests for sentiment momentum indicators in RoundMetricsTracker."""
+
+    def _make_tracker(self, tmpdir):
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from action_logger import RoundMetricsTracker
+        return RoundMetricsTracker(tmpdir)
+
+    def test_momentum_present_in_metrics(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tracker = self._make_tracker(tmpdir)
+            tracker.add_action({"action_type": "CREATE_POST", "agent_name": "a", "content": "great"})
+            metrics = tracker.flush_round(1, "twitter", 10, 1)
+            assert "momentum" in metrics
+            assert "velocity" in metrics["momentum"]
+            assert "direction" in metrics["momentum"]
+            assert "signal" in metrics["momentum"]
+
+    def test_first_round_zero_velocity(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tracker = self._make_tracker(tmpdir)
+            tracker.add_action({"action_type": "CREATE_POST", "agent_name": "a", "content": "great"})
+            metrics = tracker.flush_round(1, "twitter", 10, 1)
+            assert metrics["momentum"]["velocity"] == 0.0
+
+    def test_increasing_sentiment_positive_velocity(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tracker = self._make_tracker(tmpdir)
+            # Round 1: negative
+            tracker.add_action({"action_type": "CREATE_POST", "agent_name": "a", "content": "terrible awful crisis"})
+            tracker.flush_round(1, "twitter", 10, 1)
+            # Round 2: positive (shift)
+            tracker.add_action({"action_type": "CREATE_POST", "agent_name": "a", "content": "great excellent love progress"})
+            metrics = tracker.flush_round(2, "twitter", 10, 1)
+            assert metrics["momentum"]["velocity"] > 0
+
+    def test_decreasing_sentiment_negative_velocity(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tracker = self._make_tracker(tmpdir)
+            # Round 1: positive
+            tracker.add_action({"action_type": "CREATE_POST", "agent_name": "a", "content": "great excellent love"})
+            tracker.flush_round(1, "twitter", 10, 1)
+            # Round 2: negative (shift)
+            tracker.add_action({"action_type": "CREATE_POST", "agent_name": "a", "content": "terrible awful crisis fail"})
+            metrics = tracker.flush_round(2, "twitter", 10, 1)
+            assert metrics["momentum"]["velocity"] < 0
+
+    def test_strong_signal_on_big_shift(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tracker = self._make_tracker(tmpdir)
+            tracker.add_action({"action_type": "CREATE_POST", "agent_name": "a", "content": "terrible crisis"})
+            tracker.flush_round(1, "twitter", 10, 1)
+            tracker.add_action({"action_type": "CREATE_POST", "agent_name": "a", "content": "great excellent wonderful love hope progress"})
+            metrics = tracker.flush_round(2, "twitter", 10, 1)
+            assert metrics["momentum"]["signal"] in ("strong_positive", "strong_negative")
+
+    def test_stable_direction_on_no_change(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tracker = self._make_tracker(tmpdir)
+            tracker.add_action({"action_type": "CREATE_POST", "agent_name": "a", "content": "neutral info"})
+            tracker.flush_round(1, "twitter", 10, 1)
+            tracker.add_action({"action_type": "CREATE_POST", "agent_name": "a", "content": "neutral info again"})
+            metrics = tracker.flush_round(2, "twitter", 10, 1)
+            assert metrics["momentum"]["direction"] == "stable"
+
+
+# ---------------------------------------------------------------------------
 # Influence propagation tests
 # ---------------------------------------------------------------------------
 
