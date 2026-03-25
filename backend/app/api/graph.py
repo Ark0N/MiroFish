@@ -288,6 +288,156 @@ def generate_ontology():
         }), 500
 
 
+# ============== Endpoint 1b: Ingest URL ==============
+
+@graph_bp.route('/ingest-url', methods=['POST'])
+@limiter.limit("10 per minute")
+def ingest_url():
+    """
+    Ingest text from URLs (news articles, RSS feeds, web pages) into an
+    existing or new project. Extracts text via trafilatura, then runs through
+    the ontology + graph pipeline.
+
+    Request: application/json
+
+    Parameters:
+        urls: List of URLs to ingest (required)
+        simulation_requirement: Simulation requirement (required)
+        project_id: Existing project ID to add to (optional — creates new if omitted)
+        project_name: Name for new project (optional)
+        additional_context: Extra context (optional)
+
+    Returns:
+        {
+            "success": true,
+            "data": {
+                "project_id": "proj_xxxx",
+                "ontology": {...},
+                "ingested_urls": [...],
+                "failed_urls": [...],
+                "total_text_length": 12345
+            }
+        }
+    """
+    from ..utils.url_extractor import extract_text_from_urls
+
+    try:
+        data = request.get_json(silent=True)
+        if not data:
+            return jsonify({"success": False, "error": "JSON body required"}), 400
+
+        urls = data.get("urls", [])
+        simulation_requirement = data.get("simulation_requirement", "")
+        project_id = data.get("project_id")
+        project_name = data.get("project_name", "URL Ingestion Project")
+        additional_context = data.get("additional_context", "")
+
+        if not urls:
+            return jsonify({"success": False, "error": "At least one URL is required"}), 400
+        if not simulation_requirement:
+            return jsonify({"success": False, "error": "simulation_requirement is required"}), 400
+        if len(urls) > 20:
+            return jsonify({"success": False, "error": "Maximum 20 URLs per request"}), 400
+
+        logger.info(f"=== URL ingestion: {len(urls)} URLs ===")
+
+        # Reset cost tracker
+        CostTracker.get_instance().reset("ontology")
+
+        # Extract text from URLs
+        results = extract_text_from_urls(urls)
+        ingested = [r for r in results if r["success"]]
+        failed = [{"url": r["url"], "error": r["error"]} for r in results if not r["success"]]
+
+        if not ingested:
+            return jsonify({
+                "success": False,
+                "error": "No URLs could be successfully extracted",
+                "failed_urls": failed
+            }), 400
+
+        # Build document texts
+        document_texts = []
+        all_text = ""
+        for r in ingested:
+            text = TextProcessor.preprocess_text(r["text"])
+            document_texts.append(text)
+            title = r.get("title", r["url"])
+            all_text += f"\n\n=== {title} ===\n{text}"
+
+        # Get or create project
+        if project_id:
+            err = validate_id_param(project_id, "project_id")
+            if err:
+                return err
+            project = ProjectManager.get_project(project_id)
+            if not project:
+                return jsonify({"success": False, "error": f"Project not found: {project_id}"}), 404
+            # Append new text to existing
+            existing_text = ProjectManager.get_extracted_text(project_id) or ""
+            all_text = existing_text + all_text
+        else:
+            project = ProjectManager.create_project(name=project_name)
+
+        project.simulation_requirement = simulation_requirement
+        project.total_text_length = len(all_text)
+        project.files.extend([
+            {"filename": r.get("title", r["url"])[:100], "size": len(r["text"]), "source": "url"}
+            for r in ingested
+        ])
+        ProjectManager.save_extracted_text(project.project_id, all_text)
+
+        # Generate ontology
+        model_name = data.get("model_name")
+        llm_client = None
+        if model_name:
+            from ..utils.llm_client import LLMClient
+            llm_client = LLMClient(model=model_name, cost_phase="ontology")
+        generator = OntologyGenerator(llm_client=llm_client)
+        ontology = generator.generate(
+            document_texts=document_texts,
+            simulation_requirement=simulation_requirement,
+            additional_context=additional_context if additional_context else None
+        )
+
+        project.ontology = {
+            "entity_types": ontology.get("entity_types", []),
+            "edge_types": ontology.get("edge_types", [])
+        }
+        project.analysis_summary = ontology.get("analysis_summary", "")
+        project.status = ProjectStatus.ONTOLOGY_GENERATED
+        ProjectManager.save_project(project)
+
+        logger.info(f"=== URL ingestion complete === project: {project.project_id}, "
+                     f"{len(ingested)} URLs ingested, {len(failed)} failed")
+
+        return jsonify({
+            "success": True,
+            "data": {
+                "project_id": project.project_id,
+                "project_name": project.name,
+                "ontology": project.ontology,
+                "analysis_summary": project.analysis_summary,
+                "ingested_urls": [{"url": r["url"], "title": r.get("title", "")} for r in ingested],
+                "failed_urls": failed,
+                "total_text_length": project.total_text_length
+            }
+        })
+
+    except BudgetExceededError as e:
+        logger.error(f"URL ingestion budget exceeded: {e}")
+        CostTracker.get_instance().log_summary()
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "cost_summary": CostTracker.get_instance().get_summary()
+        }), 402
+
+    except Exception as e:
+        logger.error(f"URL ingestion failed: {str(e)}")
+        return jsonify({"success": False, "error": "URL ingestion failed"}), 500
+
+
 # ============== Endpoint 2: Build graph ==============
 
 @graph_bp.route('/build', methods=['POST'])

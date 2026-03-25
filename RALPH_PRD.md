@@ -14,11 +14,11 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **1.3 Contrarian agent injection** — Add a "Devil's Advocate" persona type in `oasis_profile_generator.py` that deliberately challenges emerging consensus. 5-10% of agents should be contrarians. Track whether contrarian arguments shift group opinion (a signal of weak consensus).
 
-- [~] **1.4 Prediction confidence calibration** — Add a `PredictionCalibrator` service that compares agent consensus distribution to confidence bands. If 90% of agents agree → high confidence, but if contrarians successfully shifted opinion → downgrade. Wire into `report_agent.py` structured predictions.
+- [x] **1.4 Prediction confidence calibration** — Add a `PredictionCalibrator` service that compares agent consensus distribution to confidence bands. If 90% of agents agree → high confidence, but if contrarians successfully shifted opinion → downgrade. Wire into `report_agent.py` structured predictions.
 
 ## Phase 2: Real-Time & Temporal Intelligence
 
-- [ ] **2.1 News/RSS ingestion endpoint** — Add `POST /api/graph/ingest-url` that accepts URLs (news articles, RSS feeds), extracts text via `trafilatura` or `newspaper3k`, and feeds through existing `text_processor.py` → ontology → graph pipeline. Enables current-event prediction without manual PDF upload.
+- [~] **2.1 News/RSS ingestion endpoint** — Add `POST /api/graph/ingest-url` that accepts URLs (news articles, RSS feeds), extracts text via `trafilatura` or `newspaper3k`, and feeds through existing `text_processor.py` → ontology → graph pipeline. Enables current-event prediction without manual PDF upload.
 
 - [ ] **2.2 Temporal event modeling** — Extend `simulation_config_generator.py` to model event cascades: when a major event fires at round N, generate follow-up derivative events at rounds N+2, N+5 based on graph relationships. E.g., "trade war announced" → "supply chain disruption" → "price increases".
 

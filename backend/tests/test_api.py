@@ -176,6 +176,37 @@ class TestGraphEndpoints:
         assert data['success'] is False
 
 
+class TestIngestUrlEndpoint:
+    """Tests for POST /api/graph/ingest-url."""
+
+    def test_missing_urls_returns_400(self, client):
+        response = client.post('/api/graph/ingest-url',
+                               json={"simulation_requirement": "test"})
+        assert response.status_code == 400
+        assert "URL" in response.get_json()["error"]
+
+    def test_missing_simulation_requirement_returns_400(self, client):
+        response = client.post('/api/graph/ingest-url',
+                               json={"urls": ["https://example.com"]})
+        assert response.status_code == 400
+        assert "simulation_requirement" in response.get_json()["error"]
+
+    def test_empty_body_returns_400(self, client):
+        response = client.post('/api/graph/ingest-url',
+                               data="not json",
+                               content_type='application/json')
+        assert response.status_code == 400
+
+    def test_too_many_urls_returns_400(self, client):
+        response = client.post('/api/graph/ingest-url',
+                               json={
+                                   "urls": [f"https://example.com/{i}" for i in range(25)],
+                                   "simulation_requirement": "test"
+                               })
+        assert response.status_code == 400
+        assert "20" in response.get_json()["error"]
+
+
 class TestSimulationEndpoints:
     """Tests for /api/simulation/ endpoints."""
 

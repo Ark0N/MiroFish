@@ -494,3 +494,55 @@ class TestPredictionCalibrator:
 
         shift = cal._measure_contrarian_impact(str(tmp_path))
         assert shift == 0.0
+
+
+# ---------------------------------------------------------------------------
+# URL extractor tests
+# ---------------------------------------------------------------------------
+
+
+class TestUrlExtractor:
+    """Tests for URL text extraction utility."""
+
+    @patch('app.utils.url_extractor.trafilatura')
+    def test_successful_extraction(self, mock_traf):
+        from app.utils.url_extractor import extract_text_from_url
+        mock_traf.fetch_url.return_value = "<html><body>Long article content here with enough text to pass the minimum threshold of fifty characters easily.</body></html>"
+        mock_traf.extract.return_value = "Long article content here with enough text to pass the minimum threshold of fifty characters easily."
+        mock_metadata = MagicMock()
+        mock_metadata.title = "Test Article"
+        mock_traf.extract_metadata.return_value = mock_metadata
+
+        result = extract_text_from_url("https://example.com/article")
+        assert result["success"] is True
+        assert len(result["text"]) > 50
+        assert result["title"] == "Test Article"
+
+    @patch('app.utils.url_extractor.trafilatura')
+    def test_fetch_failure(self, mock_traf):
+        from app.utils.url_extractor import extract_text_from_url
+        mock_traf.fetch_url.return_value = None
+
+        result = extract_text_from_url("https://invalid.example.com")
+        assert result["success"] is False
+        assert result["error"] is not None
+
+    @patch('app.utils.url_extractor.trafilatura')
+    def test_empty_extraction(self, mock_traf):
+        from app.utils.url_extractor import extract_text_from_url
+        mock_traf.fetch_url.return_value = "<html></html>"
+        mock_traf.extract.return_value = ""
+
+        result = extract_text_from_url("https://example.com/empty")
+        assert result["success"] is False
+
+    @patch('app.utils.url_extractor.trafilatura')
+    def test_extract_multiple_urls(self, mock_traf):
+        from app.utils.url_extractor import extract_text_from_urls
+        mock_traf.fetch_url.return_value = "<html>content</html>"
+        mock_traf.extract.return_value = "A" * 100
+        mock_traf.extract_metadata.return_value = MagicMock(title="Title")
+
+        results = extract_text_from_urls(["https://a.com", "https://b.com"])
+        assert len(results) == 2
+        assert all(r["success"] for r in results)
