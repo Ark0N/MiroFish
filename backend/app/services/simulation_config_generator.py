@@ -80,8 +80,11 @@ class AgentActivityConfig:
     # Influence weight (determines probability of their posts being seen by other agents)
     influence_weight: float = 1.0
 
+    # LLM temperature for this agent (higher = more creative/impulsive, lower = more analytical)
+    temperature: float = 0.7
 
-@dataclass  
+
+@dataclass
 class TimeSimulationConfig:
     """Time simulation configuration (based on Chinese timezone activity patterns)."""
     # Total simulation duration (simulated hours)
@@ -333,7 +336,10 @@ class SimulationConfigGenerator:
             all_agent_configs.extend(batch_configs)
         
         reasoning_parts.append(f"Agent configs: successfully generated {len(all_agent_configs)}")
-        
+
+        # Apply power-law distribution for realistic social media activity patterns
+        all_agent_configs = self._apply_power_law_distribution(all_agent_configs)
+
         # ========== Assign publisher agents to initial posts ==========
         logger.info("Assigning suitable publisher agents to initial posts...")
         event_config = self._assign_initial_post_agents(event_config, all_agent_configs)
@@ -713,6 +719,7 @@ Simulation requirement: {simulation_requirement}
 - 提取热点话题关键词
 - 描述舆论发展方向
 - 设计初始帖子内容，**每帖子必须指定 poster_type（发布者类型）**
+- Design 2-3 scheduled events that inject new developments at different simulation stages (e.g., round 5: official response, round 15: media investigation reveals new facts)
 
 **Important**: poster_type must be selected from the "Available Entity Types" above, so initial posts can be assigned to suitable agents.
 Example: Official statements should be published by Official/University type, news by MediaOutlet, student opinions by Student.
@@ -723,6 +730,10 @@ Return JSON format (no markdown):
     "narrative_direction": "<narrative development direction>",
     "initial_posts": [
         {{"content": "post content", "poster_type": "entity type (must be from available types)"}},
+        ...
+    ],
+    "scheduled_events": [
+        {{"round": <round number>, "content": "event description/post content", "poster_type": "entity type"}},
         ...
     ],
     "reasoning": "<brief explanation>"
@@ -745,7 +756,7 @@ Return JSON format (no markdown):
         """解析Event config结果"""
         return EventConfig(
             initial_posts=result.get("initial_posts", []),
-            scheduled_events=[],
+            scheduled_events=result.get("scheduled_events", []),
             hot_topics=result.get("hot_topics", []),
             narrative_direction=result.get("narrative_direction", "")
         )
@@ -885,7 +896,8 @@ Return JSON format (no markdown):
             "response_delay_max": <最大响应延迟分钟>,
             "sentiment_bias": <-1.0到1.0>,
             "stance": "<supportive/opposing/neutral/observer>",
-            "influence_weight": <影响力权重>
+            "influence_weight": <影响力权重>,
+            "temperature": <0.3-1.0, lower for analytical/official agents, higher for emotional/impulsive agents>
         }},
         ...
     ]
@@ -923,12 +935,55 @@ Return JSON format (no markdown):
                 response_delay_max=cfg.get("response_delay_max", 60),
                 sentiment_bias=cfg.get("sentiment_bias", 0.0),
                 stance=cfg.get("stance", "neutral"),
-                influence_weight=cfg.get("influence_weight", 1.0)
+                influence_weight=cfg.get("influence_weight", 1.0),
+                temperature=cfg.get("temperature", 0.7),
             )
             configs.append(config)
         
         return configs
     
+    def _apply_power_law_distribution(self, agent_configs: List[AgentActivityConfig]) -> List[AgentActivityConfig]:
+        """Apply power-law distribution to activity levels for realistic social media patterns.
+
+        Real social media follows the 90-9-1 rule: 1% create most content, 9% contribute
+        occasionally, 90% are lurkers. We use a Pareto-like redistribution.
+        """
+        import random
+
+        if not agent_configs:
+            return agent_configs
+
+        n = len(agent_configs)
+        # Generate power-law distributed values (Pareto with alpha=1.5)
+        # Higher alpha = more skewed (more lurkers)
+        alpha = 1.5
+        raw_values = sorted(
+            [random.paretovariate(alpha) for _ in range(n)],
+            reverse=True
+        )
+
+        # Normalize to 0.05-1.0 range (minimum 0.05 so lurkers still occasionally act)
+        max_val = max(raw_values) if raw_values else 1.0
+        min_val = min(raw_values) if raw_values else 0.0
+        range_val = max_val - min_val if max_val != min_val else 1.0
+
+        normalized = [0.05 + 0.95 * (v - min_val) / range_val for v in raw_values]
+
+        # Sort agents by their current activity_level (descending) to preserve relative ranking
+        sorted_agents = sorted(agent_configs, key=lambda a: a.activity_level, reverse=True)
+
+        for agent, new_level in zip(sorted_agents, normalized):
+            agent.activity_level = round(new_level, 3)
+
+        # Log distribution stats
+        levels = [a.activity_level for a in agent_configs]
+        high_activity = sum(1 for l in levels if l > 0.7)
+        mid_activity = sum(1 for l in levels if 0.3 <= l <= 0.7)
+        low_activity = sum(1 for l in levels if l < 0.3)
+        logger.info(f"Power-law activity distribution applied: {high_activity} high, {mid_activity} mid, {low_activity} low activity agents")
+
+        return agent_configs
+
     def _generate_agent_config_by_rule(self, entity: EntityNode) -> Dict[str, Any]:
         """基于规则生成单Agent配置（中国人作息）"""
         entity_type = (entity.get_entity_type() or "Unknown").lower()
@@ -944,7 +999,8 @@ Return JSON format (no markdown):
                 "response_delay_max": 240,
                 "sentiment_bias": 0.0,
                 "stance": "neutral",
-                "influence_weight": 3.0
+                "influence_weight": 3.0,
+                "temperature": 0.3,
             }
         elif entity_type in ["mediaoutlet"]:
             # Media: all day activity, medium frequency, high influence
@@ -957,7 +1013,8 @@ Return JSON format (no markdown):
                 "response_delay_max": 30,
                 "sentiment_bias": 0.0,
                 "stance": "observer",
-                "influence_weight": 2.5
+                "influence_weight": 2.5,
+                "temperature": 0.4,
             }
         elif entity_type in ["professor", "expert", "official"]:
             # 专家/教授：工作+晚间活动，中等频率
@@ -970,7 +1027,8 @@ Return JSON format (no markdown):
                 "response_delay_max": 90,
                 "sentiment_bias": 0.0,
                 "stance": "neutral",
-                "influence_weight": 2.0
+                "influence_weight": 2.0,
+                "temperature": 0.4,
             }
         elif entity_type in ["student"]:
             # 学生：晚间为主，高频率
@@ -983,7 +1041,8 @@ Return JSON format (no markdown):
                 "response_delay_max": 15,
                 "sentiment_bias": 0.0,
                 "stance": "neutral",
-                "influence_weight": 0.8
+                "influence_weight": 0.8,
+                "temperature": 0.9,
             }
         elif entity_type in ["alumni"]:
             # 校友：晚间为主
@@ -996,7 +1055,8 @@ Return JSON format (no markdown):
                 "response_delay_max": 30,
                 "sentiment_bias": 0.0,
                 "stance": "neutral",
-                "influence_weight": 1.0
+                "influence_weight": 1.0,
+                "temperature": 0.7,
             }
         else:
             # 普通人：晚间高峰
@@ -1009,7 +1069,8 @@ Return JSON format (no markdown):
                 "response_delay_max": 20,
                 "sentiment_bias": 0.0,
                 "stance": "neutral",
-                "influence_weight": 1.0
+                "influence_weight": 1.0,
+                "temperature": 0.7,
             }
     
 
