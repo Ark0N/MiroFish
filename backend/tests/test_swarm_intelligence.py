@@ -744,6 +744,109 @@ class TestSentimentMomentum:
 
 
 # ---------------------------------------------------------------------------
+# Agent memory tests
+# ---------------------------------------------------------------------------
+
+
+class TestAgentMemory:
+    """Tests for agent short-term memory system."""
+
+    def _make_memory(self, max_history=5):
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from agent_memory import AgentMemoryManager
+        return AgentMemoryManager(max_history=max_history)
+
+    def test_record_and_get_context(self):
+        mem = self._make_memory()
+        mem.record_action("alice", {"action_type": "CREATE_POST", "content": "I love this!", "round": 1})
+        ctx = mem.get_context("alice")
+        assert "I love this!" in ctx
+        assert "Round 1" in ctx
+
+    def test_empty_context_for_unknown_agent(self):
+        mem = self._make_memory()
+        assert mem.get_context("unknown") == ""
+
+    def test_max_history_respected(self):
+        mem = self._make_memory(max_history=3)
+        for i in range(5):
+            mem.record_action("alice", {"action_type": "CREATE_POST", "content": f"Post {i}", "round": i})
+        assert mem.get_memory_size("alice") == 3
+        # Should have posts 2,3,4 (oldest dropped)
+        ctx = mem.get_context("alice")
+        assert "Post 2" in ctx
+        assert "Post 4" in ctx
+        assert "Post 0" not in ctx
+
+    def test_non_content_actions_not_stored(self):
+        mem = self._make_memory()
+        mem.record_action("alice", {"action_type": "DO_NOTHING", "round": 1})
+        assert mem.get_memory_size("alice") == 0
+
+    def test_like_action_recorded(self):
+        mem = self._make_memory()
+        mem.record_action("alice", {"action_type": "LIKE_POST", "target_content": "great post", "round": 1})
+        assert mem.get_memory_size("alice") == 1
+        ctx = mem.get_context("alice")
+        assert "Engaged with" in ctx
+
+    def test_stance_detection_positive(self):
+        mem = self._make_memory()
+        mem.record_action("alice", {"action_type": "CREATE_POST", "content": "great excellent love progress", "round": 1})
+        assert mem.get_agent_stance("alice") == "positive"
+
+    def test_stance_detection_negative(self):
+        mem = self._make_memory()
+        mem.record_action("bob", {"action_type": "CREATE_POST", "content": "terrible awful crisis fail", "round": 1})
+        assert mem.get_agent_stance("bob") == "negative"
+
+    def test_stance_detection_neutral(self):
+        mem = self._make_memory()
+        mem.record_action("charlie", {"action_type": "CREATE_POST", "content": "just sharing information", "round": 1})
+        assert mem.get_agent_stance("charlie") == "neutral"
+
+    def test_get_all_agents(self):
+        mem = self._make_memory()
+        mem.record_action("alice", {"action_type": "CREATE_POST", "content": "hi", "round": 1})
+        mem.record_action("bob", {"action_type": "CREATE_POST", "content": "hello", "round": 1})
+        agents = mem.get_all_agents()
+        assert set(agents) == {"alice", "bob"}
+
+    def test_clear_specific_agent(self):
+        mem = self._make_memory()
+        mem.record_action("alice", {"action_type": "CREATE_POST", "content": "hi", "round": 1})
+        mem.record_action("bob", {"action_type": "CREATE_POST", "content": "hi", "round": 1})
+        mem.clear("alice")
+        assert mem.get_memory_size("alice") == 0
+        assert mem.get_memory_size("bob") == 1
+
+    def test_clear_all(self):
+        mem = self._make_memory()
+        mem.record_action("alice", {"action_type": "CREATE_POST", "content": "hi", "round": 1})
+        mem.clear()
+        assert len(mem.get_all_agents()) == 0
+
+    def test_serialization_roundtrip(self):
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from agent_memory import AgentMemoryManager
+        mem = self._make_memory()
+        mem.record_action("alice", {"action_type": "CREATE_POST", "content": "test post", "round": 1})
+        data = mem.to_dict()
+        loaded = AgentMemoryManager.from_dict(data)
+        assert loaded.get_memory_size("alice") == 1
+        assert "test post" in loaded.get_context("alice")
+
+    def test_content_truncation(self):
+        mem = self._make_memory()
+        long_content = "x" * 1000
+        mem.record_action("alice", {"action_type": "CREATE_POST", "content": long_content, "round": 1})
+        data = mem.to_dict()
+        assert len(data["alice"][0]["content"]) <= 500
+
+
+# ---------------------------------------------------------------------------
 # Influence propagation tests
 # ---------------------------------------------------------------------------
 
