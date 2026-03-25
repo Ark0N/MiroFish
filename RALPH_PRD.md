@@ -122,9 +122,9 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **12.2 Network effect weighting** — Weight agent influence by their position in the follow graph. Agents with many followers have more influence on overall sentiment. Use PageRank-like scoring on the follow network.
 
-- [~] **12.3 Echo chamber detection** — Detect when agent subgroups form echo chambers (only interacting with like-minded agents). Flag this in analytics as it reduces prediction diversity and reliability.
+- [x] **12.3 Echo chamber detection** — Detect when agent subgroups form echo chambers (only interacting with like-minded agents). Flag this in analytics as it reduces prediction diversity and reliability.
 
-- [ ] **12.4 Simulation quality score** — Compute an overall quality metric for each simulation based on: agent diversity, network connectivity, opinion spread, participation rate, and absence of degenerate behaviors (all agents converging to same opinion instantly).
+- [~] **12.4 Simulation quality score** — Compute an overall quality metric for each simulation based on: agent diversity, network connectivity, opinion spread, participation rate, and absence of degenerate behaviors (all agents converging to same opinion instantly).
 
 ## Phase 13: Production Hardening
 

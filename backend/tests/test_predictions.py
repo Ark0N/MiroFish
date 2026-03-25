@@ -2195,3 +2195,56 @@ class TestEchoChamberDetector:
         d = ec.to_dict()
         assert d["size"] == 2
         assert d["insularity_score"] == 0.8
+
+
+# ---------------------------------------------------------------------------
+# Simulation quality scorer tests
+# ---------------------------------------------------------------------------
+
+
+class TestSimulationQuality:
+    """Tests for simulation quality scoring."""
+
+    def _make_scorer(self):
+        from app.services.simulation_quality import SimulationQualityScorer
+        return SimulationQualityScorer()
+
+    def test_good_simulation(self):
+        scorer = self._make_scorer()
+        sentiments = {f"a{i}": (i - 5) / 5 for i in range(10)}  # diverse
+        graph = {f"a{i}": [f"a{j}" for j in range(10) if j != i][:3] for i in range(10)}
+        types = {f"a{i}": ["Person", "Official", "Student", "MediaOutlet"][i % 4] for i in range(10)}
+        result = scorer.score(sentiments, graph, types, participation_rate=0.8)
+        assert result["overall_quality"] > 0.4
+        assert result["grade"] in ("A", "B", "C")
+
+    def test_degenerate_all_same(self):
+        scorer = self._make_scorer()
+        sentiments = {f"a{i}": 0.5 for i in range(10)}
+        graph = {f"a{i}": [] for i in range(10)}
+        types = {f"a{i}": "Person" for i in range(10)}
+        result = scorer.score(sentiments, graph, types, participation_rate=0.5)
+        assert result["components"]["non_degenerate"] < 0.5
+        assert result["components"]["diversity"] == 0.0  # All same type
+
+    def test_empty_simulation(self):
+        scorer = self._make_scorer()
+        result = scorer.score({}, {}, {}, 0.0)
+        assert result["overall_quality"] == 0.0
+        assert result["grade"] == "F"
+
+    def test_has_recommendations(self):
+        scorer = self._make_scorer()
+        sentiments = {f"a{i}": 0.0 for i in range(5)}
+        graph = {f"a{i}": [] for i in range(5)}
+        types = {f"a{i}": "Person" for i in range(5)}
+        result = scorer.score(sentiments, graph, types, 0.2)
+        assert len(result["recommendations"]) >= 1
+
+    def test_grade_mapping(self):
+        scorer = self._make_scorer()
+        assert scorer._grade(0.9) == "A"
+        assert scorer._grade(0.7) == "B"
+        assert scorer._grade(0.5) == "C"
+        assert scorer._grade(0.4) == "D"
+        assert scorer._grade(0.1) == "F"
