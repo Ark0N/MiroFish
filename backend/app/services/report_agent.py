@@ -26,7 +26,8 @@ from .graph_tools import (
     SearchResult,
     InsightForgeResult,
     PanoramaResult,
-    InterviewResult
+    InterviewResult,
+    ConsensusResult
 )
 
 logger = get_logger('mirofish.report_agent')
@@ -545,6 +546,13 @@ TOOL_DESC_INTERVIEW_AGENTS = """\
 - 采访摘要和观点对比
 
 【重要】需要OASIS模拟环境正在运行才能使用此功能！"""
+
+TOOL_DESC_CONSENSUS_ANALYSIS = """\
+ConsensusAnalysis: Analyzes agreement and disagreement patterns across all simulation agents. \
+Returns stance distribution (supportive/opposing/neutral), sentiment trajectory over time, \
+identified factions with member lists, agreement score (0-1), top discussed themes, and \
+representative quotes from each faction. Use this tool to quantify the degree of consensus \
+or polarization on a topic."""
 
 # ── Language detection helper ──
 
@@ -1222,6 +1230,13 @@ class ReportAgent:
                     "interview_topic": "采访主题或需求描述（如：'了解学生对宿舍甲醛事件的看法'）",
                     "max_agents": "最多采访的Agent数量（可选，默认5，最大10）"
                 }
+            },
+            "consensus_analysis": {
+                "name": "consensus_analysis",
+                "description": TOOL_DESC_CONSENSUS_ANALYSIS,
+                "parameters": {
+                    "query": "The topic or question to analyze consensus around"
+                }
             }
         }
     
@@ -1291,7 +1306,19 @@ class ReportAgent:
                     max_agents=max_agents
                 )
                 return result.to_text()
-            
+
+            elif tool_name == "consensus_analysis":
+                query = parameters.get("query", self.simulation_requirement)
+                # Resolve simulation directory from simulation_id
+                from .simulation_manager import SimulationManager
+                sim_manager = SimulationManager()
+                simulation_dir = sim_manager._get_simulation_dir(self.simulation_id)
+                result = self.graph_tools.consensus_analysis(
+                    query=query,
+                    simulation_dir=simulation_dir
+                )
+                return result.to_text()
+
             # ========== 向后兼容的旧工具（内部重定向到新工具） ==========
             
             elif tool_name == "search_graph":
@@ -1327,14 +1354,14 @@ class ReportAgent:
                 return json.dumps(result, ensure_ascii=False, indent=2)
             
             else:
-                return f"Unknown tool: {tool_name}。请使用以下工具之一: insight_forge, panorama_search, quick_search"
+                return f"Unknown tool: {tool_name}。请使用以下工具之一: insight_forge, panorama_search, quick_search, consensus_analysis"
                 
         except Exception as e:
             logger.error(f"工具执行失败: {tool_name}, 错误: {str(e)}")
             return f"工具执行失败: {str(e)}"
     
     # 合法的工具名称集合，用于裸 JSON 兜底解析时校验
-    VALID_TOOL_NAMES = {"insight_forge", "panorama_search", "quick_search", "interview_agents"}
+    VALID_TOOL_NAMES = {"insight_forge", "panorama_search", "quick_search", "interview_agents", "consensus_analysis"}
 
     def _parse_tool_calls(self, response: str) -> List[Dict[str, Any]]:
         """
@@ -1819,7 +1846,78 @@ class ReportAgent:
             )
         
         return final_answer
-    
+
+    def _extract_structured_predictions(self, report_content: str, consensus_data: Optional[Dict] = None) -> str:
+        """Extract structured predictions with confidence levels from the generated report.
+
+        Makes one additional LLM call to analyze the report and produce a structured
+        predictions summary with confidence scores.
+        """
+        consensus_context = ""
+        if consensus_data:
+            consensus_context = f"""
+Consensus Analysis Data:
+- Agreement Score: {consensus_data.get('agreement_score', 'N/A')} (0=complete disagreement, 1=full consensus)
+- Stance Distribution: {consensus_data.get('stance_distribution', {})}
+- Total Agents Analyzed: {consensus_data.get('total_agents_analyzed', 0)}
+"""
+
+        prompt = f"""Based on the following simulation report and agent consensus data, extract the key predictions with confidence levels.
+
+{consensus_context}
+
+Report Content:
+{report_content[:8000]}
+
+Extract 3-7 key predictions from this report. For each prediction, provide:
+1. A clear, concise prediction statement
+2. A confidence level (0-100%) based on:
+   - How many agents exhibited behavior supporting this prediction
+   - The agreement score from consensus analysis
+   - The strength of evidence in the simulation
+3. Supporting evidence (brief)
+4. Risk factors that could invalidate this prediction
+
+Format your response as a markdown section that can be appended to the report:
+
+## Structured Predictions
+
+| # | Prediction | Confidence | Evidence |
+|---|-----------|------------|----------|
+| 1 | [prediction] | [X%] | [brief evidence] |
+| ... | ... | ... | ... |
+
+### Prediction Details
+
+#### Prediction 1: [title]
+- **Confidence**: X%
+- **Supporting Evidence**: [evidence from simulation]
+- **Risk Factors**: [what could change this]
+- **Agent Agreement**: [how agents align on this]
+
+[repeat for each prediction]
+
+### Overall Forecast Confidence
+[1-2 sentence summary of overall prediction reliability based on agent consensus and simulation dynamics]
+"""
+
+        system_prompt = "You are an expert analyst extracting structured predictions from simulation reports. Be precise about confidence levels — they should reflect actual agent behavior patterns, not speculation."
+
+        try:
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ]
+            response = self.llm.chat(
+                messages=messages,
+                temperature=0.3,
+                max_tokens=4096
+            )
+            return response if response else ""
+        except Exception as e:
+            logger.warning(f"Structured prediction extraction failed: {e}")
+            return ""
+
     def generate_report(
         self, 
         progress_callback: Optional[Callable[[str, int, str], None]] = None,
@@ -1996,6 +2094,23 @@ class ReportAgent:
             
             # 使用ReportManager组装完整报告
             report.markdown_content = ReportManager.assemble_full_report(report_id, outline)
+
+            # Extract and append structured predictions
+            if progress_callback:
+                progress_callback("generating", 97, "Extracting structured predictions...")
+            ReportManager.update_progress(
+                report_id, "generating", 97, "Extracting structured predictions...",
+                completed_sections=completed_section_titles
+            )
+            predictions_section = self._extract_structured_predictions(report.markdown_content)
+            if predictions_section:
+                report.markdown_content += "\n\n" + predictions_section
+                # Re-save the full report with predictions appended
+                from ..utils.file_utils import atomic_write_text
+                full_report_path = ReportManager._get_report_markdown_path(report_id)
+                atomic_write_text(full_report_path, report.markdown_content)
+                logger.info(f"Structured predictions appended to report: {report_id}")
+
             report.status = ReportStatus.COMPLETED
             report.completed_at = datetime.now().isoformat()
             

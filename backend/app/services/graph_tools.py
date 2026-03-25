@@ -15,7 +15,7 @@ import json
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 
-from graphiti_core.nodes import EntityNode as GraphitiNode
+from graphiti_core.nodes import EntityNode as GraphitiNode, CommunityNode
 from graphiti_core.edges import EntityEdge as GraphitiEdge
 
 from ..config import Config
@@ -199,6 +199,7 @@ class PanoramaResult:
     total_edges: int = 0
     active_count: int = 0
     historical_count: int = 0
+    communities: List[Dict[str, Any]] = field(default_factory=list)  # Community/cluster info from graph
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -210,7 +211,8 @@ class PanoramaResult:
             "total_nodes": self.total_nodes,
             "total_edges": self.total_edges,
             "active_count": self.active_count,
-            "historical_count": self.historical_count
+            "historical_count": self.historical_count,
+            "communities": self.communities
         }
 
     def to_text(self) -> str:
@@ -236,6 +238,12 @@ class PanoramaResult:
             for node in self.all_nodes:
                 entity_type = next((l for l in node.labels if l not in ["Entity", "Node"]), "Entity")
                 text_parts.append(f"- **{node.name}** ({entity_type})")
+        if self.communities:
+            text_parts.append(f"\n### [Communities/Clusters] ({len(self.communities)} detected)")
+            for i, comm in enumerate(self.communities, 1):
+                text_parts.append(f"**{i}. {comm.get('name', 'Unnamed')}** ({comm.get('member_count', 0)} members)")
+                if comm.get('summary'):
+                    text_parts.append(f"   Summary: {comm['summary']}")
         return "\n".join(text_parts)
 
 
@@ -336,6 +344,80 @@ class InterviewResult:
         return "\n".join(text_parts)
 
 
+@dataclass
+class ConsensusResult:
+    """Result from consensus analysis tool."""
+    query: str
+    total_agents_analyzed: int
+    stance_distribution: Dict[str, int]  # e.g., {"supportive": 15, "opposing": 8, "neutral": 12}
+    sentiment_summary: Dict[str, Any]  # avg sentiment, positive/negative/neutral counts
+    key_factions: List[Dict[str, Any]]  # groups of agents with similar views
+    agreement_score: float  # 0.0 (complete disagreement) to 1.0 (full consensus)
+    top_themes: List[str]  # most discussed themes
+    representative_quotes: List[Dict[str, str]]  # {"agent": name, "quote": content, "stance": stance}
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "query": self.query,
+            "total_agents_analyzed": self.total_agents_analyzed,
+            "stance_distribution": self.stance_distribution,
+            "sentiment_summary": self.sentiment_summary,
+            "key_factions": self.key_factions,
+            "agreement_score": self.agreement_score,
+            "top_themes": self.top_themes,
+            "representative_quotes": self.representative_quotes
+        }
+
+    def to_text(self) -> str:
+        text_parts = [
+            "## Consensus Analysis",
+            f"Query: {self.query}",
+            f"Total agents analyzed: {self.total_agents_analyzed}",
+            f"Agreement score: {self.agreement_score} (0=complete disagreement, 1=full consensus)",
+            "\n### Stance Distribution",
+        ]
+        for stance, count in self.stance_distribution.items():
+            pct = round(count / self.total_agents_analyzed * 100, 1) if self.total_agents_analyzed > 0 else 0
+            text_parts.append(f"- {stance}: {count} agents ({pct}%)")
+
+        text_parts.append("\n### Sentiment Summary")
+        text_parts.append(f"- Average sentiment: {self.sentiment_summary.get('average', 0)}")
+        text_parts.append(f"- Positive agents: {self.sentiment_summary.get('positive_agents', 0)}")
+        text_parts.append(f"- Negative agents: {self.sentiment_summary.get('negative_agents', 0)}")
+        text_parts.append(f"- Neutral agents: {self.sentiment_summary.get('neutral_agents', 0)}")
+
+        if self.sentiment_summary.get("trajectory"):
+            text_parts.append("\n### Sentiment Trajectory")
+            for t in self.sentiment_summary["trajectory"]:
+                text_parts.append(
+                    f"- Round {t.get('round', '?')} ({t.get('platform', '?')}): "
+                    f"avg_sentiment={t.get('avg_sentiment', 0)}, posts={t.get('content_posts', 0)}"
+                )
+
+        if self.key_factions:
+            text_parts.append("\n### Identified Factions")
+            for faction in self.key_factions:
+                text_parts.append(
+                    f"- **{faction['stance']}** faction: {faction['count']} agents "
+                    f"(avg sentiment: {faction.get('avg_sentiment', 'N/A')})"
+                )
+                members = faction.get("members", [])
+                if members:
+                    text_parts.append(f"  Members: {', '.join(members[:10])}")
+
+        if self.top_themes:
+            text_parts.append("\n### Top Discussed Themes")
+            for i, theme in enumerate(self.top_themes, 1):
+                text_parts.append(f"{i}. {theme}")
+
+        if self.representative_quotes:
+            text_parts.append("\n### Representative Quotes")
+            for rq in self.representative_quotes:
+                text_parts.append(f'- **{rq["agent"]}** ({rq["stance"]}): "{rq["quote"]}"')
+
+        return "\n".join(text_parts)
+
+
 class GraphToolsService:
     """
     Graph retrieval tools service.
@@ -345,6 +427,7 @@ class GraphToolsService:
     2. panorama_search - Breadth search
     3. quick_search - Simple search
     4. interview_agents - Agent interviews
+    5. consensus_analysis - Consensus/disagreement analysis across agents
 
     Foundation tools:
     - search_graph, get_all_nodes, get_all_edges, get_node_detail,
@@ -869,7 +952,36 @@ Return the sub-question list in JSON format."""
         result.active_count = len(active_facts)
         result.historical_count = len(historical_facts)
 
-        logger.info(f"PanoramaSearch complete: {result.active_count} active, {result.historical_count} historical")
+        # Fetch community data from graph
+        communities = []
+        try:
+            graphiti = GraphitiManager.get_instance()
+            community_nodes = run_async(CommunityNode.get_by_group_ids(graphiti.driver, [graph_id]))
+            for comm in community_nodes[:10]:  # Top 10 communities
+                # Count members via HAS_MEMBER edges
+                member_count = 0
+                try:
+                    records, _, _ = run_async(graphiti.driver.execute_query(
+                        "MATCH (c:Community {uuid: $uuid})-[:HAS_MEMBER]->(e:Entity) RETURN count(e) AS cnt",
+                        uuid=comm.uuid,
+                        database_="neo4j",
+                    ))
+                    if records:
+                        member_count = records[0]['cnt']
+                except Exception:
+                    pass
+                communities.append({
+                    "name": comm.name or "unnamed",
+                    "summary": comm.summary or "",
+                    "member_count": member_count,
+                    "uuid": comm.uuid,
+                })
+        except Exception as e:
+            logger.warning(f"Community fetch failed (non-fatal): {e}")
+
+        result.communities = communities
+
+        logger.info(f"PanoramaSearch complete: {result.active_count} active, {result.historical_count} historical, {len(communities)} communities")
         return result
 
     def quick_search(self, graph_id: str, query: str, limit: int = 10) -> SearchResult:
@@ -1259,3 +1371,185 @@ Please generate an interview summary."""
         except Exception as e:
             logger.warning(f"Failed to generate interview summary: {e}")
             return f"Interviewed {len(interviews)} respondents, including: " + ", ".join([i.agent_name for i in interviews])
+
+    def consensus_analysis(self, query: str, simulation_dir: str) -> ConsensusResult:
+        """Analyze agreement/disagreement patterns across simulation agents.
+
+        Reads simulation action logs (actions.jsonl) and round metrics to compute:
+        - Stance distribution across agents
+        - Sentiment clustering
+        - Faction identification (groups with similar views)
+        - Agreement score
+
+        Args:
+            query: The topic/question to analyze consensus around
+            simulation_dir: Path to simulation output directory
+        """
+        import os as _os
+
+        all_posts = []
+        agent_stances = {}  # agent_name -> list of sentiments
+
+        # Read action logs from both platforms
+        for platform in ["twitter", "reddit"]:
+            actions_file = _os.path.join(simulation_dir, platform, "actions.jsonl")
+            if not _os.path.exists(actions_file):
+                continue
+
+            try:
+                with open(actions_file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            action = json.loads(line)
+                            action_type = action.get("action_type", "")
+                            if action_type in ("CREATE_POST", "CREATE_COMMENT", "QUOTE_POST"):
+                                agent_name = action.get("agent_name", action.get("user_name", "unknown"))
+                                content = action.get("content", action.get("action_args", {}).get("content", ""))
+                                if content:
+                                    all_posts.append({"agent": agent_name, "content": str(content), "platform": platform})
+                                    if agent_name not in agent_stances:
+                                        agent_stances[agent_name] = []
+                                    agent_stances[agent_name].append(str(content))
+                        except json.JSONDecodeError:
+                            continue
+            except Exception:
+                continue
+
+        # Simple keyword-based sentiment analysis per post
+        positive_keywords = {"good", "great", "support", "agree", "happy", "love", "excellent", "hope", "thank", "progress", "solution", "positive", "improvement", "benefit"}
+        negative_keywords = {"bad", "terrible", "oppose", "disagree", "angry", "hate", "awful", "crisis", "fail", "problem", "scandal", "corrupt", "outrage", "concern", "danger", "risk", "worried"}
+
+        agent_sentiments = {}
+        for agent, posts in agent_stances.items():
+            scores = []
+            for post in posts:
+                lower_post = post.lower()
+                pos = sum(1 for w in positive_keywords if w in lower_post)
+                neg = sum(1 for w in negative_keywords if w in lower_post)
+                total = pos + neg
+                score = (pos - neg) / total if total > 0 else 0.0
+                scores.append(score)
+            avg = sum(scores) / len(scores) if scores else 0.0
+            agent_sentiments[agent] = avg
+
+        # Classify stances
+        stance_dist = {"supportive": 0, "opposing": 0, "neutral": 0}
+        for agent, avg_sent in agent_sentiments.items():
+            if avg_sent > 0.15:
+                stance_dist["supportive"] += 1
+            elif avg_sent < -0.15:
+                stance_dist["opposing"] += 1
+            else:
+                stance_dist["neutral"] += 1
+
+        total_agents = len(agent_sentiments)
+
+        # Compute agreement score (1.0 = all same stance, 0.0 = evenly split)
+        if total_agents > 0:
+            max_faction = max(stance_dist.values())
+            agreement_score = max_faction / total_agents
+        else:
+            agreement_score = 0.0
+
+        # Identify factions
+        factions = []
+        for stance_name in ["supportive", "opposing", "neutral"]:
+            members = []
+            for agent, avg_sent in agent_sentiments.items():
+                if stance_name == "supportive" and avg_sent > 0.15:
+                    members.append(agent)
+                elif stance_name == "opposing" and avg_sent < -0.15:
+                    members.append(agent)
+                elif stance_name == "neutral" and -0.15 <= avg_sent <= 0.15:
+                    members.append(agent)
+            if members:
+                factions.append({
+                    "stance": stance_name,
+                    "count": len(members),
+                    "members": members[:10],  # Top 10 members
+                    "avg_sentiment": round(sum(agent_sentiments[m] for m in members) / len(members), 3)
+                })
+
+        # Extract top themes (most common words in posts, excluding stopwords)
+        stopwords = {"the", "a", "an", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
+                     "do", "does", "did", "will", "would", "shall", "should", "may", "might", "can", "could",
+                     "i", "you", "he", "she", "it", "we", "they", "me", "him", "her", "us", "them",
+                     "my", "your", "his", "its", "our", "their", "this", "that", "these", "those",
+                     "in", "on", "at", "to", "for", "of", "with", "by", "from", "as", "into", "through",
+                     "and", "but", "or", "not", "no", "so", "if", "when", "what", "which", "who", "how",
+                     "all", "each", "every", "both", "few", "more", "most", "other", "some", "such",
+                     "than", "too", "very", "just", "about", "above", "after", "before", "between",
+                     "same", "also", "only", "own", "then", "there", "here", "now", "up", "out", "over"}
+        word_counts = {}
+        query_lower = query.lower()
+        for post in all_posts:
+            words = post["content"].lower().split()
+            for word in words:
+                word = ''.join(c for c in word if c.isalnum())
+                if word and len(word) > 2 and word not in stopwords:
+                    word_counts[word] = word_counts.get(word, 0) + 1
+        top_themes = sorted(word_counts, key=word_counts.get, reverse=True)[:15]
+
+        # Get representative quotes (one per faction)
+        representative_quotes = []
+        for faction in factions:
+            if faction["members"]:
+                agent = faction["members"][0]
+                posts_for_agent = agent_stances.get(agent, [])
+                if posts_for_agent:
+                    # Pick the longest post as most representative
+                    best_post = max(posts_for_agent, key=len)
+                    representative_quotes.append({
+                        "agent": agent,
+                        "quote": best_post[:500],
+                        "stance": faction["stance"]
+                    })
+
+        # Sentiment summary
+        all_sentiments = list(agent_sentiments.values())
+        sentiment_summary = {
+            "average": round(sum(all_sentiments) / len(all_sentiments), 3) if all_sentiments else 0.0,
+            "positive_agents": stance_dist["supportive"],
+            "negative_agents": stance_dist["opposing"],
+            "neutral_agents": stance_dist["neutral"],
+        }
+
+        # Also read round metrics if available for trajectory info
+        trajectory = []
+        for platform in ["twitter", "reddit"]:
+            metrics_file = _os.path.join(simulation_dir, platform, "round_metrics.jsonl")
+            if _os.path.exists(metrics_file):
+                try:
+                    with open(metrics_file, "r", encoding="utf-8") as f:
+                        for line in f:
+                            line = line.strip()
+                            if line:
+                                try:
+                                    m = json.loads(line)
+                                    trajectory.append({
+                                        "round": m.get("round"),
+                                        "platform": platform,
+                                        "avg_sentiment": m.get("sentiment", {}).get("average", 0),
+                                        "content_posts": m.get("content_posts", 0)
+                                    })
+                                except json.JSONDecodeError:
+                                    continue
+                except Exception:
+                    continue
+
+        if trajectory:
+            sentiment_summary["trajectory"] = trajectory
+
+        return ConsensusResult(
+            query=query,
+            total_agents_analyzed=total_agents,
+            stance_distribution=stance_dist,
+            sentiment_summary=sentiment_summary,
+            key_factions=factions,
+            agreement_score=round(agreement_score, 3),
+            top_themes=top_themes,
+            representative_quotes=representative_quotes
+        )
