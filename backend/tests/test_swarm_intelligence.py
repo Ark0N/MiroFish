@@ -951,6 +951,121 @@ class TestEventCascades:
 
 
 # ---------------------------------------------------------------------------
+# Multi-wave simulation tests
+# ---------------------------------------------------------------------------
+
+
+class TestMultiWaveManager:
+    """Tests for multi-wave simulation orchestration."""
+
+    def _make_manager(self, tmp_path):
+        from app.services.multi_wave import MultiWaveManager
+        mgr = MultiWaveManager()
+        mgr.SERIES_DIR = str(tmp_path / "wave_series")
+        os.makedirs(mgr.SERIES_DIR, exist_ok=True)
+        return mgr
+
+    def test_create_series(self, tmp_path):
+        mgr = self._make_manager(tmp_path)
+        config = mgr.create_series("proj_1", "graph_1")
+        assert config.series_id.startswith("series_")
+        assert config.project_id == "proj_1"
+        assert config.graph_id == "graph_1"
+        assert len(config.waves) == 0
+
+    def test_add_wave(self, tmp_path):
+        mgr = self._make_manager(tmp_path)
+        config = mgr.create_series("proj_1", "graph_1")
+        wave = mgr.add_wave(config.series_id, "sim_1", [{"round": 5, "content": "event"}])
+        assert wave.wave_number == 1
+        assert wave.simulation_id == "sim_1"
+        assert len(wave.injected_events) == 1
+
+    def test_multiple_waves(self, tmp_path):
+        mgr = self._make_manager(tmp_path)
+        config = mgr.create_series("proj_1", "graph_1")
+        mgr.add_wave(config.series_id, "sim_1")
+        mgr.add_wave(config.series_id, "sim_2")
+        loaded = mgr.get_series(config.series_id)
+        assert len(loaded.waves) == 2
+        assert loaded.waves[0].wave_number == 1
+        assert loaded.waves[1].wave_number == 2
+
+    def test_extract_sentiment_snapshot(self, tmp_path):
+        mgr = self._make_manager(tmp_path)
+        # Create mock action logs
+        sim_dir = tmp_path / "sim_output"
+        twitter_dir = sim_dir / "twitter"
+        twitter_dir.mkdir(parents=True)
+        actions = [
+            {"action_type": "CREATE_POST", "agent_name": "alice", "content": "great excellent love progress"},
+            {"action_type": "CREATE_POST", "agent_name": "bob", "content": "terrible awful crisis danger"},
+            {"action_type": "CREATE_POST", "agent_name": "charlie", "content": "just some information here"},
+        ]
+        with open(twitter_dir / "actions.jsonl", "w") as f:
+            for a in actions:
+                f.write(json.dumps(a) + "\n")
+
+        snapshot = mgr.extract_sentiment_snapshot(str(sim_dir))
+        assert "alice" in snapshot
+        assert "bob" in snapshot
+        assert snapshot["alice"] > 0  # positive
+        assert snapshot["bob"] < 0  # negative
+
+    def test_extract_empty_dir(self, tmp_path):
+        mgr = self._make_manager(tmp_path)
+        snapshot = mgr.extract_sentiment_snapshot(str(tmp_path))
+        assert snapshot == {}
+
+    def test_generate_wave_events_with_snapshot(self, tmp_path):
+        mgr = self._make_manager(tmp_path)
+        snapshot = {"alice": 0.5, "bob": 0.3, "charlie": 0.4}
+        events = mgr.generate_wave_events(snapshot, "New policy announced")
+        assert len(events) >= 2
+        assert events[0]["is_wave_transition"] is True
+        assert "positive" in events[0]["content"].lower()
+        assert events[1]["content"] == "New policy announced"
+
+    def test_generate_wave_events_negative(self, tmp_path):
+        mgr = self._make_manager(tmp_path)
+        snapshot = {"alice": -0.5, "bob": -0.3}
+        events = mgr.generate_wave_events(snapshot, "")
+        assert len(events) >= 1
+        assert "concern" in events[0]["content"].lower() or "opposition" in events[0]["content"].lower()
+
+    def test_generate_wave_events_empty(self, tmp_path):
+        mgr = self._make_manager(tmp_path)
+        events = mgr.generate_wave_events({}, "")
+        assert events == []
+
+    def test_update_wave_status(self, tmp_path):
+        mgr = self._make_manager(tmp_path)
+        config = mgr.create_series("proj_1", "graph_1")
+        mgr.add_wave(config.series_id, "sim_1")
+        mgr.update_wave_status(config.series_id, 1, "completed", {"alice": 0.5})
+        loaded = mgr.get_series(config.series_id)
+        assert loaded.waves[0].status == "completed"
+        assert loaded.waves[0].sentiment_snapshot["alice"] == 0.5
+
+    def test_get_nonexistent_series(self, tmp_path):
+        mgr = self._make_manager(tmp_path)
+        assert mgr.get_series("nonexistent") is None
+
+    def test_series_roundtrip(self, tmp_path):
+        mgr = self._make_manager(tmp_path)
+        config = mgr.create_series("proj_x", "graph_x")
+        mgr.add_wave(config.series_id, "sim_a", [{"round": 3, "content": "test"}])
+        mgr.update_wave_status(config.series_id, 1, "completed")
+
+        loaded = mgr.get_series(config.series_id)
+        assert loaded.project_id == "proj_x"
+        assert loaded.waves[0].simulation_id == "sim_a"
+        assert loaded.waves[0].status == "completed"
+        d = loaded.to_dict()
+        assert d["series_id"] == config.series_id
+
+
+# ---------------------------------------------------------------------------
 # Config defaults tests
 # ---------------------------------------------------------------------------
 

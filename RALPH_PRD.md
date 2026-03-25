@@ -22,9 +22,9 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **2.2 Temporal event modeling** — Extend `simulation_config_generator.py` to model event cascades: when a major event fires at round N, generate follow-up derivative events at rounds N+2, N+5 based on graph relationships. E.g., "trade war announced" → "supply chain disruption" → "price increases".
 
-- [~] **2.3 Time-decay relevance scoring** — Add recency weighting to `graph_tools.py` retrieval tools. Entities/episodes added more recently should rank higher in search results. Use episode timestamps from Graphiti.
+- [x] **2.3 Time-decay relevance scoring** — Add recency weighting to `graph_tools.py` retrieval tools. Entities/episodes added more recently should rank higher in search results. Use episode timestamps from Graphiti.
 
-- [ ] **2.4 Multi-wave simulation** — Add ability to run sequential simulation waves where wave N+1 inherits the final state (opinion positions, relationships) of wave N but injects new events. Enables modeling how predictions evolve as situations develop.
+- [~] **2.4 Multi-wave simulation** — Add ability to run sequential simulation waves where wave N+1 inherits the final state (opinion positions, relationships) of wave N but injects new events. Enables modeling how predictions evolve as situations develop.
 
 ## Phase 3: Swarm Intelligence Improvements
 
