@@ -82,9 +82,9 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **8.2 Prediction confidence bands** — Enhance prediction output with statistical confidence bands using bootstrap resampling of agent opinions. Run 100 bootstrap samples of agent sentiment to compute true confidence intervals rather than LLM-estimated ones.
 
-- [~] **8.3 Cross-validation prediction scoring** — Split agents into train/test groups. Train group runs the simulation, test group evaluates independently. Compare train predictions vs test predictions for internal validation without waiting for real-world outcomes.
+- [x] **8.3 Cross-validation prediction scoring** — Split agents into train/test groups. Train group runs the simulation, test group evaluates independently. Compare train predictions vs test predictions for internal validation without waiting for real-world outcomes.
 
-- [ ] **8.4 Prediction decay tracking** — Track how predictions age over time. Predictions with no supporting evidence after N days get automatically downgraded. Predictions with new supporting evidence get boosted. Add `prediction_health.json` per report.
+- [~] **8.4 Prediction decay tracking** — Track how predictions age over time. Predictions with no supporting evidence after N days get automatically downgraded. Predictions with new supporting evidence get boosted. Add `prediction_health.json` per report.
 
 ## Phase 9: Advanced Analytics Dashboard
 

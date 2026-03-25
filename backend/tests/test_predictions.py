@@ -1483,3 +1483,86 @@ class TestCrossValidator:
         posts = {f"a{i}": ["great progress"] for i in range(10)}
         result = v.validate(posts, n_folds=3)
         assert "avg_sentiment_delta" in result
+
+
+# ---------------------------------------------------------------------------
+# Prediction decay tests
+# ---------------------------------------------------------------------------
+
+
+class TestPredictionDecay:
+    """Tests for prediction decay tracking."""
+
+    def _make_tracker(self):
+        from app.services.prediction_decay import PredictionDecayTracker
+        return PredictionDecayTracker()
+
+    def test_fresh_prediction(self):
+        from datetime import datetime
+        t = self._make_tracker()
+        preds = [{"event": "Test", "probability": 0.7}]
+        health = t.compute_health(preds, datetime.now().isoformat())
+        assert len(health) == 1
+        assert health[0].health_status == "fresh"
+        assert health[0].decay_factor >= 0.9
+
+    def test_stale_prediction_decays(self):
+        from datetime import datetime, timedelta
+        t = self._make_tracker()
+        old_date = (datetime.now() - timedelta(days=45)).isoformat()
+        preds = [{"event": "Test", "probability": 0.7}]
+        health = t.compute_health(preds, old_date)
+        assert health[0].health_status == "stale"
+        assert health[0].current_probability < 0.7
+
+    def test_evidence_boosts_prediction(self):
+        from datetime import datetime
+        t = self._make_tracker()
+        now = datetime.now()
+        preds = [{"event": "Test", "probability": 0.5}]
+        evidence = [
+            {"prediction_idx": 0, "timestamp": now.isoformat()},
+            {"prediction_idx": 0, "timestamp": now.isoformat()},
+        ]
+        health = t.compute_health(preds, now.isoformat(), evidence_log=evidence)
+        assert health[0].health_status == "boosted"
+        assert health[0].evidence_count == 2
+
+    def test_aging_prediction(self):
+        from datetime import datetime, timedelta
+        t = self._make_tracker()
+        aging_date = (datetime.now() - timedelta(days=20)).isoformat()
+        preds = [{"event": "Test", "probability": 0.7}]
+        health = t.compute_health(preds, aging_date)
+        assert health[0].health_status == "aging"
+
+    def test_decay_factor_bounded(self):
+        from datetime import datetime, timedelta
+        t = self._make_tracker()
+        very_old = (datetime.now() - timedelta(days=365)).isoformat()
+        preds = [{"event": "Test", "probability": 0.9}]
+        health = t.compute_health(preds, very_old)
+        assert health[0].decay_factor >= 0.3
+        assert health[0].current_probability >= 0.05
+
+    def test_multiple_predictions(self):
+        from datetime import datetime
+        t = self._make_tracker()
+        preds = [
+            {"event": "A", "probability": 0.8},
+            {"event": "B", "probability": 0.4},
+        ]
+        health = t.compute_health(preds, datetime.now().isoformat())
+        assert len(health) == 2
+        assert health[0].prediction_idx == 0
+        assert health[1].prediction_idx == 1
+
+    def test_health_to_dict(self):
+        from datetime import datetime
+        t = self._make_tracker()
+        preds = [{"event": "Test", "probability": 0.7}]
+        health = t.compute_health(preds, datetime.now().isoformat())
+        d = health[0].to_dict()
+        assert "health_status" in d
+        assert "decay_factor" in d
+        assert "current_probability" in d
