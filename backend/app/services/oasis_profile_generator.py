@@ -210,6 +210,9 @@ class OasisProfileGenerator:
         self._total_api_calls = 0
         self._token_lock = __import__('threading').Lock()
 
+        # Follow relationships map (populated after profile generation)
+        self._follow_map: Dict[int, List[int]] = {}
+
         # Graphiti client for enrichment search
         self.graph_id = graph_id
         self._graphiti_available = False
@@ -683,6 +686,12 @@ Please generate JSON with the following fields:
    - Stance and viewpoints (attitude toward topics, content that may provoke or move them)
    - Unique characteristics (catchphrases, special experiences, personal hobbies)
    - Personal memory (important part of persona: describe this individual's connection to events and their actions/reactions in those events)
+   - Social media action tendencies: Explicitly describe which actions this person tends to take on social media. Use these categories:
+     * "Creator" types (journalists, activists, opinionated individuals): Primarily CREATE_POST and QUOTE_POST with commentary. They initiate discussions and share original thoughts.
+     * "Engager" types (students, fans, supporters): Mix of CREATE_POST, LIKE_POST, REPOST, and commenting. They react to others' content and amplify messages they agree with.
+     * "Lurker" types (busy professionals, shy individuals, casual observers): Mostly LIKE_POST and occasional REPOST. They consume content but rarely create original posts.
+     * "Influencer" types (public figures, experts): CREATE_POST and QUOTE_POST with analysis. They share authoritative opinions and attract engagement.
+     Describe which category fits this person and why, weaving it into the persona narrative.
 3. age: Age number (must be an integer)
 4. gender: Must be in English: "male" or "female"
 5. mbti: MBTI type (e.g., INTJ, ENFP, etc.)
@@ -731,6 +740,11 @@ Please generate JSON with the following fields:
    - Stance and attitude (official position on core topics, approach to handling controversies)
    - Special notes (represented group profile, operational habits)
    - Organization memory (important part of persona: describe this organization's connection to events and its actions/reactions in those events)
+   - Social media action tendencies: Explicitly describe the organization's social media behavior pattern:
+     * Official/government accounts: Primarily CREATE_POST for announcements. Rarely LIKE or REPOST others. Formal, measured, infrequent posting (lurker-like frequency but creator-like content).
+     * Media accounts: High-frequency CREATE_POST and QUOTE_POST. They report news, quote other sources with commentary, and occasionally REPOST breaking news.
+     * NGO/advocacy organizations: Mix of CREATE_POST (campaigns), REPOST (amplifying supporters), and QUOTE_POST (responding to critics or allies).
+     Describe which pattern fits this organization and why.
 3. age: Fixed at 30 (virtual age for organization accounts)
 4. gender: Fixed as "other" (organization accounts use "other" to indicate non-personal)
 5. mbti: MBTI type, used to describe account style, e.g., ISTJ for rigorous and conservative
@@ -817,10 +831,105 @@ Important:
                 "interested_topics": ["General", "Social Issues"],
             }
     
+    def _generate_follow_relationships(
+        self,
+        profiles: List[OasisAgentProfile],
+        entities: List[EntityNode]
+    ) -> Dict[int, List[int]]:
+        """Generate initial follow relationships from knowledge graph entity relationships.
+
+        Uses entity edges/relationships to determine who should follow whom:
+        - Students follow their university
+        - Employees follow their organization
+        - Journalists follow organizations they cover
+        - Everyone follows media outlets and high-influence entities
+        - Reciprocal relationships: if A is related to B, both follow each other
+
+        Returns:
+            Dict mapping user_id to list of user_ids they should follow
+        """
+        # Build entity UUID -> profile mapping
+        uuid_to_profile: Dict[str, OasisAgentProfile] = {}
+        for profile in profiles:
+            if profile.source_entity_uuid:
+                uuid_to_profile[profile.source_entity_uuid] = profile
+
+        # Build entity UUID -> EntityNode mapping
+        uuid_to_entity: Dict[str, EntityNode] = {}
+        for entity in entities:
+            uuid_to_entity[entity.uuid] = entity
+
+        follow_map: Dict[int, List[int]] = {p.user_id: [] for p in profiles}
+
+        # 1. Relationship-based follows: if entities are connected by edges, agents follow each other
+        for entity in entities:
+            if not entity.related_edges:
+                continue
+
+            source_profile = uuid_to_profile.get(entity.uuid)
+            if not source_profile:
+                continue
+
+            for edge in entity.related_edges:
+                # Find the other entity in the relationship
+                # Edge structure uses target_node_uuid (outgoing) or source_node_uuid (incoming)
+                direction = edge.get("direction", "")
+                if direction == "outgoing":
+                    target_uuid = edge.get("target_node_uuid")
+                else:
+                    target_uuid = edge.get("source_node_uuid")
+
+                if target_uuid and target_uuid != entity.uuid:
+                    target_profile = uuid_to_profile.get(target_uuid)
+                    if target_profile:
+                        # Bidirectional follow for related entities
+                        if target_profile.user_id not in follow_map[source_profile.user_id]:
+                            follow_map[source_profile.user_id].append(target_profile.user_id)
+                        if source_profile.user_id not in follow_map[target_profile.user_id]:
+                            follow_map[target_profile.user_id].append(source_profile.user_id)
+
+        # 2. Type-based follows: everyone follows high-influence entities (media, officials)
+        high_influence_types = {"mediaoutlet", "university", "governmentagency"}
+        high_influence_profiles = [
+            p for p in profiles
+            if (p.source_entity_type or "").lower() in high_influence_types
+        ]
+
+        for profile in profiles:
+            for hi_profile in high_influence_profiles:
+                if hi_profile.user_id != profile.user_id:
+                    if hi_profile.user_id not in follow_map[profile.user_id]:
+                        follow_map[profile.user_id].append(hi_profile.user_id)
+
+        # 3. Same-type clustering: agents of the same type follow each other (community effect)
+        type_groups: Dict[str, List[OasisAgentProfile]] = {}
+        for profile in profiles:
+            etype = (profile.source_entity_type or "unknown").lower()
+            if etype not in type_groups:
+                type_groups[etype] = []
+            type_groups[etype].append(profile)
+
+        for etype, group in type_groups.items():
+            if len(group) <= 1:
+                continue
+            # Each agent follows up to 5 random same-type agents
+            for profile in group:
+                others = [p for p in group if p.user_id != profile.user_id]
+                follow_count = min(5, len(others))
+                selected = random.sample(others, follow_count)
+                for other in selected:
+                    if other.user_id not in follow_map[profile.user_id]:
+                        follow_map[profile.user_id].append(other.user_id)
+
+        total_follows = sum(len(v) for v in follow_map.values())
+        logger.info(f"Generated {total_follows} follow relationships for {len(profiles)} agents")
+
+        return follow_map
+
     def set_graph_id(self, graph_id: str):
         """Set graph ID for graph search."""
         self.graph_id = graph_id
-    
+
     def generate_profiles_from_entities(
         self,
         entities: List[EntityNode],
@@ -981,6 +1090,10 @@ Important:
                      f"estimated cost=${self._total_input_tokens * 1.0 / 1_000_000 + self._total_output_tokens * 5.0 / 1_000_000:.2f} "
                      f"(Haiku @ $1/$5 per MTok)")
 
+        # Generate follow relationships from knowledge graph structure
+        valid_profiles = [p for p in profiles if p is not None]
+        self._follow_map = self._generate_follow_relationships(valid_profiles, entities)
+
         return profiles
     
     def _print_generated_profile(self, entity_name: str, entity_type: str, profile: OasisAgentProfile):
@@ -1040,31 +1153,34 @@ Important:
     def _save_twitter_csv(self, profiles: List[OasisAgentProfile], file_path: str):
         """
         Save Twitter profiles as CSV format (per OASIS official requirements)
-        
+
         OASIS Twitter required CSV fields:
         - user_id: User ID (starting from 0 based on CSV order)
         - name: User real name
         - username: System username
         - user_char: Detailed persona description (injected into LLM system prompt to guide agent behavior)
         - description: Short public bio (displayed on user profile page)
-        
+        - following_agentid_list: Python-style list of agent IDs this user follows (from knowledge graph)
+        - previous_tweets: Python-style list of previous tweets (empty by default)
+
         user_char vs description difference:
         - user_char: Internal use, LLM system prompt, determines how agent thinks and acts
         - description: External display, bio visible to other users
         """
         import csv
-        
+
         # Ensure file extension is .csv
         if not file_path.endswith('.csv'):
             file_path = file_path.replace('.json', '.csv')
-        
+
         with open(file_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            
-            # Write OASIS required headers
-            headers = ['user_id', 'name', 'username', 'user_char', 'description']
+
+            # Write OASIS required headers (including follow relationships and previous tweets)
+            headers = ['user_id', 'name', 'username', 'user_char', 'description',
+                        'following_agentid_list', 'previous_tweets']
             writer.writerow(headers)
-            
+
             # Write data rows
             for idx, profile in enumerate(profiles):
                 # user_char: Full persona (bio + persona), for LLM system prompt
@@ -1073,20 +1189,26 @@ Important:
                     user_char = f"{profile.bio} {profile.persona}"
                 # Handle newlines (replace with spaces in CSV)
                 user_char = user_char.replace('\n', ' ').replace('\r', ' ')
-                
+
                 # description: Short bio, for external display
                 description = profile.bio.replace('\n', ' ').replace('\r', ' ')
-                
+
+                # following_agentid_list: list of agent IDs from knowledge graph relationships
+                follow_list = self._follow_map.get(idx, [])
+                following_str = str(follow_list)  # Python-style list string e.g. "[1, 3, 5]"
+
                 row = [
                     idx,                    # user_id: Sequential ID starting from 0
                     profile.name,           # name: Real name
                     profile.user_name,      # username: Username
                     user_char,              # user_char: Full persona (internal LLM use)
-                    description             # description: Short bio (external display)
+                    description,            # description: Short bio (external display)
+                    following_str,          # following_agentid_list: knowledge graph follow relationships
+                    "[]"                    # previous_tweets: empty by default
                 ]
                 writer.writerow(row)
-        
-        logger.info(f"Saved {len(profiles)} Twitter profiles to {file_path} (OASIS CSV format)")
+
+        logger.info(f"Saved {len(profiles)} Twitter profiles to {file_path} (OASIS CSV format, with follow relationships)")
     
     def _normalize_gender(self, gender: Optional[str]) -> str:
         """
@@ -1154,13 +1276,17 @@ Important:
                 item["profession"] = profile.profession
             if profile.interested_topics:
                 item["interested_topics"] = profile.interested_topics
-            
+
+            # Follow relationships from knowledge graph
+            user_id = profile.user_id if profile.user_id is not None else idx
+            item["following"] = self._follow_map.get(user_id, [])
+
             data.append(item)
-        
+
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        
-        logger.info(f"Saved {len(profiles)} Reddit profiles to {file_path} (JSON format, includes user_id field)")
+
+        logger.info(f"Saved {len(profiles)} Reddit profiles to {file_path} (JSON format, includes user_id and following fields)")
     
     # Keep old method name as alias for backward compatibility
     def save_profiles_to_json(
