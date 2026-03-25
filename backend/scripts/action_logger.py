@@ -16,7 +16,7 @@ import json
 import os
 import logging
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 
 
 class PlatformActionLogger:
@@ -198,6 +198,101 @@ class SimulationLogManager:
     
     def debug(self, message: str):
         self.log(message, "debug")
+
+
+class RoundMetricsTracker:
+    """Tracks per-round aggregate metrics for swarm intelligence analysis.
+
+    Computes sentiment distribution, action type counts, and engagement metrics
+    after each round. Saves to round_metrics.jsonl for report agent analysis.
+    """
+
+    def __init__(self, output_dir: str):
+        self.output_dir = output_dir
+        self.metrics_file = os.path.join(output_dir, "round_metrics.jsonl")
+        self._current_round_actions: List[Dict[str, Any]] = []
+
+    def add_action(self, action: Dict[str, Any]):
+        """Buffer an action for current round metrics computation."""
+        self._current_round_actions.append(action)
+
+    def flush_round(self, round_num: int, platform: str, total_agents: int, active_agents: int):
+        """Compute and save metrics for the completed round."""
+        actions = self._current_round_actions
+
+        # Action type distribution
+        action_counts: Dict[str, int] = {}
+        for a in actions:
+            atype = a.get("action_type", "UNKNOWN")
+            action_counts[atype] = action_counts.get(atype, 0) + 1
+
+        # Content-bearing actions (posts, comments, quotes)
+        content_actions = [
+            a for a in actions
+            if a.get("action_type") in ("CREATE_POST", "CREATE_COMMENT", "QUOTE_POST")
+        ]
+
+        # Simple keyword-based sentiment estimation
+        positive_keywords = {"good", "great", "support", "agree", "happy", "love", "excellent", "wonderful", "hope", "thank", "progress", "solution"}
+        negative_keywords = {"bad", "terrible", "oppose", "disagree", "angry", "hate", "awful", "crisis", "fail", "problem", "scandal", "corrupt", "outrage"}
+
+        sentiment_scores = []
+        for a in content_actions:
+            content = str(a.get("content", "")).lower()
+            pos = sum(1 for w in positive_keywords if w in content)
+            neg = sum(1 for w in negative_keywords if w in content)
+            total = pos + neg
+            if total > 0:
+                score = (pos - neg) / total  # -1.0 to 1.0
+            else:
+                score = 0.0
+            sentiment_scores.append(score)
+
+        avg_sentiment = sum(sentiment_scores) / len(sentiment_scores) if sentiment_scores else 0.0
+        positive_count = sum(1 for s in sentiment_scores if s > 0.2)
+        negative_count = sum(1 for s in sentiment_scores if s < -0.2)
+        neutral_count = len(sentiment_scores) - positive_count - negative_count
+
+        # Engagement metrics
+        likes = sum(1 for a in actions if a.get("action_type") in ("LIKE_POST", "LIKE_COMMENT"))
+        dislikes = sum(1 for a in actions if a.get("action_type") in ("DISLIKE_POST", "DISLIKE_COMMENT"))
+        reposts = sum(1 for a in actions if a.get("action_type") == "REPOST")
+
+        metrics = {
+            "round": round_num,
+            "platform": platform,
+            "timestamp": datetime.now().isoformat(),
+            "total_agents": total_agents,
+            "active_agents": active_agents,
+            "total_actions": len(actions),
+            "action_counts": action_counts,
+            "content_posts": len(content_actions),
+            "sentiment": {
+                "average": round(avg_sentiment, 3),
+                "positive": positive_count,
+                "negative": negative_count,
+                "neutral": neutral_count,
+            },
+            "engagement": {
+                "likes": likes,
+                "dislikes": dislikes,
+                "reposts": reposts,
+            },
+            "participation_rate": round(active_agents / total_agents, 3) if total_agents > 0 else 0,
+        }
+
+        # Write to JSONL
+        try:
+            os.makedirs(os.path.dirname(self.metrics_file), exist_ok=True)
+            with open(self.metrics_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(metrics, ensure_ascii=False) + "\n")
+        except Exception as e:
+            logging.getLogger("mirofish.metrics").warning(f"Failed to write round metrics: {e}")
+
+        # Reset buffer
+        self._current_round_actions = []
+
+        return metrics
 
 
 # ============ Legacy interface compatibility ============

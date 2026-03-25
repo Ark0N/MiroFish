@@ -1166,6 +1166,8 @@ async def run_twitter_simulation(
                                 action_args={"content": event_content}
                             )
                             total_actions += 1
+                        if metrics_tracker:
+                            metrics_tracker.add_action({"action_type": "CREATE_POST", "content": event_content})
                     except Exception as e:
                         log_info(f"Failed to inject scheduled event at round {round_num + 1}: {e}")
 
@@ -1413,6 +1415,8 @@ async def run_reddit_simulation(
                                 action_args={"content": event_content}
                             )
                             total_actions += 1
+                        if metrics_tracker:
+                            metrics_tracker.add_action({"action_type": "CREATE_POST", "content": event_content})
                     except Exception as e:
                         log_info(f"Failed to inject scheduled event at round {round_num + 1}: {e}")
 
@@ -1420,6 +1424,8 @@ async def run_reddit_simulation(
             # 没有活跃agent时也记录roundended（actions_count=0）
             if action_logger:
                 action_logger.log_round_end(round_num + 1, 0, simulated_hours=current_simulated_hours)
+            if metrics_tracker:
+                metrics_tracker.flush_round(round_num + 1, "reddit", total_agents_count, 0)
             continue
 
         actions = {agent: LLMAction() for _, agent in active_agents}
@@ -1443,18 +1449,27 @@ async def run_reddit_simulation(
                 total_actions += 1
                 round_action_count += 1
 
+            if metrics_tracker:
+                metrics_tracker.add_action({
+                    "action_type": action_data["action_type"],
+                    "content": action_data["action_args"].get("content", ""),
+                })
+
         if action_logger:
             action_logger.log_round_end(round_num + 1, round_action_count, simulated_hours=current_simulated_hours)
+
+        if metrics_tracker:
+            metrics_tracker.flush_round(round_num + 1, "reddit", total_agents_count, len(active_agents))
 
         if (round_num + 1) % 20 == 0:
             progress = (round_num + 1) / total_rounds * 100
             log_info(f"Day {simulated_day}, {simulated_hour:02d}:00 - Round {round_num + 1}/{total_rounds} ({progress:.1f}%)")
 
     # 注意：不Closing environment，保留给Interview使用
-    
+
     if action_logger:
         action_logger.log_simulation_end(total_rounds, total_actions)
-    
+
     result.total_actions = total_actions
     elapsed = (datetime.now() - start_time).total_seconds()
     log_info(f"模拟循环complete! 耗时: {elapsed:.1f}秒, 总动作: {total_actions}")
@@ -1514,6 +1529,10 @@ async def main():
     log_manager = SimulationLogManager(simulation_dir)
     twitter_logger = log_manager.get_twitter_logger()
     reddit_logger = log_manager.get_reddit_logger()
+
+    # 创建每轮指标追踪器（每个平台独立追踪，写入各自子目录）
+    twitter_metrics = RoundMetricsTracker(os.path.join(simulation_dir, "twitter"))
+    reddit_metrics = RoundMetricsTracker(os.path.join(simulation_dir, "reddit"))
     
     log_manager.info("=" * 60)
     log_manager.info("OASIS 双平台Parallel simulation")
@@ -1550,14 +1569,14 @@ async def main():
     reddit_result: Optional[PlatformSimulation] = None
     
     if args.twitter_only:
-        twitter_result = await run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds)
+        twitter_result = await run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds, twitter_metrics)
     elif args.reddit_only:
-        reddit_result = await run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds)
+        reddit_result = await run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds, reddit_metrics)
     else:
         # 并行运行（每个平台使用独立的日志记录器）
         results = await asyncio.gather(
-            run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds),
-            run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds),
+            run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds, twitter_metrics),
+            run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds, reddit_metrics),
         )
         twitter_result, reddit_result = results
     
