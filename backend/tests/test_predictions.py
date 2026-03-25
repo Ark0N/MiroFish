@@ -2070,3 +2070,63 @@ class TestOpinionDriftModel:
         d = state.to_dict()
         assert d["agent_name"] == "test"
         assert d["total_drift"] == 0.5
+
+
+# ---------------------------------------------------------------------------
+# Network influence tests
+# ---------------------------------------------------------------------------
+
+
+class TestNetworkInfluence:
+    """Tests for network influence (PageRank) scoring."""
+
+    def _make_scorer(self):
+        from app.services.network_influence import NetworkInfluenceScorer
+        return NetworkInfluenceScorer()
+
+    def test_empty_graph(self):
+        scorer = self._make_scorer()
+        assert scorer.compute_pagerank({}) == {}
+
+    def test_star_topology(self):
+        """Hub agent followed by everyone should have highest PageRank."""
+        scorer = self._make_scorer()
+        graph = {
+            "hub": [],
+            "a": ["hub"],
+            "b": ["hub"],
+            "c": ["hub"],
+            "d": ["hub"],
+        }
+        scores = scorer.compute_pagerank(graph)
+        assert scores["hub"] > scores["a"]
+        assert scores["hub"] > scores["b"]
+
+    def test_uniform_graph(self):
+        """All agents following each other should have similar scores."""
+        scorer = self._make_scorer()
+        agents = ["a", "b", "c"]
+        graph = {a: [x for x in agents if x != a] for a in agents}
+        scores = scorer.compute_pagerank(graph)
+        # All should be roughly equal
+        values = list(scores.values())
+        assert max(values) - min(values) < 0.05
+
+    def test_scores_sum_to_one(self):
+        scorer = self._make_scorer()
+        graph = {"a": ["b"], "b": ["c"], "c": ["a"]}
+        scores = scorer.compute_pagerank(graph)
+        assert abs(sum(scores.values()) - 1.0) < 0.01
+
+    def test_influence_weighted_sentiment(self):
+        scorer = self._make_scorer()
+        sentiments = {"hub": 0.8, "a": -0.5, "b": -0.3}
+        graph = {"hub": [], "a": ["hub"], "b": ["hub"]}
+        result = scorer.compute_influence_weighted_sentiment(sentiments, graph)
+        # Hub has positive sentiment and highest influence → weighted should be more positive
+        assert result["influence_weighted_sentiment"] > result["standard_sentiment"]
+
+    def test_empty_sentiments(self):
+        scorer = self._make_scorer()
+        result = scorer.compute_influence_weighted_sentiment({}, {})
+        assert result["standard_sentiment"] == 0.0

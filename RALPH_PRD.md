@@ -118,9 +118,9 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 ## Phase 12: Simulation Quality & Realism
 
-- [~] **12.1 Agent opinion drift model** — Add a mathematical model for how agent opinions evolve over rounds. Each agent has an opinion inertia (resistance to change) and a susceptibility (how much they're influenced by others). Compute from persona attributes.
+- [x] **12.1 Agent opinion drift model** — Add a mathematical model for how agent opinions evolve over rounds. Each agent has an opinion inertia (resistance to change) and a susceptibility (how much they're influenced by others). Compute from persona attributes.
 
-- [ ] **12.2 Network effect weighting** — Weight agent influence by their position in the follow graph. Agents with many followers have more influence on overall sentiment. Use PageRank-like scoring on the follow network.
+- [~] **12.2 Network effect weighting** — Weight agent influence by their position in the follow graph. Agents with many followers have more influence on overall sentiment. Use PageRank-like scoring on the follow network.
 
 - [ ] **12.3 Echo chamber detection** — Detect when agent subgroups form echo chambers (only interacting with like-minded agents). Flag this in analytics as it reduces prediction diversity and reliability.
 
