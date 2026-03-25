@@ -78,7 +78,7 @@ docker compose up --build
 - `utils/` — `llm_client.py` (unified LLM client, auto-detects Anthropic vs OpenAI), `validation.py` (path traversal prevention), `retry.py` (exponential backoff decorator), `file_parser.py`/`file_utils.py` (multi-stage encoding fallback: UTF-8 → charset_normalizer → chardet → replace mode), `logger.py`, `graphiti_manager.py` (thread-safe Graphiti singleton + async bridge + embedder factory: Voyage AI or local Ollama), `ontology_store.py` (thread-safe ontology cache), `graph_paging.py`
 - `models/` — File-based persistence (JSON on disk under `backend/uploads/projects/`). Atomic writes (temp file + `os.replace()`). No database. Project states: `CREATED` → `ONTOLOGY_GENERATED` → `GRAPH_BUILDING` → `GRAPH_COMPLETED`
 - `scripts/` (at `backend/scripts/`, not `backend/app/scripts/`) — Standalone OASIS simulation runners (`run_twitter_simulation.py`, `run_reddit_simulation.py`, `run_parallel_simulation.py`) launched as subprocesses by `SimulationRunner`. Also `action_logger.py` (JSONL logging per platform + `RoundMetricsTracker` for per-round sentiment/activity metrics) and `simulation_utils.py` (dual LLM config, model creation, signal handlers).
-- `tests/` — 194 unit tests across 5 files: `test_llm_client.py`, `test_api.py`, `test_project.py`, `test_retry.py`, `test_swarm_intelligence.py`. Pytest config in `pyproject.toml` (`[tool.pytest.ini_options]`). No `conftest.py` — tests are self-contained with `unittest.mock` (no real API/DB calls)
+- `tests/` — 206 unit tests across 5 files: `test_llm_client.py`, `test_api.py`, `test_project.py`, `test_retry.py`, `test_swarm_intelligence.py`. Pytest config in `pyproject.toml` (`[tool.pytest.ini_options]`). No `conftest.py` — tests are self-contained with `unittest.mock` (no real API/DB calls)
 
 ### Frontend (`frontend/src/`)
 
@@ -111,6 +111,7 @@ docker compose up --build
 - **Mid-simulation event injection**: Scheduled events fire at configured rounds; also supports real-time injection via `INJECT_EVENT` IPC command
 - **Consensus analysis**: `ConsensusAnalysis` tool reads action logs to compute stance distribution, sentiment trajectory, faction identification, and agreement scores for report generation
 - **Structured predictions**: Report agent appends structured predictions section with confidence levels derived from agent consensus patterns
+- **Cost tracking**: `CostTracker` singleton accumulates token usage/costs across all LLM call sites (ontology, profiles, config, report). Raises `BudgetExceededError` when cumulative cost exceeds `PIPELINE_BUDGET_LIMIT` ($20 default). API endpoints return HTTP 402 with cost summary on budget exceeded
 - **Process cleanup**: `atexit` handlers kill orphaned simulation subprocesses on Flask shutdown; simulation scripts handle `SIGINT`/`SIGTERM` for graceful closure; frontend calls `checkAndStopRunningSimulation()` on mount to terminate orphans
 - **Simulation state files**: `run_state.json` (recovery after restart), `state.json` (metadata + entity counts) in project upload directory
 - **Input validation**: `validate_safe_id()` prevents path traversal; API params have bounds checking
@@ -162,6 +163,7 @@ Embeddings for Graphiti semantic search use a configurable backend via `_create_
 | `REPORT_AGENT_MAX_TOOL_CALLS` | No | Max tool calls per report generation (default: 10) |
 | `REPORT_AGENT_MAX_REFLECTION_ROUNDS` | No | Max reflection rounds (default: 3) |
 | `REPORT_AGENT_TEMPERATURE` | No | Report agent LLM temperature (default: 0.5) |
+| `PIPELINE_BUDGET_LIMIT` | No | Max USD cost per pipeline run before aborting (default: 20.0) |
 
 ## API Endpoints
 
