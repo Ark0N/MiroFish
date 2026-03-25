@@ -1636,3 +1636,77 @@ class TestAnalyticsService:
         svc = self._make_service()
         profiles = svc.agent_profiles(str(tmp_path))
         assert profiles == []
+
+
+# ---------------------------------------------------------------------------
+# Prediction deduplication tests
+# ---------------------------------------------------------------------------
+
+
+class TestPredictionDedup:
+    """Tests for prediction deduplication."""
+
+    def _make_dedup(self, threshold=0.5):
+        from app.services.prediction_dedup import PredictionDeduplicator
+        return PredictionDeduplicator(similarity_threshold=threshold)
+
+    def test_no_duplicates(self):
+        d = self._make_dedup()
+        preds = [
+            {"event": "Market crash imminent", "probability": 0.8},
+            {"event": "Peace treaty signed tomorrow", "probability": 0.3},
+        ]
+        result = d.deduplicate(preds)
+        assert len(result) == 2
+
+    def test_exact_duplicates_merged(self):
+        d = self._make_dedup()
+        preds = [
+            {"event": "Oil prices will rise sharply", "probability": 0.7},
+            {"event": "Oil prices will rise sharply", "probability": 0.8},
+        ]
+        result = d.deduplicate(preds)
+        assert len(result) == 1
+        assert result[0]["merge_count"] == 2
+
+    def test_near_duplicates_merged(self):
+        d = self._make_dedup(threshold=0.4)
+        preds = [
+            {"event": "Stock market crash expected next month", "probability": 0.7},
+            {"event": "Stock market crash likely next quarter", "probability": 0.6},
+        ]
+        result = d.deduplicate(preds)
+        assert len(result) == 1
+
+    def test_merged_probability_averaged(self):
+        d = self._make_dedup()
+        preds = [
+            {"event": "same event happening", "probability": 0.8},
+            {"event": "same event happening", "probability": 0.4},
+        ]
+        result = d.deduplicate(preds)
+        assert abs(result[0]["probability"] - 0.6) < 0.01
+
+    def test_find_duplicates(self):
+        d = self._make_dedup()
+        preds = [
+            {"event": "Global economic recession crisis coming"},
+            {"event": "Global economic recession crisis expected"},
+            {"event": "Completely different topic here"},
+        ]
+        dupes = d.find_duplicates(preds)
+        assert len(dupes) >= 1
+        assert dupes[0][0] == 0 and dupes[0][1] == 1
+
+    def test_empty_and_single(self):
+        d = self._make_dedup()
+        assert d.deduplicate([]) == []
+        preds = [{"event": "Only one", "probability": 0.5}]
+        assert len(d.deduplicate(preds)) == 1
+
+    def test_similarity_computation(self):
+        d = self._make_dedup()
+        # Identical should be 1.0
+        assert d.compute_similarity("hello world", "hello world") == 1.0
+        # Completely different should be low
+        assert d.compute_similarity("cats dogs animals", "programming javascript code") < 0.1
