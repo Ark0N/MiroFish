@@ -15,6 +15,7 @@ from ..services.simulation_manager import SimulationManager
 from ..models.project import ProjectManager
 from ..models.task import TaskManager, TaskStatus
 from ..utils.logger import get_logger
+from ..utils.cost_tracker import CostTracker, BudgetExceededError
 from .helpers import validate_id_param
 
 logger = get_logger('mirofish.api.report')
@@ -123,6 +124,9 @@ def generate_report():
         # Define background task
         def run_generate():
             try:
+                # Reset cost tracker for report generation phase
+                CostTracker.get_instance().reset(f"report_{report_id}")
+
                 task_manager.update_task(
                     task_id,
                     status=TaskStatus.PROCESSING,
@@ -134,7 +138,7 @@ def generate_report():
                 llm_client = None
                 if data.get('model_name'):
                     from ..utils.llm_client import LLMClient
-                    llm_client = LLMClient(model=data['model_name'])
+                    llm_client = LLMClient(model=data['model_name'], cost_phase="report")
                 agent = ReportAgent(
                     graph_id=graph_id,
                     simulation_id=simulation_id,
@@ -159,20 +163,32 @@ def generate_report():
                 # Save report
                 ReportManager.save_report(report)
 
+                CostTracker.get_instance().log_summary()
+
                 if report.status == ReportStatus.COMPLETED:
                     task_manager.complete_task(
                         task_id,
                         result={
                             "report_id": report.report_id,
                             "simulation_id": simulation_id,
-                            "status": "completed"
+                            "status": "completed",
+                            "cost_summary": CostTracker.get_instance().get_summary()
                         }
                     )
                 else:
                     task_manager.fail_task(task_id, report.error or "Report generation failed")
 
+            except BudgetExceededError as e:
+                logger.error(f"Report generation budget exceeded: {e}")
+                CostTracker.get_instance().log_summary()
+                task_manager.fail_task(
+                    task_id,
+                    f"Budget exceeded: {e}. Cost: {CostTracker.get_instance().get_summary()}"
+                )
+
             except Exception as e:
                 logger.error(f"Report generation failed: {str(e)}")
+                CostTracker.get_instance().log_summary()
                 task_manager.fail_task(task_id, str(e))
 
         # Start background thread

@@ -16,6 +16,7 @@ from ..services.simulation_runner import SimulationRunner, RunnerStatus
 from ..utils.logger import get_logger
 from ..models.project import ProjectManager
 from ..utils.validation import validate_safe_id
+from ..utils.cost_tracker import CostTracker, BudgetExceededError
 from .helpers import validate_id_param, require_neo4j
 
 logger = get_logger('mirofish.api.simulation')
@@ -526,6 +527,9 @@ def prepare_simulation():
         # 定义后台任务
         def run_prepare():
             try:
+                # Reset cost tracker for simulation preparation phase
+                CostTracker.get_instance().reset(f"prepare_{simulation_id}")
+
                 task_manager.update_task(
                     task_id,
                     status=TaskStatus.PROCESSING,
@@ -610,14 +614,33 @@ def prepare_simulation():
                     max_agents=max_agents
                 )
                 
+                # Log cost summary
+                CostTracker.get_instance().log_summary()
+
                 # 任务complete
+                task_result = result_state.to_simple_dict()
+                task_result["cost_summary"] = CostTracker.get_instance().get_summary()
                 task_manager.complete_task(
                     task_id,
-                    result=result_state.to_simple_dict()
+                    result=task_result
                 )
-                
+
+            except BudgetExceededError as e:
+                logger.error(f"Simulation preparation budget exceeded: {e}")
+                CostTracker.get_instance().log_summary()
+                task_manager.fail_task(
+                    task_id,
+                    f"Budget exceeded: {e}. Cost summary: {CostTracker.get_instance().get_summary()}"
+                )
+                state = manager.get_simulation(simulation_id)
+                if state:
+                    state.status = SimulationStatus.FAILED
+                    state.error = str(e)
+                    manager._save_simulation_state(state)
+
             except Exception as e:
                 logger.error(f"preparation模拟failed: {str(e)}")
+                CostTracker.get_instance().log_summary()
                 task_manager.fail_task(task_id, str(e))
                 
                 # 更新模拟状态为failed

@@ -76,6 +76,9 @@ class Config:
     REPORT_AGENT_MAX_REFLECTION_ROUNDS = int(os.environ.get('REPORT_AGENT_MAX_REFLECTION_ROUNDS', '3'))
     REPORT_AGENT_TEMPERATURE = float(os.environ.get('REPORT_AGENT_TEMPERATURE', '0.5'))
 
+    # Pipeline cost budget (USD). Aborts LLM calls when cumulative cost exceeds this limit.
+    PIPELINE_BUDGET_LIMIT = float(os.environ.get('PIPELINE_BUDGET_LIMIT', '20.0'))
+
     @classmethod
     def validate(cls):
         """Validate required configuration."""

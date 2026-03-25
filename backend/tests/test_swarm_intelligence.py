@@ -553,6 +553,116 @@ class TestScheduledEvents:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Cost tracker tests
+# ---------------------------------------------------------------------------
+
+
+class TestCostTracker:
+    """Tests for centralized LLM cost tracking and budget enforcement."""
+
+    def _get_tracker(self):
+        from app.utils.cost_tracker import CostTracker
+        CostTracker._reset_instance()
+        tracker = CostTracker.get_instance()
+        tracker.reset("test-run")
+        return tracker
+
+    def test_singleton(self):
+        from app.utils.cost_tracker import CostTracker
+        CostTracker._reset_instance()
+        t1 = CostTracker.get_instance()
+        t2 = CostTracker.get_instance()
+        assert t1 is t2
+
+    def test_reset_clears_state(self):
+        tracker = self._get_tracker()
+        tracker.record_usage(1000, 500, model="claude-haiku-4-5-20251001", phase="test")
+        tracker.reset("new-run")
+        s = tracker.get_summary()
+        assert s["total_api_calls"] == 0
+        assert s["total_cost_usd"] == 0.0
+        assert s["run_id"] == "new-run"
+
+    def test_record_usage_accumulates(self):
+        tracker = self._get_tracker()
+        tracker.record_usage(1000, 500, model="claude-haiku-4-5-20251001", phase="test1")
+        tracker.record_usage(2000, 1000, model="claude-haiku-4-5-20251001", phase="test2")
+        s = tracker.get_summary()
+        assert s["total_input_tokens"] == 3000
+        assert s["total_output_tokens"] == 1500
+        assert s["total_api_calls"] == 2
+
+    def test_cost_calculation_haiku(self):
+        tracker = self._get_tracker()
+        # Haiku: $1/MTok input, $5/MTok output
+        cost = tracker.record_usage(1_000_000, 1_000_000, model="claude-haiku-4-5-20251001", phase="test")
+        assert abs(cost - 6.0) < 0.01  # $1 input + $5 output
+
+    def test_cost_calculation_opus(self):
+        tracker = self._get_tracker()
+        # Opus: $15/MTok input, $75/MTok output
+        cost = tracker.record_usage(1_000_000, 1_000_000, model="claude-opus-4-20250514", phase="test")
+        assert abs(cost - 90.0) < 0.01  # $15 input + $75 output
+
+    def test_budget_exceeded_raises(self):
+        from app.utils.cost_tracker import BudgetExceededError
+        tracker = self._get_tracker()
+        tracker._budget_limit = 1.0  # $1 limit
+        # Record enough to exceed: 1M tokens of Haiku output = $5
+        tracker.record_usage(0, 1_000_000, model="claude-haiku-4-5-20251001", phase="test")
+        with pytest.raises(BudgetExceededError) as exc_info:
+            tracker.check_budget("test_phase")
+        assert exc_info.value.current_cost >= 1.0
+        assert "budget exceeded" in str(exc_info.value).lower()
+
+    def test_budget_not_exceeded(self):
+        tracker = self._get_tracker()
+        tracker._budget_limit = 100.0
+        tracker.record_usage(1000, 500, model="claude-haiku-4-5-20251001", phase="test")
+        tracker.check_budget("test")  # Should not raise
+
+    def test_cost_by_phase(self):
+        tracker = self._get_tracker()
+        tracker.record_usage(1000, 500, model="claude-haiku-4-5-20251001", phase="ontology")
+        tracker.record_usage(2000, 1000, model="claude-haiku-4-5-20251001", phase="profiles")
+        s = tracker.get_summary()
+        assert "ontology" in s["cost_by_phase"]
+        assert "profiles" in s["cost_by_phase"]
+        assert s["cost_by_phase"]["profiles"] > s["cost_by_phase"]["ontology"]
+
+    def test_remaining_budget(self):
+        tracker = self._get_tracker()
+        tracker._budget_limit = 20.0
+        initial = tracker.remaining_budget
+        assert initial == 20.0
+        tracker.record_usage(1_000_000, 0, model="claude-haiku-4-5-20251001", phase="test")
+        assert tracker.remaining_budget < 20.0
+        assert tracker.remaining_budget == pytest.approx(19.0, abs=0.01)
+
+    def test_unknown_model_uses_fallback(self):
+        tracker = self._get_tracker()
+        # Unknown model should use Haiku-class fallback pricing
+        cost = tracker.record_usage(1_000_000, 0, model="some-unknown-model", phase="test")
+        assert abs(cost - 1.0) < 0.01  # $1/MTok input fallback
+
+    def test_zero_tokens_no_op(self):
+        tracker = self._get_tracker()
+        cost = tracker.record_usage(0, 0, phase="test")
+        assert cost == 0.0
+        assert tracker.get_summary()["total_api_calls"] == 0
+
+    def test_default_budget_limit(self):
+        with patch.dict(os.environ, {}, clear=False):
+            env = os.environ.copy()
+            env.pop("PIPELINE_BUDGET_LIMIT", None)
+            with patch.dict(os.environ, env, clear=True):
+                import importlib
+                import app.config
+                importlib.reload(app.config)
+                assert app.config.Config.PIPELINE_BUDGET_LIMIT == 20.0
+
+
 class TestConfigDefaults:
     """Tests for updated config defaults."""
 

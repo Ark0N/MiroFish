@@ -10,6 +10,7 @@ from typing import Optional, Dict, Any, List
 from openai import OpenAI
 
 from ..config import Config
+from .cost_tracker import CostTracker
 
 
 def _is_anthropic_key(api_key: str) -> bool:
@@ -49,11 +50,13 @@ class LLMClient:
         self,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
-        model: Optional[str] = None
+        model: Optional[str] = None,
+        cost_phase: str = "llm_client",
     ):
         self.api_key = api_key or Config.LLM_API_KEY
         self.base_url = base_url or Config.LLM_BASE_URL
         self.model = model or Config.LLM_MODEL_NAME
+        self._cost_phase = cost_phase
 
         if not self.api_key:
             raise ValueError("LLM_API_KEY is not configured")
@@ -129,6 +132,16 @@ class LLMClient:
             kwargs["response_format"] = response_format
 
         response = self.client.chat.completions.create(**kwargs)
+        # Track token usage if available
+        if hasattr(response, 'usage') and response.usage:
+            tracker = CostTracker.get_instance()
+            tracker.record_usage(
+                input_tokens=response.usage.prompt_tokens or 0,
+                output_tokens=response.usage.completion_tokens or 0,
+                model=self.model,
+                phase=self._cost_phase,
+            )
+            tracker.check_budget(self._cost_phase)
         return response.choices[0].message.content
 
     def _chat_anthropic(
@@ -179,6 +192,17 @@ class LLMClient:
             raise RuntimeError(f"Anthropic API error (status {e.status_code}): {e.message}") from e
         except anthropic.APIConnectionError as e:
             raise RuntimeError(f"Anthropic connection error: {e}") from e
+
+        # Track token usage
+        if hasattr(response, 'usage') and response.usage:
+            tracker = CostTracker.get_instance()
+            tracker.record_usage(
+                input_tokens=response.usage.input_tokens or 0,
+                output_tokens=response.usage.output_tokens or 0,
+                model=self.model,
+                phase=self._cost_phase,
+            )
+            tracker.check_budget(self._cost_phase)
 
         if response.stop_reason == "content_filter":
             raise ValueError(

@@ -18,6 +18,7 @@ from ..utils.file_parser import FileParser
 from ..utils.logger import get_logger
 from ..models.task import TaskManager, TaskStatus
 from ..models.project import ProjectManager, ProjectStatus
+from ..utils.cost_tracker import CostTracker, BudgetExceededError
 from .helpers import validate_id_param, require_neo4j
 
 # Get logger
@@ -163,7 +164,10 @@ def generate_ontology():
     """
     try:
         logger.info("=== Starting ontology generation ===")
-        
+
+        # Reset cost tracker for new pipeline run
+        CostTracker.get_instance().reset("ontology")
+
         # Get parameters
         simulation_requirement = request.form.get('simulation_requirement', '')
         project_name = request.form.get('project_name', 'Unnamed Project')
@@ -266,8 +270,18 @@ def generate_ontology():
             }
         })
         
+    except BudgetExceededError as e:
+        logger.error(f"Ontology generation budget exceeded: {e}")
+        CostTracker.get_instance().log_summary()
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "cost_summary": CostTracker.get_instance().get_summary()
+        }), 402
+
     except Exception as e:
         logger.error(f"Ontology generation failed: {str(e)}")
+        CostTracker.get_instance().log_summary()
         return jsonify({
             "success": False,
             "error": "Ontology generation failed"

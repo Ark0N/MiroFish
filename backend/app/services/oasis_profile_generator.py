@@ -22,6 +22,7 @@ from ..utils.graphiti_manager import GraphitiManager, run_async
 
 from ..config import Config
 from ..utils.logger import get_logger
+from ..utils.cost_tracker import CostTracker
 from .graph_entity_reader import EntityNode, GraphEntityReader
 
 logger = get_logger('mirofish.oasis_profile')
@@ -490,6 +491,15 @@ class OasisProfileGenerator:
                             self._total_input_tokens += resp.usage.input_tokens
                             self._total_output_tokens += resp.usage.output_tokens
                             self._total_api_calls += 1
+                        # Centralized cost tracking + budget check
+                        cost_tracker = CostTracker.get_instance()
+                        cost_tracker.record_usage(
+                            input_tokens=resp.usage.input_tokens,
+                            output_tokens=resp.usage.output_tokens,
+                            model=self.model_name,
+                            phase="profiles",
+                        )
+                        cost_tracker.check_budget("profiles")
                     content = "{" + resp.content[0].text  # Prepend the prefilled '{'
                     # Strip closed think tags, but preserve any JSON inside
                     raw_content = content

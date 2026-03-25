@@ -22,6 +22,7 @@ from openai import OpenAI
 from ..config import Config
 from ..utils.llm_client import _is_anthropic_key, create_anthropic_client
 from ..utils.logger import get_logger
+from ..utils.cost_tracker import CostTracker
 from .graph_entity_reader import EntityNode, GraphEntityReader
 
 logger = get_logger('mirofish.simulation_config')
@@ -467,6 +468,16 @@ class SimulationConfigGenerator:
                     if not resp.content:
                         raise ValueError("Empty response from API")
                     content = resp.content[0].text
+                    # Track cost
+                    if hasattr(resp, 'usage') and resp.usage:
+                        cost_tracker = CostTracker.get_instance()
+                        cost_tracker.record_usage(
+                            input_tokens=resp.usage.input_tokens,
+                            output_tokens=resp.usage.output_tokens,
+                            model=self.model_name,
+                            phase="config",
+                        )
+                        cost_tracker.check_budget("config")
                     # Strip closed think tags
                     content = re.sub(r'<think>[\s\S]*?</think>', '', content, flags=re.DOTALL).strip()
                     # Also strip unclosed think tags (truncated output)
@@ -486,6 +497,16 @@ class SimulationConfigGenerator:
                     )
                     content = response.choices[0].message.content
                     finish_reason = response.choices[0].finish_reason
+                    # Track cost
+                    if hasattr(response, 'usage') and response.usage:
+                        cost_tracker = CostTracker.get_instance()
+                        cost_tracker.record_usage(
+                            input_tokens=response.usage.prompt_tokens or 0,
+                            output_tokens=response.usage.completion_tokens or 0,
+                            model=self.model_name,
+                            phase="config",
+                        )
+                        cost_tracker.check_budget("config")
 
                 # Check if truncated
                 if finish_reason == 'length':

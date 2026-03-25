@@ -1183,7 +1183,7 @@ class ReportAgent:
         self.simulation_id = simulation_id
         self.simulation_requirement = simulation_requirement
         
-        self.llm = llm_client or LLMClient()
+        self.llm = llm_client or LLMClient(cost_phase="report")
         self.graph_tools = graph_tools or GraphToolsService()
         
         # Tool definitions
