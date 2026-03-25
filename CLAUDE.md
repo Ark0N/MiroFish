@@ -54,9 +54,9 @@ docker compose up --build
 ### 5-Step Pipeline
 
 1. **Graph Construction** — Upload docs (PDF/MD/TXT) → `OntologyGenerator` extracts entity/relationship types via LLM → `GraphBuilderService` creates Graphiti/Neo4j knowledge graph. Ontology enforces exactly 10 entity types with `Person` and `Organization` as mandatory fallbacks.
-2. **Environment Setup** — `GraphEntityReader` extracts entities → `OasisProfileGenerator` creates agent personas (CSV/JSON) → `SimulationConfigGenerator` generates simulation parameters including time dilation and peak activity hours (19:00-22:00 CST).
-3. **Simulation** — `SimulationRunner` launches OASIS as subprocess → Twitter + Reddit run concurrently via `asyncio.gather` within a single subprocess → agents interact autonomously → `GraphMemoryUpdater` feeds actions back to graph. After rounds complete, simulation enters **Wait Mode** (process stays alive for post-simulation interviews).
-4. **Report Generation** — `ReportAgent` (ReACT loop) uses 4 retrieval tools (InsightForge, PanoramaSearch, QuickSearch, interviews) → generates structured Markdown report.
+2. **Environment Setup** — `GraphEntityReader` extracts entities → `OasisProfileGenerator` creates agent personas (CSV/JSON) with action tendency guidance and initial follow relationships from graph edges → `SimulationConfigGenerator` generates simulation parameters including time dilation, peak activity hours (19:00-22:00 CST), per-agent temperature, power-law activity distribution, and scheduled mid-simulation events.
+3. **Simulation** — `SimulationRunner` launches OASIS as subprocess → Twitter + Reddit run concurrently via `asyncio.gather` within a single subprocess → agents interact autonomously with per-agent temperature and network-based feed filtering → `GraphMemoryUpdater` feeds actions back to graph → `RoundMetricsTracker` computes per-round sentiment/activity metrics → scheduled events inject at configured rounds. After rounds complete, simulation enters **Wait Mode** (process stays alive for post-simulation interviews).
+4. **Report Generation** — `ReportAgent` (ReACT loop) uses 5 retrieval tools (InsightForge, PanoramaSearch, QuickSearch, ConsensusAnalysis, interviews) → generates structured Markdown report with appended structured predictions (confidence levels derived from agent consensus).
 5. **Deep Interaction** — Chat with ReportAgent or individual agents for follow-up analysis.
 
 ### Backend (`backend/app/`)
@@ -65,20 +65,20 @@ docker compose up --build
 - `services/` — Core business logic:
   - `ontology_generator.py` — LLM-driven entity/relationship extraction (enforces exactly 10 entity types, excludes reserved field names like `uuid`, `created_at`, `summary`)
   - `graph_builder.py` — Graphiti wrapper. Graph IDs (group_ids) prefixed `mirofish_`. Text chunks sent as episodes via `add_episode()`. Uses `ontology_store.py` to cache entity types per group_id.
-  - `oasis_profile_generator.py` — Converts entities to OASIS agent profiles (CSV/JSON)
+  - `oasis_profile_generator.py` — Converts entities to OASIS agent profiles (CSV/JSON) with action tendency prompts (Creator/Engager/Lurker/Influencer) and auto-generated follow relationships from graph edges
   - `simulation_runner.py` — Subprocess-based OASIS execution with file-based IPC
-  - `simulation_ipc.py` — Directory-based message queue: writes JSON commands to `ipc_commands/`, polls responses from `ipc_responses/`. Command types: `INTERVIEW`, `BATCH_INTERVIEW`, `CLOSE_ENV`
+  - `simulation_ipc.py` — Directory-based message queue: writes JSON commands to `ipc_commands/`, polls responses from `ipc_responses/`. Command types: `INTERVIEW`, `BATCH_INTERVIEW`, `INJECT_EVENT`, `CLOSE_ENV`
   - `simulation_manager.py` — Orchestrates simulation lifecycle. `SimulationStatus` enum: `CREATED` → `PREPARING` → `READY` → (running) → `COMPLETED`/`FAILED`
   - `report_agent.py` — ReACT tool loop (largest service file)
   - `graph_entity_reader.py` — Entity reader/filter from Neo4j graph
   - `graph_memory_updater.py` — Feeds simulation activities back to graph in real-time
-  - `graph_tools.py` — Report agent retrieval tools (InsightForge, PanoramaSearch, QuickSearch, interviews)
-  - `simulation_config_generator.py` — Generates OASIS config with time dilation and timezone settings
+  - `graph_tools.py` — Report agent retrieval tools (InsightForge, PanoramaSearch, QuickSearch, ConsensusAnalysis, interviews). ConsensusAnalysis reads action logs to compute stance distribution, sentiment trajectory, factions, and agreement scores
+  - `simulation_config_generator.py` — Generates OASIS config with time dilation, timezone settings, per-agent temperature, power-law activity distribution, and scheduled mid-simulation events
   - `text_processor.py` — Document text extraction and chunking
 - `utils/` — `llm_client.py` (unified LLM client, auto-detects Anthropic vs OpenAI), `validation.py` (path traversal prevention), `retry.py` (exponential backoff decorator), `file_parser.py`/`file_utils.py` (multi-stage encoding fallback: UTF-8 → charset_normalizer → chardet → replace mode), `logger.py`, `graphiti_manager.py` (thread-safe Graphiti singleton + async bridge + embedder factory: Voyage AI or local Ollama), `ontology_store.py` (thread-safe ontology cache), `graph_paging.py`
 - `models/` — File-based persistence (JSON on disk under `backend/uploads/projects/`). Atomic writes (temp file + `os.replace()`). No database. Project states: `CREATED` → `ONTOLOGY_GENERATED` → `GRAPH_BUILDING` → `GRAPH_COMPLETED`
-- `scripts/` (at `backend/scripts/`, not `backend/app/scripts/`) — Standalone OASIS simulation runners (`run_twitter_simulation.py`, `run_reddit_simulation.py`, `run_parallel_simulation.py`) launched as subprocesses by `SimulationRunner`. Also `action_logger.py` (JSONL logging per platform) and `simulation_utils.py` (dual LLM config, model creation, signal handlers).
-- `tests/` — 156 unit tests across 4 files: `test_llm_client.py`, `test_api.py`, `test_project.py`, `test_retry.py`. Pytest config in `pyproject.toml` (`[tool.pytest.ini_options]`). No `conftest.py` — tests are self-contained with `unittest.mock` (no real API/DB calls)
+- `scripts/` (at `backend/scripts/`, not `backend/app/scripts/`) — Standalone OASIS simulation runners (`run_twitter_simulation.py`, `run_reddit_simulation.py`, `run_parallel_simulation.py`) launched as subprocesses by `SimulationRunner`. Also `action_logger.py` (JSONL logging per platform + `RoundMetricsTracker` for per-round sentiment/activity metrics) and `simulation_utils.py` (dual LLM config, model creation, signal handlers).
+- `tests/` — 194 unit tests across 5 files: `test_llm_client.py`, `test_api.py`, `test_project.py`, `test_retry.py`, `test_swarm_intelligence.py`. Pytest config in `pyproject.toml` (`[tool.pytest.ini_options]`). No `conftest.py` — tests are self-contained with `unittest.mock` (no real API/DB calls)
 
 ### Frontend (`frontend/src/`)
 
@@ -103,8 +103,14 @@ docker compose up --build
 - **Async operations**: Graph building, simulation, and report generation are all async tasks with progress polling (not WebSockets)
 - **Thread safety**: `SimulationRunner` uses `threading.Lock` for class-level state; `GraphMemoryUpdater` uses `_counter_lock` for counter atomicity
 - **Atomic persistence**: All JSON file writes use temp file + `os.replace()` to prevent corruption
-- **JSONL action logging**: Agent actions stream to platform-specific `actions.jsonl` files via `PlatformActionLogger`; report agent uses `agent_log.jsonl`
+- **JSONL action logging**: Agent actions stream to platform-specific `actions.jsonl` files via `PlatformActionLogger`; `RoundMetricsTracker` computes per-round sentiment/activity metrics to `round_metrics.jsonl`; report agent uses `agent_log.jsonl`
 - **Platform action whitelists**: Per-platform allowed actions hardcoded in `config.py` (Twitter: 6 actions, Reddit: 13 actions)
+- **Power-law activity distribution**: Agent activity levels follow Pareto distribution (alpha=1.5) — few very active agents, many lurkers, matching real 90-9-1 social media patterns
+- **Per-agent temperature**: Each agent gets an LLM temperature based on persona type (0.3 for formal officials, 0.9 for impulsive students), affecting response creativity
+- **Network-based feed filtering**: Initial follow relationships generated from knowledge graph edges; agents see posts from followed accounts + recommendations (not just global feed)
+- **Mid-simulation event injection**: Scheduled events fire at configured rounds; also supports real-time injection via `INJECT_EVENT` IPC command
+- **Consensus analysis**: `ConsensusAnalysis` tool reads action logs to compute stance distribution, sentiment trajectory, faction identification, and agreement scores for report generation
+- **Structured predictions**: Report agent appends structured predictions section with confidence levels derived from agent consensus patterns
 - **Process cleanup**: `atexit` handlers kill orphaned simulation subprocesses on Flask shutdown; simulation scripts handle `SIGINT`/`SIGTERM` for graceful closure; frontend calls `checkAndStopRunningSimulation()` on mount to terminate orphans
 - **Simulation state files**: `run_state.json` (recovery after restart), `state.json` (metadata + entity counts) in project upload directory
 - **Input validation**: `validate_safe_id()` prevents path traversal; API params have bounds checking
@@ -152,9 +158,9 @@ Embeddings for Graphiti semantic search use a configurable backend via `_create_
 | `LLM_BOOST_BASE_URL` | No | Simulation LLM URL (e.g. `http://<gpu-host>:11434/v1`) |
 | `LLM_BOOST_MODEL_NAME` | No | Simulation LLM model (e.g. `qwen3-sim` — Qwen3:32b with thinking disabled) |
 | `CORS_ORIGINS` | No | Comma-separated origins (default: `http://localhost:3000,http://127.0.0.1:3000`) |
-| `OASIS_DEFAULT_MAX_ROUNDS` | No | Simulation rounds (default: 10) |
-| `REPORT_AGENT_MAX_TOOL_CALLS` | No | Max tool calls per report generation (default: 5) |
-| `REPORT_AGENT_MAX_REFLECTION_ROUNDS` | No | Max reflection rounds (default: 2) |
+| `OASIS_DEFAULT_MAX_ROUNDS` | No | Simulation rounds (default: 30) |
+| `REPORT_AGENT_MAX_TOOL_CALLS` | No | Max tool calls per report generation (default: 10) |
+| `REPORT_AGENT_MAX_REFLECTION_ROUNDS` | No | Max reflection rounds (default: 3) |
 | `REPORT_AGENT_TEMPERATURE` | No | Report agent LLM temperature (default: 0.5) |
 
 ## API Endpoints
