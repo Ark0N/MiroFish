@@ -1985,3 +1985,88 @@ class TestBatchIngester:
         p = BatchProgress(total=10, completed=5, succeeded=4, failed=1)
         d = p.to_dict()
         assert d["progress_pct"] == 50.0
+
+
+# ---------------------------------------------------------------------------
+# Opinion drift model tests
+# ---------------------------------------------------------------------------
+
+
+class TestOpinionDriftModel:
+    """Tests for agent opinion drift model."""
+
+    def _make_model(self):
+        from app.services.opinion_drift import OpinionDriftModel
+        return OpinionDriftModel()
+
+    def test_initialize_agents(self):
+        model = self._make_model()
+        agents = [
+            {"agent_name": "alice", "entity_type": "Person"},
+            {"agent_name": "gov_1", "entity_type": "Official"},
+        ]
+        states = model.initialize_agents(agents)
+        assert len(states) == 2
+        assert states["alice"].inertia < states["gov_1"].inertia  # Officials more inert
+
+    def test_initialize_with_sentiments(self):
+        model = self._make_model()
+        agents = [{"agent_name": "alice"}]
+        states = model.initialize_agents(agents, {"alice": 0.7})
+        assert states["alice"].opinion == 0.7
+
+    def test_update_round_social_influence(self):
+        model = self._make_model()
+        agents = [
+            {"agent_name": "follower", "entity_type": "Student"},
+            {"agent_name": "leader", "entity_type": "Person"},
+        ]
+        states = model.initialize_agents(agents, {"follower": 0.0, "leader": 0.8})
+        follow_graph = {"follower": ["leader"], "leader": []}
+
+        # After one round, follower should drift toward leader's opinion
+        model.update_round(states, follow_graph, noise_scale=0.0, seed=42)
+        assert states["follower"].opinion > 0  # Moved toward leader
+
+    def test_high_inertia_resists_change(self):
+        model = self._make_model()
+        agents = [
+            {"agent_name": "official", "entity_type": "Official"},
+            {"agent_name": "influencer", "entity_type": "Person"},
+        ]
+        states = model.initialize_agents(agents, {"official": 0.5, "influencer": -0.9})
+        follow_graph = {"official": ["influencer"], "influencer": []}
+
+        initial = states["official"].opinion
+        model.update_round(states, follow_graph, noise_scale=0.0, seed=42)
+        # Official should barely move despite following someone with opposite opinion
+        assert abs(states["official"].opinion - initial) < 0.2
+
+    def test_opinion_bounded(self):
+        model = self._make_model()
+        agents = [{"agent_name": "a", "entity_type": "Student"}]
+        states = model.initialize_agents(agents, {"a": 0.99})
+        follow_graph = {"a": []}
+        for _ in range(50):
+            model.update_round(states, follow_graph, noise_scale=0.1, seed=None)
+        assert -1.0 <= states["a"].opinion <= 1.0
+
+    def test_drift_summary(self):
+        model = self._make_model()
+        agents = [{"agent_name": "a"}, {"agent_name": "b"}]
+        states = model.initialize_agents(agents, {"a": 0.0, "b": 0.0})
+        follow_graph = {"a": ["b"], "b": ["a"]}
+        # Run several rounds
+        for i in range(5):
+            model.update_round(states, follow_graph, noise_scale=0.1, seed=i)
+        summary = model.compute_drift_summary(states)
+        assert summary["total_agents"] == 2
+        assert "avg_drift" in summary
+
+    def test_to_dict(self):
+        from app.services.opinion_drift import AgentOpinionState
+        state = AgentOpinionState(agent_name="test", opinion=0.5, inertia=0.7, susceptibility=0.2)
+        state.opinion_history = [0.0, 0.3, 0.5]
+        d = state.to_dict()
+        assert d["agent_name"] == "test"
+        assert d["total_drift"] == 0.5
