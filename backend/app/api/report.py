@@ -515,6 +515,62 @@ def get_predictions(report_id: str):
         }), 500
 
 
+@report_bp.route('/<report_id>/predictions/export', methods=['GET'])
+def export_predictions(report_id: str):
+    """Export predictions as CSV or JSONL.
+
+    Query params:
+        format: "csv" or "jsonl" (default "csv")
+    """
+    err = validate_id_param(report_id, "report_id")
+    if err:
+        return err
+
+    fmt = request.args.get("format", "csv").lower()
+    if fmt not in ("csv", "jsonl"):
+        return jsonify({"success": False, "error": "format must be csv or jsonl"}), 400
+
+    try:
+        predictions = ReportManager.load_predictions(report_id)
+        if not predictions or not predictions.predictions:
+            return jsonify({"success": False, "error": "No predictions found"}), 404
+
+        import io
+        pred_dicts = [p.to_dict() for p in predictions.predictions]
+
+        if fmt == "jsonl":
+            import json as _json
+            lines = [_json.dumps(p, ensure_ascii=False) for p in pred_dicts]
+            content = "\n".join(lines) + "\n"
+            mimetype = "application/x-ndjson"
+            filename = f"{report_id}_predictions.jsonl"
+        else:
+            import csv as _csv
+            output = io.StringIO()
+            fields = ["event", "probability", "confidence_interval", "timeframe",
+                       "agent_agreement", "impact_level", "reasoning"]
+            writer = _csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
+            writer.writeheader()
+            for p in pred_dicts:
+                row = dict(p)
+                row["confidence_interval"] = f"{p.get('confidence_interval', [0,1])[0]:.2f}-{p.get('confidence_interval', [0,1])[1]:.2f}"
+                writer.writerow(row)
+            content = output.getvalue()
+            mimetype = "text/csv"
+            filename = f"{report_id}_predictions.csv"
+
+        from flask import Response
+        return Response(
+            content,
+            mimetype=mimetype,
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+
+    except Exception as e:
+        logger.error(f"Export failed: {e}")
+        return jsonify({"success": False, "error": "Export failed"}), 500
+
+
 @report_bp.route('/<report_id>/scenarios', methods=['GET'])
 def get_scenarios(report_id: str):
     """Build scenario tree from a report's predictions."""

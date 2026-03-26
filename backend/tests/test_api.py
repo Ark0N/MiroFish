@@ -323,6 +323,42 @@ class TestCatalogEndpoint:
         assert any('/analytics' in p for p in paths)
 
 
+class TestPredictionExportEndpoint:
+    """Tests for GET /api/report/<id>/predictions/export."""
+
+    def test_export_nonexistent_returns_404(self, client):
+        response = client.get('/api/report/nonexistent/predictions/export')
+        assert response.status_code == 404
+
+    def test_export_invalid_format_returns_400(self, client):
+        response = client.get('/api/report/test-id/predictions/export?format=xml')
+        assert response.status_code == 400
+
+    @patch.object(ReportManager, 'load_predictions')
+    def test_export_csv(self, mock_load, client):
+        from app.services.report_agent import PredictionSet, StructuredPrediction
+        ps = PredictionSet(predictions=[
+            StructuredPrediction(event="Test event", probability=0.7, agent_agreement=0.8),
+        ], overall_confidence="High", generated_at="2026-01-01")
+        mock_load.return_value = ps
+        response = client.get('/api/report/valid-id/predictions/export?format=csv')
+        assert response.status_code == 200
+        assert 'text/csv' in response.content_type
+        assert b'event' in response.data  # Header row
+        assert b'Test event' in response.data
+
+    @patch.object(ReportManager, 'load_predictions')
+    def test_export_jsonl(self, mock_load, client):
+        from app.services.report_agent import PredictionSet, StructuredPrediction
+        ps = PredictionSet(predictions=[
+            StructuredPrediction(event="Test event", probability=0.7),
+        ], overall_confidence="High", generated_at="2026-01-01")
+        mock_load.return_value = ps
+        response = client.get('/api/report/valid-id/predictions/export?format=jsonl')
+        assert response.status_code == 200
+        assert b'Test event' in response.data
+
+
 class TestScenariosEndpoint:
     """Tests for GET /api/report/<report_id>/scenarios."""
 

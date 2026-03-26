@@ -254,6 +254,10 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **27.1 Test new report endpoints with mock data** — Add tests for `/scenarios`, `/selftest`, `/catalog` endpoints. Verify selftest returns pass for all services. Verify catalog lists correct count. Verify scenarios returns tree structure with mock predictions.
 
+## Phase 28: Prediction Export & Sharing
+
+- [x] **28.1 CSV/JSONL prediction export endpoint** — Add `GET /api/report/<id>/predictions/export?format=csv|jsonl` that exports predictions in tabular formats for external tools. CSV includes event, probability, confidence_interval, agent_agreement, impact_level, health_status.
+
 ## Ralph Loop Session Summary
 
 **Session completed**: 23 phases, 92 items, 621 tests, 72 commits.
