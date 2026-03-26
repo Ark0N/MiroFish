@@ -198,9 +198,9 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 ## Phase 20: Pipeline Integration & Wiring
 
-- [~] **20.1 Wire prediction engine into report generation** — Integrate the full prediction pipeline into `generate_report()`: after predictions are extracted, automatically run calibration → bootstrap confidence → cross-validation → dependency detection → deduplication → contradiction check → narrative generation → provenance tracking → executive summary. Store all artifacts alongside the report.
+- [x] **20.1 Wire prediction engine into report generation** — Integrate the full prediction pipeline into `generate_report()`: after predictions are extracted, automatically run calibration → bootstrap confidence → cross-validation → dependency detection → deduplication → contradiction check → narrative generation → provenance tracking → executive summary. Store all artifacts alongside the report.
 
-- [ ] **20.2 Analytics API blueprint** — Create a dedicated `/api/analytics/` Flask blueprint exposing: `GET /simulation/<id>` (simulation analytics), `GET /agents/<id>` (agent profiles), `GET /network/<id>` (influence + echo chambers), `GET /quality/<id>` (quality score). Wire to existing AnalyticsService.
+- [~] **20.2 Analytics API blueprint** — Create a dedicated `/api/analytics/` Flask blueprint exposing: `GET /simulation/<id>` (simulation analytics), `GET /agents/<id>` (agent profiles), `GET /network/<id>` (influence + echo chambers), `GET /quality/<id>` (quality score). Wire to existing AnalyticsService.
 
 - [ ] **20.3 Prediction health dashboard endpoint** — Add `GET /api/report/<id>/health` that returns prediction health (decay), stability index, contradiction warnings, and uncertainty decomposition for all predictions in a report. Single endpoint for the frontend dashboard.
 

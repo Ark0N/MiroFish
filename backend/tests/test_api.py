@@ -270,6 +270,26 @@ class TestWebhookEndpoint:
         assert response.status_code in (200, 500)
 
 
+class TestAnalyticsEndpoints:
+    """Tests for /api/analytics/ endpoints."""
+
+    def test_simulation_analytics_invalid_id_returns_400(self, client):
+        response = client.get('/api/analytics/simulation/<script>')
+        assert response.status_code == 400
+
+    def test_agents_analytics_invalid_id_returns_400(self, client):
+        response = client.get('/api/analytics/agents/<script>')
+        assert response.status_code == 400
+
+    def test_network_analytics_invalid_id_returns_400(self, client):
+        response = client.get('/api/analytics/network/<script>')
+        assert response.status_code == 400
+
+    def test_quality_score_invalid_id_returns_400(self, client):
+        response = client.get('/api/analytics/quality/<script>')
+        assert response.status_code == 400
+
+
 class TestSimulationEndpoints:
     """Tests for /api/simulation/ endpoints."""
 
