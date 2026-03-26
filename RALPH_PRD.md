@@ -242,6 +242,10 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **24.1 Wire PredictionTable into Step4Report** — Import PredictionTable.vue and the getPredictions API call into Step4Report.vue. After report loads, fetch predictions and render the table below the report markdown. Only show when predictions exist.
 
+## Phase 25: Frontend Health & Analytics Wiring
+
+- [x] **25.1 Wire health dashboard into Step4Report** — After predictions load, also fetch `/api/report/<id>/health` and display PredictionHealthBadge + UncertaintyBar + ContradictionAlert below the PredictionTable.
+
 ## Ralph Loop Session Summary
 
 **Session completed**: 23 phases, 92 items, 621 tests, 72 commits.

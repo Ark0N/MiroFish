@@ -70,6 +70,32 @@
             :predictions="predictions"
             :overallConfidence="predictionsOverallConfidence"
           />
+
+          <!-- Prediction Health Dashboard -->
+          <div v-if="predictionHealth" class="prediction-health-section">
+            <h3 class="health-section-title">Prediction Health</h3>
+            <div class="health-badges-row">
+              <PredictionHealthBadge
+                v-for="(h, idx) in predictionHealth.prediction_health"
+                :key="idx"
+                :healthStatus="h.health_status"
+                :decayFactor="h.decay_factor"
+                :daysSinceEvidence="h.days_since_last_evidence"
+                :evidenceCount="h.evidence_count"
+              />
+            </div>
+            <UncertaintyBar
+              v-for="(u, idx) in predictionHealth.uncertainties"
+              :key="'u-' + idx"
+              :epistemic="u.epistemic"
+              :aleatoric="u.aleatoric"
+              :recommendation="u.recommendation"
+            />
+            <ContradictionAlert
+              v-if="predictionHealth.contradictions && predictionHealth.contradictions.length > 0"
+              :contradictions="predictionHealth.contradictions"
+            />
+          </div>
         </div>
 
         <!-- Waiting State -->
@@ -399,9 +425,12 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick, h, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { getAgentLog, getConsoleLog, getPredictions } from '../api/report'
+import { getAgentLog, getConsoleLog, getPredictions, getPredictionHealth } from '../api/report'
 import { renderMarkdown } from '../utils/markdown'
 import PredictionTable from './PredictionTable.vue'
+import PredictionHealthBadge from './PredictionHealthBadge.vue'
+import UncertaintyBar from './UncertaintyBar.vue'
+import ContradictionAlert from './ContradictionAlert.vue'
 
 const router = useRouter()
 
@@ -434,6 +463,7 @@ const collapsedSections = ref(new Set())
 const isComplete = ref(false)
 const predictions = ref([])
 const predictionsOverallConfidence = ref('')
+const predictionHealth = ref(null)
 const startTime = ref(null)
 const leftPanel = ref(null)
 const rightPanel = ref(null)
@@ -2043,6 +2073,15 @@ const fetchPredictions = async () => {
   } catch (e) {
     // Predictions are optional — don't break the report view
   }
+  // Also fetch health dashboard
+  try {
+    const healthRes = await getPredictionHealth(props.reportId)
+    if (healthRes.data?.success && healthRes.data?.data) {
+      predictionHealth.value = healthRes.data.data
+    }
+  } catch (e) {
+    // Health is optional
+  }
 }
 
 const fetchConsoleLog = async () => {
@@ -2275,6 +2314,26 @@ watch(() => props.reportId, (newId) => {
   max-width: 800px;
   margin: 0 auto;
   width: 100%;
+}
+
+.prediction-health-section {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #2a2a3e;
+}
+
+.health-section-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1rem;
+  color: #e0e0e0;
+  margin-bottom: 0.75rem;
+}
+
+.health-badges-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
 }
 
 .report-header-block {
