@@ -2789,3 +2789,69 @@ class TestStressTester:
         sentiments = {f"a{i}": 0.5 for i in range(10)}
         result = t.stress_test(sentiments, 0.6)
         assert "recommendation" in result
+
+
+# ---------------------------------------------------------------------------
+# Prediction chaining tests
+# ---------------------------------------------------------------------------
+
+
+class TestPredictionChaining:
+    """Tests for prediction chaining engine."""
+
+    def _make_engine(self):
+        from app.services.prediction_chaining import PredictionChainingEngine
+        return PredictionChainingEngine()
+
+    def test_independent_and(self):
+        e = self._make_engine()
+        # P(A AND B) = P(A) * P(B) for independent events
+        result = e.joint_and(0.5, 0.5, dependency_strength=0.0)
+        assert abs(result - 0.25) < 0.001
+
+    def test_fully_dependent_and(self):
+        e = self._make_engine()
+        # Fully dependent: P(A AND B) = min(P(A), P(B))
+        result = e.joint_and(0.8, 0.6, dependency_strength=1.0)
+        assert abs(result - 0.6) < 0.001
+
+    def test_independent_or(self):
+        e = self._make_engine()
+        result = e.joint_or(0.5, 0.5, dependency_strength=0.0)
+        assert abs(result - 0.75) < 0.001
+
+    def test_conditional(self):
+        e = self._make_engine()
+        result = e.conditional(0.8, 0.9)
+        assert abs(result - 0.72) < 0.001
+
+    def test_chain_predictions(self):
+        e = self._make_engine()
+        preds = [
+            {"event": "Trade war", "probability": 0.7},
+            {"event": "Supply disruption", "probability": 0.5},
+        ]
+        edges = [{"source_idx": 0, "target_idx": 1, "strength": 0.6, "relationship": "causes"}]
+        compounds = e.chain_predictions(preds, edges)
+        assert len(compounds) == 1
+        assert compounds[0]["joint_and"] > 0
+        assert compounds[0]["joint_or"] > 0
+        assert compounds[0]["conditional_then"] > 0
+
+    def test_best_worst_most_likely(self):
+        e = self._make_engine()
+        preds = [
+            {"event": "A", "probability": 0.8},
+            {"event": "B", "probability": 0.6},
+        ]
+        result = e.best_worst_most_likely(preds)
+        assert result["best_case"] > 0
+        assert result["worst_case"] > 0
+        assert result["most_likely"] >= result["best_case"]
+        assert result["num_predictions"] == 2
+
+    def test_empty_predictions(self):
+        e = self._make_engine()
+        assert e.chain_predictions([], []) == []
+        result = e.best_worst_most_likely([])
+        assert result["best_case"] == 0.0
