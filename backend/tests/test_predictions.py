@@ -2377,3 +2377,61 @@ class TestProvenanceTracker:
         pred = {"event": "", "probability": 0.5, "evidence": []}
         prov = tracker.build_provenance(pred, 0)
         assert len(prov.nodes) >= 1  # At least the prediction node
+
+
+# ---------------------------------------------------------------------------
+# Counterfactual analysis tests
+# ---------------------------------------------------------------------------
+
+
+class TestCounterfactualAnalyzer:
+    """Tests for counterfactual prediction analysis."""
+
+    def _make_analyzer(self):
+        from app.services.counterfactual import CounterfactualAnalyzer
+        return CounterfactualAnalyzer()
+
+    def test_empty_input(self):
+        a = self._make_analyzer()
+        result = a.analyze({}, 0.5)
+        assert result["scenarios"] == []
+
+    def test_remove_influencer_scenario(self):
+        a = self._make_analyzer()
+        sentiments = {"hub": 0.9, "a": -0.1, "b": -0.2, "c": -0.3}
+        result = a.analyze(sentiments, 0.6, top_influencers=["hub"])
+        remove_scenarios = [s for s in result["scenarios"] if s["type"] == "remove_agent"]
+        assert len(remove_scenarios) >= 1
+        # Removing the positive hub should decrease probability
+        assert remove_scenarios[0]["probability_impact"] < 0
+
+    def test_flip_faction_scenario(self):
+        a = self._make_analyzer()
+        sentiments = {"p1": 0.5, "p2": 0.6, "n1": -0.5}
+        factions = {"supportive": ["p1", "p2"], "opposing": ["n1"]}
+        result = a.analyze(sentiments, 0.7, faction_members=factions)
+        flip_scenarios = [s for s in result["scenarios"] if s["type"] == "flip_faction"]
+        assert len(flip_scenarios) >= 1
+
+    def test_unanimous_scenarios_present(self):
+        a = self._make_analyzer()
+        sentiments = {"a": 0.3, "b": -0.2}
+        result = a.analyze(sentiments, 0.5)
+        types = [s["type"] for s in result["scenarios"]]
+        assert "unanimous_positive" in types
+        assert "unanimous_negative" in types
+
+    def test_scenarios_sorted_by_impact(self):
+        a = self._make_analyzer()
+        sentiments = {f"a{i}": 0.5 for i in range(5)}
+        sentiments["outlier"] = -0.9
+        result = a.analyze(sentiments, 0.6, top_influencers=["outlier"])
+        impacts = [abs(s["probability_impact"]) for s in result["scenarios"]]
+        assert impacts == sorted(impacts, reverse=True)
+
+    def test_probability_bounded(self):
+        a = self._make_analyzer()
+        sentiments = {"a": 0.9, "b": 0.8}
+        result = a.analyze(sentiments, 0.95)
+        for s in result["scenarios"]:
+            assert 0.05 <= s["new_probability"] <= 0.99
