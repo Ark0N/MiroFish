@@ -96,6 +96,12 @@
               :contradictions="predictionHealth.contradictions"
             />
           </div>
+
+          <!-- Scenario Analysis -->
+          <ScenarioCompare
+            v-if="scenarioData"
+            :scenarios="scenarioData"
+          />
         </div>
 
         <!-- Waiting State -->
@@ -425,12 +431,13 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick, h, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { getAgentLog, getConsoleLog, getPredictions, getPredictionHealth } from '../api/report'
+import { getAgentLog, getConsoleLog, getPredictions, getPredictionHealth, getScenarios } from '../api/report'
 import { renderMarkdown } from '../utils/markdown'
 import PredictionTable from './PredictionTable.vue'
 import PredictionHealthBadge from './PredictionHealthBadge.vue'
 import UncertaintyBar from './UncertaintyBar.vue'
 import ContradictionAlert from './ContradictionAlert.vue'
+import ScenarioCompare from './ScenarioCompare.vue'
 
 const router = useRouter()
 
@@ -464,6 +471,7 @@ const isComplete = ref(false)
 const predictions = ref([])
 const predictionsOverallConfidence = ref('')
 const predictionHealth = ref(null)
+const scenarioData = ref(null)
 const startTime = ref(null)
 const leftPanel = ref(null)
 const rightPanel = ref(null)
@@ -2073,7 +2081,7 @@ const fetchPredictions = async () => {
   } catch (e) {
     // Predictions are optional — don't break the report view
   }
-  // Also fetch health dashboard
+  // Also fetch health dashboard and scenarios
   try {
     const healthRes = await getPredictionHealth(props.reportId)
     if (healthRes.data?.success && healthRes.data?.data) {
@@ -2081,6 +2089,14 @@ const fetchPredictions = async () => {
     }
   } catch (e) {
     // Health is optional
+  }
+  try {
+    const scenarioRes = await getScenarios(props.reportId)
+    if (scenarioRes.data?.success && scenarioRes.data?.data) {
+      scenarioData.value = scenarioRes.data.data
+    }
+  } catch (e) {
+    // Scenarios are optional
   }
 }
 

@@ -515,6 +515,29 @@ def get_predictions(report_id: str):
         }), 500
 
 
+@report_bp.route('/<report_id>/scenarios', methods=['GET'])
+def get_scenarios(report_id: str):
+    """Build scenario tree from a report's predictions."""
+    err = validate_id_param(report_id, "report_id")
+    if err:
+        return err
+    try:
+        predictions = ReportManager.load_predictions(report_id)
+        if not predictions or not predictions.predictions:
+            return jsonify({"success": False, "error": "No predictions found"}), 404
+
+        from ..services.scenario_tree import ScenarioTreeBuilder
+        builder = ScenarioTreeBuilder()
+        result = builder.build_tree(
+            [p.to_dict() for p in predictions.predictions],
+            max_predictions=6,
+        )
+        return jsonify({"success": True, "data": result})
+    except Exception as e:
+        logger.error(f"Scenario tree failed: {e}")
+        return jsonify({"success": False, "error": "Scenario generation failed"}), 500
+
+
 @report_bp.route('/selftest', methods=['GET'])
 def prediction_selftest():
     """Run minimal self-test on all prediction services."""

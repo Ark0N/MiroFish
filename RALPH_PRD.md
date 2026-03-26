@@ -246,6 +246,10 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **25.1 Wire health dashboard into Step4Report** — After predictions load, also fetch `/api/report/<id>/health` and display PredictionHealthBadge + UncertaintyBar + ContradictionAlert below the PredictionTable.
 
+## Phase 26: Scenario & Analytics Frontend Wiring
+
+- [x] **26.1 Wire ScenarioCompare into Step4Report** — After predictions load, call the backend scenario tree builder via a new API endpoint, then render ScenarioCompare below the health dashboard showing best/worst/most-likely scenarios.
+
 ## Ralph Loop Session Summary
 
 **Session completed**: 23 phases, 92 items, 621 tests, 72 commits.

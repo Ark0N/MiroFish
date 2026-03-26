@@ -102,6 +102,14 @@ export const addPredictionNote = (reportId, predictionIdx, note) => {
 }
 
 /**
+ * Get scenario tree for a report
+ * @param {string} reportId
+ */
+export const getScenarios = (reportId) => {
+  return service.get(`/api/report/${reportId}/scenarios`)
+}
+
+/**
  * Get prediction service catalog
  */
 export const getPredictionCatalog = () => {
