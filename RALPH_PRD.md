@@ -156,6 +156,26 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **15.4 Simulation replay engine** — Enable replaying a simulation from any round with modified parameters or injected events. Compare alternate timelines to assess prediction robustness.
 
+## Phase 16: Prediction Market Mechanics
+
+- [ ] **16.1 Agent betting pool** — Add a virtual prediction market where agents can "bet" on outcomes using karma points. Agents who are more confident in their stance commit more karma. The distribution of bets provides a market-based probability estimate that complements the sentiment-based one.
+
+- [ ] **16.2 Prediction arbitrage detector** — When the market-based probability diverges significantly from the sentiment-based probability, flag it as an arbitrage signal. This divergence often reveals that agents' actions (bets) don't match their words (posts), which is a strong predictor of actual behavior.
+
+- [ ] **16.3 Information elicitation scoring** — Score agents by how much new information their posts reveal (measured by entropy reduction in the prediction distribution after their post). Agents who consistently provide novel information get higher credibility weights.
+
+- [ ] **16.4 Crowd wisdom aggregation** — Implement multiple aggregation methods (mean, median, geometric mean, extremized mean) and compare their accuracy across historical predictions. Auto-select the best method per project based on backtesting data.
+
+## Phase 17: Robustness Testing
+
+- [ ] **17.1 Prediction stress tester** — Systematically test how predictions respond to extreme inputs: all agents flipping stance, removing 50% of agents, injecting contradictory events. Reports a robustness score for each prediction.
+
+- [ ] **17.2 Simulation reproducibility checker** — Run the same simulation twice with different random seeds and compare outcomes. High divergence suggests the prediction is sensitive to randomness, not robust.
+
+- [ ] **17.3 Prediction stability index** — Compute a stability index for each prediction based on how much it changed across: Bayesian updates, calibration, decay, and cross-validation. Stable predictions get a "rock-solid" badge; volatile ones get a warning.
+
+- [ ] **17.4 Adversarial agent injection** — Beyond contrarians (who challenge consensus), add adversarial agents that deliberately spread misinformation. Test whether the prediction system is resilient to bad-faith actors.
+
 ---
 
 ## Ralph Loop Instructions
