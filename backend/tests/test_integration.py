@@ -684,3 +684,224 @@ class TestServiceBoundaries:
         result = cv.validate(posts)
         # All same → should agree across folds
         assert result["agreement_rate"] >= 0.5
+
+
+# ---------------------------------------------------------------------------
+# End-to-end prediction pipeline test
+# ---------------------------------------------------------------------------
+
+
+class TestPredictionPipelineE2E:
+    """End-to-end test of the 7-step prediction pipeline with mock simulation."""
+
+    def test_full_pipeline_with_synthetic_simulation(self, tmp_path):
+        """Create a synthetic simulation, then run every prediction service on it."""
+        # 1. Create synthetic simulation output
+        sim_dir = tmp_path / "sim_output"
+        twitter_dir = sim_dir / "twitter"
+        twitter_dir.mkdir(parents=True)
+
+        actions = []
+        for i in range(20):
+            sentiment = "great excellent love progress" if i < 12 else "terrible awful crisis danger"
+            actions.append({
+                "action_type": "CREATE_POST",
+                "agent_name": f"agent_{i}",
+                "content": f"Post about topic: {sentiment}",
+                "round": (i % 5) + 1,
+            })
+            # Add some engagements
+            if i > 0:
+                actions.append({
+                    "action_type": "LIKE_POST",
+                    "agent_name": f"agent_{i}",
+                    "target_post_id": f"agent_{i-1}_post",
+                    "round": (i % 5) + 1,
+                })
+        with open(twitter_dir / "actions.jsonl", "w") as f:
+            for a in actions:
+                f.write(json.dumps(a) + "\n")
+
+        # Round metrics
+        metrics = []
+        for r in range(1, 6):
+            metrics.append({
+                "round": r, "platform": "twitter",
+                "sentiment": {"average": 0.1 * r, "positive": 8, "negative": 4, "neutral": 3},
+                "momentum": {"velocity": 0.05, "acceleration": 0.01, "direction": "accelerating", "signal": "weak"},
+                "factions": {
+                    "supportive": {"count": 8, "members": [f"agent_{i}" for i in range(8)]},
+                    "opposing": {"count": 4, "members": [f"agent_{i}" for i in range(12, 16)]},
+                    "neutral": {"count": 3, "members": [f"agent_{i}" for i in range(16, 19)]},
+                },
+                "participation_rate": 0.8,
+                "content_posts": 15,
+            })
+        with open(twitter_dir / "round_metrics.jsonl", "w") as f:
+            for m in metrics:
+                f.write(json.dumps(m) + "\n")
+
+        # 2. Extract agent sentiments and posts (like the pipeline does)
+        from app.services.prediction_calibrator import PredictionCalibrator
+        from app.services.bootstrap_confidence import BootstrapConfidence
+        from app.services.cross_validator import CrossValidator
+        from app.services.prediction_dedup import PredictionDeduplicator
+        from app.services.contradiction_detector import ContradictionDetector
+        from app.services.prediction_provenance import ProvenanceTracker
+        from app.services.prediction_narrative import PredictionNarrativeGenerator
+        from app.services.analytics import AnalyticsService
+        from app.services.pattern_matcher import PatternMatcher
+        from app.services.simulation_quality import SimulationQualityScorer
+        from app.services.echo_chamber import EchoChamberDetector
+        from app.services.network_influence import NetworkInfluenceScorer
+        from app.services.prediction_market import PredictionMarket
+        from app.services.stress_tester import PredictionStressTester
+        from app.services.scenario_tree import ScenarioTreeBuilder
+        from app.services.uncertainty_decomposer import UncertaintyDecomposer
+        from app.services.counterfactual import CounterfactualAnalyzer
+        from app.services.prediction_chaining import PredictionChainingEngine
+        from app.services.report_agent import StructuredPrediction, PredictionSet
+
+        # 3. Create predictions (like the LLM would generate)
+        predictions = [
+            StructuredPrediction(event="Public opinion shifts positive on topic", probability=0.7,
+                                 evidence=["12 of 20 agents posted positively"], agent_agreement=0.75),
+            StructuredPrediction(event="Opposition faction grows significantly", probability=0.3,
+                                 evidence=["4 agents consistently negative"], agent_agreement=0.4),
+            StructuredPrediction(event="Consensus stabilizes within 10 rounds", probability=0.6,
+                                 evidence=["Momentum accelerating"], agent_agreement=0.65),
+        ]
+        ps = PredictionSet(predictions=predictions, overall_confidence="Moderate", generated_at="2026-03-26T00:00:00")
+
+        # 4. Run each service (mirroring the pipeline)
+        pred_dicts = [p.to_dict() for p in ps.predictions]
+
+        # Calibrate
+        cal = PredictionCalibrator()
+        calibrated = cal.calibrate(pred_dicts)
+        assert len(calibrated) == 3
+        assert all("calibration" in c for c in calibrated)
+
+        # Extract sentiments from sim
+        agent_sents = {}
+        for a in actions:
+            if a["action_type"] == "CREATE_POST":
+                name = a["agent_name"]
+                content = a["content"].lower()
+                pos = sum(1 for w in ["great", "excellent", "love", "progress"] if w in content)
+                neg = sum(1 for w in ["terrible", "awful", "crisis", "danger"] if w in content)
+                total = pos + neg
+                agent_sents[name] = (pos - neg) / total if total > 0 else 0.0
+
+        # Bootstrap confidence
+        bc = BootstrapConfidence()
+        bands = bc.compute_prediction_bands(agent_sents, 0.7)
+        assert bands["ci_low"] <= bands["ci_high"]
+
+        # Cross-validate
+        agent_posts = {}
+        for a in actions:
+            if a["action_type"] == "CREATE_POST":
+                name = a["agent_name"]
+                if name not in agent_posts:
+                    agent_posts[name] = []
+                agent_posts[name].append(a["content"])
+        cv = CrossValidator()
+        cv_result = cv.validate(agent_posts, n_folds=5)
+        assert cv_result["is_valid"] is True
+
+        # Dedup
+        dedup = PredictionDeduplicator()
+        deduped = dedup.deduplicate(pred_dicts)
+        assert len(deduped) == 3  # No dupes in our set
+
+        # Contradictions
+        det = ContradictionDetector()
+        contradictions = det.detect_contradictions(pred_dicts)
+        # "shifts positive" vs "opposition grows" might be a contradiction
+        # Either way, should not crash
+
+        # Impact estimation
+        for p in pred_dicts:
+            impact = det.estimate_impact(p, agent_posts=agent_posts)
+            assert 1 <= impact["impact_score"] <= 10
+
+        # Provenance
+        prov = ProvenanceTracker()
+        provenances = [prov.build_provenance(p, i, agent_posts=agent_posts) for i, p in enumerate(pred_dicts)]
+        assert len(provenances) == 3
+        assert all(len(p.nodes) >= 1 for p in provenances)
+
+        # Narrative
+        narrator = PredictionNarrativeGenerator()
+        narratives = narrator.generate_batch_narratives(pred_dicts)
+        assert len(narratives) == 3
+        assert all(len(n) > 50 for n in narratives)
+
+        # Analytics
+        analytics = AnalyticsService()
+        sim_analytics = analytics.simulation_analytics(str(sim_dir))
+        assert sim_analytics["total_rounds"] == 5
+
+        profiles = analytics.agent_profiles(str(sim_dir))
+        assert len(profiles) == 20
+
+        # Pattern fingerprint
+        matcher = PatternMatcher()
+        fp = matcher.extract_fingerprint(str(sim_dir), "test_sim")
+        assert fp.total_rounds == 5
+
+        # Quality score
+        follow_graph = {f"agent_{i}": [f"agent_{(i+1)%20}"] for i in range(20)}
+        types = {f"agent_{i}": "Person" for i in range(20)}
+        quality = SimulationQualityScorer()
+        score = quality.score(agent_sents, follow_graph, types, 0.8)
+        assert score["grade"] in ("A", "B", "C", "D", "F")
+
+        # Echo chambers
+        echo = EchoChamberDetector()
+        health = echo.compute_network_health(agent_sents, follow_graph)
+        assert "health" in health
+
+        # Network influence
+        influence = NetworkInfluenceScorer()
+        pagerank = influence.compute_pagerank(follow_graph)
+        assert len(pagerank) == 20
+        assert abs(sum(pagerank.values()) - 1.0) < 0.01
+
+        # Prediction market
+        market = PredictionMarket()
+        state = market.create_market("Topic prediction", agent_sents)
+        assert state.num_bettors > 0
+        arb = market.detect_arbitrage(state.market_probability, 0.7)
+        assert "has_arbitrage" in arb
+
+        # Stress test
+        tester = PredictionStressTester()
+        stress = tester.stress_test(agent_sents, 0.7)
+        assert stress["robustness_score"] >= 0
+        assert len(stress["scenarios"]) >= 3
+
+        # Scenario tree
+        tree = ScenarioTreeBuilder()
+        scenarios = tree.build_tree(pred_dicts)
+        assert scenarios["total_scenarios"] == 8  # 2^3
+        assert scenarios["best_case"] is not None
+
+        # Uncertainty
+        decomposer = UncertaintyDecomposer()
+        uncertainty = decomposer.decompose(0.7, list(agent_sents.values()), n_simulations=1)
+        assert uncertainty["total_uncertainty"] > 0
+
+        # Counterfactual
+        counter = CounterfactualAnalyzer()
+        cf = counter.analyze(agent_sents, 0.7, top_influencers=["agent_0"])
+        assert len(cf["scenarios"]) >= 3
+
+        # Chaining
+        chainer = PredictionChainingEngine()
+        bwml = chainer.best_worst_most_likely(pred_dicts)
+        assert bwml["num_predictions"] == 3
+
+        # All services passed — the full prediction engine works end-to-end
+        assert True, "Full E2E pipeline completed successfully"
