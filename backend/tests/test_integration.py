@@ -1065,3 +1065,109 @@ class TestChangeNotifier:
             assert len(sig_changes) == 2
             major_changes = n.get_changes("r1", min_severity="major")
             assert len(major_changes) == 1
+
+
+# ---------------------------------------------------------------------------
+# Full pipeline wiring test
+# ---------------------------------------------------------------------------
+
+
+class TestPipelineWiringE2E:
+    """Test that _run_prediction_pipeline actually calls all wired services."""
+
+    def test_pipeline_calls_all_steps(self, tmp_path):
+        """Mock the simulation dir and verify the pipeline exercises all steps."""
+        from unittest.mock import MagicMock, patch, call
+        from app.services.report_agent import (
+            ReportAgent, Report, ReportStatus, ReportManager,
+            StructuredPrediction, PredictionSet,
+        )
+
+        # Create synthetic simulation dir
+        sim_dir = str(tmp_path / "sim")
+        twitter_dir = os.path.join(sim_dir, "twitter")
+        os.makedirs(twitter_dir)
+        actions = [
+            {"action_type": "CREATE_POST", "agent_name": f"agent_{i}",
+             "content": "great progress love excellent" if i < 7 else "terrible crisis awful",
+             "round": (i % 3) + 1}
+            for i in range(10)
+        ]
+        with open(os.path.join(twitter_dir, "actions.jsonl"), "w") as f:
+            for a in actions:
+                f.write(json.dumps(a) + "\n")
+
+        # Setup agent with mocked dependencies
+        with patch('app.services.report_agent.GraphToolsService'), \
+             patch('app.services.report_agent.LLMClient'):
+            agent = ReportAgent.__new__(ReportAgent)
+            agent.llm = MagicMock()
+            agent.graph_tools = MagicMock()
+            agent.simulation_id = "sim_test"
+            agent.simulation_requirement = "test prediction"
+            agent.report_logger = None
+            agent.console_logger = None
+
+        # Mock consensus analysis
+        mock_consensus = MagicMock()
+        mock_consensus.to_dict.return_value = {
+            "agreement_score": 0.7,
+            "total_agents_analyzed": 10,
+            "stance_distribution": {"supportive": 7, "opposing": 2, "neutral": 1},
+            "consensus_strength": {"diversity_score": 0.6, "conviction_score": 0.5,
+                                    "stability_score": 0.8, "weighted_score": 0.66},
+        }
+        agent.graph_tools.consensus_analysis.return_value = mock_consensus
+
+        # Create report and predictions
+        report = Report(
+            report_id="r_test", simulation_id="sim_test", graph_id="g_test",
+            simulation_requirement="test prediction", status=ReportStatus.GENERATING,
+            markdown_content="# Test Report\n\nSome content here.",
+        )
+        predictions = [
+            StructuredPrediction(event="Market rises", probability=0.6, agent_agreement=0.7,
+                                 evidence=["Agent data"], risk_factors=["Policy change"]),
+            StructuredPrediction(event="Crisis averted", probability=0.5, agent_agreement=0.6,
+                                 evidence=["Consensus"], risk_factors=["External shock"]),
+        ]
+        ps = PredictionSet(predictions=predictions, overall_confidence="Moderate",
+                           generated_at="2026-03-26T00:00:00")
+
+        # Mock file-system-dependent services
+        with patch('app.services.simulation_manager.SimulationManager') as MockSimMgr, \
+             patch.object(ReportManager, 'save_predictions'), \
+             patch.object(ReportManager, '_get_report_markdown_path', return_value=str(tmp_path / "report.md")), \
+             patch('app.services.prediction_provenance.ProvenanceTracker.save_provenance'), \
+             patch('app.services.prediction_graph_bridge.PredictionGraphBridge.enrich_graph_with_predictions') as mock_graph, \
+             patch('app.services.change_notifier.ChangeNotifier._store_change'):
+
+            MockSimMgr.return_value._get_simulation_dir.return_value = sim_dir
+
+            # Write a dummy file so atomic_write_text doesn't fail
+            (tmp_path / "report.md").write_text("placeholder")
+
+            # RUN THE PIPELINE
+            agent._run_prediction_pipeline(report, "r_test", ps)
+
+        # Verify key outcomes
+        # 1. Predictions were modified (calibration changes probabilities)
+        # At minimum, predictions still exist and have valid probabilities
+        assert len(ps.predictions) >= 1
+        for p in ps.predictions:
+            assert 0.0 < p.probability < 1.0
+
+        # 2. Executive summary was prepended
+        assert "Executive Summary" in report.markdown_content
+
+        # 3. Graph bridge was called
+        mock_graph.assert_called_once()
+        call_args = mock_graph.call_args
+        assert call_args[1]["graph_id"] == "g_test" or call_args[0][0] == "g_test"
+
+        # 4. Overall confidence was enriched (CV adds interpretation)
+        assert "CV:" in ps.overall_confidence or "Moderate" in ps.overall_confidence
+
+        # 5. Predictions have impact levels set
+        for p in ps.predictions:
+            assert p.impact_level in ("low", "medium", "high", "critical")

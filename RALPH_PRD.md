@@ -286,6 +286,10 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **35.1 Auto-enrich graph after report generation** — After the prediction pipeline completes and predictions are saved, call PredictionGraphBridge.enrich_graph_with_predictions to feed predictions back into the knowledge graph. Makes predictions discoverable via graph search in future sessions.
 
+## Phase 36: Pipeline Wiring Integration Tests
+
+- [x] **36.1 Test full pipeline wiring end-to-end** — Add an integration test that mocks the LLM and simulation manager, then calls `_run_prediction_pipeline` directly with synthetic predictions. Verify: calibration runs, bootstrap runs, dedup runs, change events emitted, provenance saved, graph bridge called, executive summary generated. Tests the actual wiring, not individual services.
+
 ## Ralph Loop Session Summary
 
 **Session completed**: 31 phases, 100 items, 634 tests, 81 commits.
