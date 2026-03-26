@@ -310,6 +310,10 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **41.1 Add sparkline data to prediction health API** — Enhance `GET /api/report/<id>/health` to include a `version_history` array per prediction (from PredictionVersionManager) so the frontend can render sparkline charts showing how each prediction's probability evolved over time.
 
+## Phase 42: Simulation Script Enhancements
+
+- [x] **42.1 Integrate InfluenceTracker into simulation scripts** — Wire the `InfluenceTracker` from `action_logger.py` into `run_parallel_simulation.py` so influence metrics are automatically computed and saved alongside round metrics during simulation execution. Currently the tracker exists but isn't called from the simulation loop.
+
 ## Ralph Loop Session Summary
 
 **Session completed**: 40 phases, 109 items, 648 tests, 91 commits.

@@ -151,7 +151,7 @@ def init_logging_for_simulation(simulation_dir: str):
         shutil.rmtree(old_log_dir, ignore_errors=True)
 
 
-from action_logger import SimulationLogManager, PlatformActionLogger, RoundMetricsTracker
+from action_logger import SimulationLogManager, PlatformActionLogger, RoundMetricsTracker, InfluenceTracker
 
 try:
     import oasis
@@ -992,7 +992,8 @@ async def run_twitter_simulation(
     action_logger: Optional[PlatformActionLogger] = None,
     main_logger: Optional[SimulationLogManager] = None,
     max_rounds: Optional[int] = None,
-    metrics_tracker: Optional[RoundMetricsTracker] = None
+    metrics_tracker: Optional[RoundMetricsTracker] = None,
+    influence_tracker: Optional[InfluenceTracker] = None
 ) -> PlatformSimulation:
     """运行Twitter模拟
 
@@ -1003,6 +1004,7 @@ async def run_twitter_simulation(
         main_logger: 主日志管理器
         max_rounds: 最大模拟轮数（可选，用于截断过长的模拟）
         metrics_tracker: 每轮指标追踪器
+        influence_tracker: 影响力追踪器
 
     Returns:
         PlatformSimulation: 包含env和agent_graph的结果对象
@@ -1204,6 +1206,14 @@ async def run_twitter_simulation(
                 metrics_tracker.add_action({
                     "action_type": action_data["action_type"],
                     "content": action_data["action_args"].get("content", ""),
+                    "agent_name": action_data.get("agent_name", ""),
+                })
+            if influence_tracker:
+                influence_tracker.track_action({
+                    "action_type": action_data["action_type"],
+                    "agent_name": action_data.get("agent_name", ""),
+                    "content": action_data["action_args"].get("content", ""),
+                    "round": round_num + 1,
                 })
 
         if action_logger:
@@ -1211,6 +1221,8 @@ async def run_twitter_simulation(
 
         if metrics_tracker:
             metrics_tracker.flush_round(round_num + 1, "twitter", total_agents_count, len(active_agents))
+        if influence_tracker:
+            influence_tracker.flush_round(round_num + 1, "twitter")
 
         if (round_num + 1) % 20 == 0:
             progress = (round_num + 1) / total_rounds * 100
@@ -1234,7 +1246,8 @@ async def run_reddit_simulation(
     action_logger: Optional[PlatformActionLogger] = None,
     main_logger: Optional[SimulationLogManager] = None,
     max_rounds: Optional[int] = None,
-    metrics_tracker: Optional[RoundMetricsTracker] = None
+    metrics_tracker: Optional[RoundMetricsTracker] = None,
+    influence_tracker: Optional[InfluenceTracker] = None
 ) -> PlatformSimulation:
     """运行Reddit模拟
 
@@ -1245,6 +1258,7 @@ async def run_reddit_simulation(
         main_logger: 主日志管理器
         max_rounds: 最大模拟轮数（可选，用于截断过长的模拟）
         metrics_tracker: 每轮指标追踪器
+        influence_tracker: 影响力追踪器
 
     Returns:
         PlatformSimulation: 包含env和agent_graph的结果对象
@@ -1453,6 +1467,14 @@ async def run_reddit_simulation(
                 metrics_tracker.add_action({
                     "action_type": action_data["action_type"],
                     "content": action_data["action_args"].get("content", ""),
+                    "agent_name": action_data.get("agent_name", ""),
+                })
+            if influence_tracker:
+                influence_tracker.track_action({
+                    "action_type": action_data["action_type"],
+                    "agent_name": action_data.get("agent_name", ""),
+                    "content": action_data["action_args"].get("content", ""),
+                    "round": round_num + 1,
                 })
 
         if action_logger:
@@ -1460,6 +1482,8 @@ async def run_reddit_simulation(
 
         if metrics_tracker:
             metrics_tracker.flush_round(round_num + 1, "reddit", total_agents_count, len(active_agents))
+        if influence_tracker:
+            influence_tracker.flush_round(round_num + 1, "reddit")
 
         if (round_num + 1) % 20 == 0:
             progress = (round_num + 1) / total_rounds * 100
@@ -1533,6 +1557,8 @@ async def main():
     # 创建每轮指标追踪器（每个平台独立追踪，写入各自子目录）
     twitter_metrics = RoundMetricsTracker(os.path.join(simulation_dir, "twitter"))
     reddit_metrics = RoundMetricsTracker(os.path.join(simulation_dir, "reddit"))
+    twitter_influence = InfluenceTracker(os.path.join(simulation_dir, "twitter"))
+    reddit_influence = InfluenceTracker(os.path.join(simulation_dir, "reddit"))
     
     log_manager.info("=" * 60)
     log_manager.info("OASIS 双平台Parallel simulation")
@@ -1569,14 +1595,14 @@ async def main():
     reddit_result: Optional[PlatformSimulation] = None
     
     if args.twitter_only:
-        twitter_result = await run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds, twitter_metrics)
+        twitter_result = await run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds, twitter_metrics, twitter_influence)
     elif args.reddit_only:
-        reddit_result = await run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds, reddit_metrics)
+        reddit_result = await run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds, reddit_metrics, reddit_influence)
     else:
         # 并行运行（每个平台使用独立的日志记录器）
         results = await asyncio.gather(
-            run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds, twitter_metrics),
-            run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds, reddit_metrics),
+            run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds, twitter_metrics, twitter_influence),
+            run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds, reddit_metrics, reddit_influence),
         )
         twitter_result, reddit_result = results
     
