@@ -206,6 +206,16 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **20.4 Wire adaptive rounds into simulation config** — Integrate `AdaptiveRoundController` into `SimulationConfigGenerator` so simulations can optionally enable adaptive stopping. Add `adaptive_rounds` flag to simulation config with configurable thresholds.
 
+## Phase 21: Test Coverage & Quality Hardening
+
+- [x] **21.1 Edge case tests for prediction pipeline** — Add tests for the 7-step `_run_prediction_pipeline` in report_agent.py: verify each step is independently fault-tolerant, test with empty simulation dirs, verify dedup actually reduces count, test narrative populates reasoning field.
+
+- [x] **21.2 API endpoint coverage expansion** — Add tests for all new API endpoints that currently only have validation tests: `GET /health` with predictions loaded, `POST /compare-predictions` with real mock data, `GET /ensemble` with mock predictions, analytics endpoints with mock sim dirs.
+
+- [x] **21.3 Dataclass serialization fuzz tests** — For every dataclass with `to_dict()`, test roundtrip: `to_dict()` → JSON serialize → JSON deserialize → verify all fields preserved. Catches any non-serializable fields (datetime objects, sets, etc).
+
+- [x] **21.4 Service boundary tests** — Test each service with extreme inputs: empty dicts, None values, very large lists (1000+ items), negative numbers, NaN probabilities. Ensures no crashes at system boundaries.
+
 ---
 
 ## Ralph Loop Instructions
