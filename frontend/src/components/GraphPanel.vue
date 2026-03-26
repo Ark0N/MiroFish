@@ -243,7 +243,8 @@ const props = defineProps({
   graphData: Object,
   loading: Boolean,
   currentPhase: Number,
-  isSimulating: Boolean
+  isSimulating: Boolean,
+  predictions: { type: Array, default: () => [] }
 })
 
 const emit = defineEmits(['refresh', 'toggle-maximize'])
@@ -738,6 +739,29 @@ const renderGraph = () => {
     .style('pointer-events', 'none')
     .style('font-family', 'system-ui, sans-serif')
 
+  // Prediction badges — small indicator on nodes that appear in predictions
+  const predictionNodes = new Set()
+  if (props.predictions && props.predictions.length > 0) {
+    for (const pred of props.predictions) {
+      const eventLower = (pred.event || '').toLowerCase()
+      for (const node of nodes) {
+        if (node.name && eventLower.includes(node.name.toLowerCase())) {
+          predictionNodes.add(node.id || node.name)
+        }
+      }
+    }
+  }
+
+  const predBadges = nodeGroup.selectAll('.pred-badge')
+    .data(nodes.filter(n => predictionNodes.has(n.id || n.name)))
+    .enter().append('circle')
+    .attr('class', 'pred-badge')
+    .attr('r', 5)
+    .attr('fill', '#8b5cf6')
+    .attr('stroke', '#fff')
+    .attr('stroke-width', 1.5)
+    .style('pointer-events', 'none')
+
   simulation.on('tick', () => {
     // 更新曲线路径
     link.attr('d', d => getLinkPath(d))
@@ -771,6 +795,10 @@ const renderGraph = () => {
     nodeLabels
       .attr('x', d => d.x)
       .attr('y', d => d.y)
+
+    predBadges
+      .attr('cx', d => d.x + 10)
+      .attr('cy', d => d.y - 10)
   })
   
   // 点击空白处关闭详情面板

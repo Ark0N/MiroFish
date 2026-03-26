@@ -330,6 +330,10 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **46.1 Add influence and memory data to analytics** — Enhance AnalyticsService.simulation_analytics() to also read `influence_metrics.jsonl` and `agent_memory.json`, returning influence rankings and agent stance summaries alongside the existing sentiment/faction/momentum data. Complete the analytics data pipeline.
 
+## Phase 47: Prediction Summary in Graph Panel
+
+- [x] **47.1 Show prediction count in GraphPanel node tooltips** — When the graph has predictions linked back (via PredictionGraphBridge), enhance the GraphPanel.vue D3 visualization to show a small prediction badge on entity nodes that appear in predictions. Adds a visual connection between the knowledge graph and predictions.
+
 ## Ralph Loop Session Summary
 
 **Session completed**: 40 phases, 109 items, 648 tests, 91 commits.
