@@ -148,13 +148,13 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 ## Phase 15: Advanced Simulation Dynamics
 
-- [~] **15.1 Adaptive round count** — Instead of fixed round counts, detect when consensus has stabilized (sentiment velocity < threshold for 3+ rounds) and auto-stop the simulation. Saves compute without losing prediction quality.
+- [x] **15.1 Adaptive round count** — Instead of fixed round counts, detect when consensus has stabilized (sentiment velocity < threshold for 3+ rounds) and auto-stop the simulation. Saves compute without losing prediction quality.
 
-- [ ] **15.2 Agent coalition formation** — Detect when agents spontaneously form coalitions (coordinated posting, mutual amplification). Track coalition stability and influence on predictions.
+- [x] **15.2 Agent coalition formation** — Detect when agents spontaneously form coalitions (coordinated posting, mutual amplification). Track coalition stability and influence on predictions.
 
-- [ ] **15.3 Information cascade detection** — Identify when a single agent's post triggers a cascade of opinion changes across the network. These cascades are critical prediction signals — rapid adoption = strong consensus, failed cascades = weak signal.
+- [x] **15.3 Information cascade detection** — Identify when a single agent's post triggers a cascade of opinion changes across the network. These cascades are critical prediction signals — rapid adoption = strong consensus, failed cascades = weak signal.
 
-- [ ] **15.4 Simulation replay engine** — Enable replaying a simulation from any round with modified parameters or injected events. Compare alternate timelines to assess prediction robustness.
+- [x] **15.4 Simulation replay engine** — Enable replaying a simulation from any round with modified parameters or injected events. Compare alternate timelines to assess prediction robustness.
 
 ---
 

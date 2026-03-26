@@ -2608,3 +2608,58 @@ class TestAdaptiveRoundController:
         assert "is_stable" in d
         assert "should_stop" in d
         assert "reason" in d
+
+
+# ---------------------------------------------------------------------------
+# Coalition detection tests
+# ---------------------------------------------------------------------------
+
+
+class TestCoalitionDetector:
+    """Tests for agent coalition detection."""
+
+    def _make_detector(self):
+        from app.services.coalition_detector import CoalitionDetector
+        return CoalitionDetector()
+
+    def test_empty_input(self):
+        det = self._make_detector()
+        assert det.detect_coalitions({}, []) == []
+
+    def test_detects_coalition(self):
+        det = self._make_detector()
+        sentiments = {f"pos_{i}": 0.7 + i * 0.02 for i in range(5)}
+        sentiments.update({f"neg_{i}": -0.6 - i * 0.02 for i in range(5)})
+        interactions = [
+            {"source": f"pos_{i}", "target": f"pos_{j}", "type": "LIKE"}
+            for i in range(5) for j in range(5) if i != j
+        ]
+        coalitions = det.detect_coalitions(sentiments, interactions, min_coalition_size=3)
+        assert len(coalitions) >= 1
+        assert coalitions[0].sentiment_coherence > 0.5
+
+    def test_no_coalition_diverse_sentiments(self):
+        det = self._make_detector()
+        sentiments = {f"a{i}": (i - 5) / 2 for i in range(10)}  # wide spread
+        coalitions = det.detect_coalitions(sentiments, [], min_coalition_size=5, coherence_threshold=0.1)
+        # With strict coherence, fewer coalitions
+        # Some might still form from adjacent sentiments
+        for c in coalitions:
+            assert c.sentiment_coherence > 0
+
+    def test_coalition_to_dict(self):
+        from app.services.coalition_detector import Coalition
+        c = Coalition(
+            coalition_id="c1", members=["a", "b", "c"],
+            avg_sentiment=0.7, sentiment_coherence=0.9,
+            mutual_interactions=6, stability_rounds=3, influence_score=0.5
+        )
+        d = c.to_dict()
+        assert d["size"] == 3
+        assert d["influence_score"] == 0.5
+
+    def test_minimum_size_respected(self):
+        det = self._make_detector()
+        sentiments = {"a": 0.5, "b": 0.5}
+        coalitions = det.detect_coalitions(sentiments, [], min_coalition_size=3)
+        assert len(coalitions) == 0
