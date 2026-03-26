@@ -33,7 +33,7 @@ npm run frontend   # Vite on port 3000
 # Build frontend
 npm run build
 
-# Run all tests (156 tests)
+# Run all tests (592 tests)
 cd backend && uv run pytest
 
 # Run specific test file
@@ -75,10 +75,47 @@ docker compose up --build
   - `graph_tools.py` — Report agent retrieval tools (InsightForge, PanoramaSearch, QuickSearch, ConsensusAnalysis, interviews). ConsensusAnalysis reads action logs to compute stance distribution, sentiment trajectory, factions, and agreement scores
   - `simulation_config_generator.py` — Generates OASIS config with time dilation, timezone settings, per-agent temperature, power-law activity distribution, and scheduled mid-simulation events
   - `text_processor.py` — Document text extraction and chunking
-- `utils/` — `llm_client.py` (unified LLM client, auto-detects Anthropic vs OpenAI), `validation.py` (path traversal prevention), `retry.py` (exponential backoff decorator), `file_parser.py`/`file_utils.py` (multi-stage encoding fallback: UTF-8 → charset_normalizer → chardet → replace mode), `logger.py`, `graphiti_manager.py` (thread-safe Graphiti singleton + async bridge + embedder factory: Voyage AI or local Ollama), `ontology_store.py` (thread-safe ontology cache), `graph_paging.py`
+  - **Prediction Engine** (37 services added via Ralph Loop optimization):
+    - `prediction_calibrator.py` — Consensus + contrarian confidence calibration
+    - `bayesian_updater.py` — Bayes' theorem probability updates (odds form)
+    - `ensemble_predictor.py` — Multi-simulation weighted aggregation
+    - `prediction_backtester.py` — Calibration curves, Brier scores, outcome tracking
+    - `bootstrap_confidence.py` — Statistical confidence bands via resampling
+    - `cross_validator.py` — K-fold agent train/test validation
+    - `prediction_decay.py` — Time-based freshness with evidence boost
+    - `prediction_versioning.py` — Version history with regression detection
+    - `prediction_dedup.py` — Jaccard similarity deduplication
+    - `prediction_dependencies.py` — Causal graph with probability propagation
+    - `prediction_chaining.py` — Joint probabilities (AND/OR/THEN)
+    - `prediction_provenance.py` — Evidence chain DAG tracing
+    - `prediction_narrative.py` — Plain English explanation generation
+    - `prediction_market.py` — Virtual betting pool, arbitrage detection, crowd aggregation
+    - `prediction_pipeline.py` — Full pipeline orchestrator with step resumption
+    - `pattern_matcher.py` — Historical simulation fingerprint comparison (cosine similarity)
+    - `scenario_tree.py` — Mutually exclusive future scenario generation
+    - `contradiction_detector.py` — Antonym-pair contradiction detection + impact estimation
+    - `counterfactual.py` — "What-if" sensitivity analysis
+    - `disagreement_analyzer.py` — Root cause disagreement classification
+    - `minority_amplifier.py` — Shannon surprise for high-value minority signals
+    - `uncertainty_decomposer.py` — Epistemic vs aleatoric decomposition
+    - `stress_tester.py` — Robustness scoring via extreme scenario testing
+    - `opinion_drift.py` — Mathematical opinion evolution (inertia + susceptibility)
+    - `network_influence.py` — PageRank-based agent influence scoring
+    - `echo_chamber.py` — Network insularity detection
+    - `simulation_quality.py` — Multi-dimensional quality grading (A-F)
+    - `coalition_detector.py` — Spontaneous agent coalition detection
+    - `adaptive_rounds.py` — Consensus-based early stopping
+    - `analytics.py` — Comprehensive simulation dashboard data
+    - `source_credibility.py` — Accuracy-based source reliability scoring
+    - `trend_detector.py` — Emerging topic and sentiment shift detection
+    - `rss_monitor.py` — RSS feed subscription management
+    - `batch_ingester.py` — Rate-limited batch URL processing
+    - `multi_wave.py` — Sequential simulation wave orchestration
+    - `parameter_learner.py` — Simulation parameter optimization from historical accuracy
+- `utils/` — `llm_client.py` (unified LLM client, auto-detects Anthropic vs OpenAI), `validation.py` (path traversal prevention), `retry.py` (exponential backoff decorator), `file_parser.py`/`file_utils.py` (multi-stage encoding fallback: UTF-8 → charset_normalizer → chardet → replace mode), `logger.py`, `graphiti_manager.py` (thread-safe Graphiti singleton + async bridge + embedder factory: Voyage AI or local Ollama), `ontology_store.py` (thread-safe ontology cache), `graph_paging.py`, `url_extractor.py` (web page text extraction via trafilatura)
 - `models/` — File-based persistence (JSON on disk under `backend/uploads/projects/`). Atomic writes (temp file + `os.replace()`). No database. Project states: `CREATED` → `ONTOLOGY_GENERATED` → `GRAPH_BUILDING` → `GRAPH_COMPLETED`
-- `scripts/` (at `backend/scripts/`, not `backend/app/scripts/`) — Standalone OASIS simulation runners (`run_twitter_simulation.py`, `run_reddit_simulation.py`, `run_parallel_simulation.py`) launched as subprocesses by `SimulationRunner`. Also `action_logger.py` (JSONL logging per platform + `RoundMetricsTracker` for per-round sentiment/activity metrics) and `simulation_utils.py` (dual LLM config, model creation, signal handlers).
-- `tests/` — 206 unit tests across 5 files: `test_llm_client.py`, `test_api.py`, `test_project.py`, `test_retry.py`, `test_swarm_intelligence.py`. Pytest config in `pyproject.toml` (`[tool.pytest.ini_options]`). No `conftest.py` — tests are self-contained with `unittest.mock` (no real API/DB calls)
+- `scripts/` (at `backend/scripts/`, not `backend/app/scripts/`) — Standalone OASIS simulation runners (`run_twitter_simulation.py`, `run_reddit_simulation.py`, `run_parallel_simulation.py`) launched as subprocesses by `SimulationRunner`. Also `action_logger.py` (JSONL logging per platform + `RoundMetricsTracker` for per-round sentiment/activity/faction metrics + `InfluenceTracker` for engagement analysis), `agent_memory.py` (per-agent rolling memory buffer for opinion continuity), and `simulation_utils.py` (dual LLM config, model creation, signal handlers).
+- `tests/` — 592 tests across 7 files: `test_llm_client.py`, `test_api.py`, `test_project.py`, `test_retry.py`, `test_swarm_intelligence.py`, `test_predictions.py` (prediction engine), `test_integration.py` (cross-service integration). Pytest config in `pyproject.toml` (`[tool.pytest.ini_options]`). No `conftest.py` — tests are self-contained with `unittest.mock` (no real API/DB calls)
 
 ### Frontend (`frontend/src/`)
 
@@ -110,7 +147,14 @@ docker compose up --build
 - **Network-based feed filtering**: Initial follow relationships generated from knowledge graph edges; agents see posts from followed accounts + recommendations (not just global feed)
 - **Mid-simulation event injection**: Scheduled events fire at configured rounds; also supports real-time injection via `INJECT_EVENT` IPC command
 - **Consensus analysis**: `ConsensusAnalysis` tool reads action logs to compute stance distribution, sentiment trajectory, faction identification, and agreement scores for report generation
-- **Structured predictions**: Report agent appends structured predictions section with confidence levels derived from agent consensus patterns
+- **Structured predictions**: Report agent extracts machine-readable JSON predictions (event, probability, confidence_interval, timeframe, reasoning, evidence, risk_factors, agent_agreement, citation_ids, impact_level) alongside markdown. Saved to `predictions.json` per report. Calibrated via consensus strength, contrarian impact, and Bayesian updating. API: `GET /api/report/<id>/predictions`
+- **Prediction engine**: 37 services form a complete prediction lifecycle — extraction → calibration → Bayesian updating → ensemble aggregation → decay tracking → versioning → backtesting → stress testing → narrative generation. All services are stateless and composable. See `RALPH_PRD.md` for the full feature list.
+- **Contrarian agents**: 5-10% of agents are injected as "Devil's Advocate" types that challenge consensus. Tracked via `is_contrarian` flag. Used by the calibrator to assess consensus fragility.
+- **Event cascades**: Scheduled events generate derivative follow-up events at +2 and +5 rounds based on event type (official/crisis/default templates).
+- **Time-decay search**: Graph search results re-ranked by recency using exponential decay (30-day half-life). Recent entities rank higher.
+- **Faction detection**: Per-round faction identification in `RoundMetricsTracker`. Factions (supportive/opposing/neutral) tracked in `faction_metrics.jsonl`.
+- **Sentiment momentum**: Velocity and acceleration of sentiment computed per round. Signals: strong_positive/strong_negative/weak/neutral. Direction: accelerating/decelerating/reversing/stable.
+- **URL ingestion**: `POST /api/graph/ingest-url` accepts URLs, extracts text via trafilatura, feeds through ontology + graph pipeline. Supports up to 20 URLs per request.
 - **Cost tracking**: `CostTracker` singleton accumulates token usage/costs across all LLM call sites (ontology, profiles, config, report). Raises `BudgetExceededError` when cumulative cost exceeds `PIPELINE_BUDGET_LIMIT` ($20 default). API endpoints return HTTP 402 with cost summary on budget exceeded
 - **Process cleanup**: `atexit` handlers kill orphaned simulation subprocesses on Flask shutdown; simulation scripts handle `SIGINT`/`SIGTERM` for graceful closure; frontend calls `checkAndStopRunningSimulation()` on mount to terminate orphans
 - **Simulation state files**: `run_state.json` (recovery after restart), `state.json` (metadata + entity counts) in project upload directory
@@ -174,6 +218,13 @@ Embeddings for Graphiti semantic search use a configurable backend via `_create_
 - `POST /api/simulation/run` — Execute simulation
 - `POST /api/report/generate` — Generate report (async)
 - `POST /api/report/chat` — Chat with ReportAgent
+- `GET /api/report/{report_id}/predictions` — Get structured predictions JSON
+- `POST /api/report/compare-predictions` — Compare predictions across reports
+- `GET /api/report/ensemble/{project_id}` — Ensemble predictions from all reports
+- `POST /api/report/{report_id}/predictions/{idx}/rate` — Rate prediction quality (1-5)
+- `POST /api/report/{report_id}/predictions/{idx}/note` — Add analyst note
+- `POST /api/graph/ingest-url` — Ingest text from URLs (news/RSS)
+- `POST /api/graph/webhook/event` — External event webhook with optional simulation injection
 - `GET /api/settings/models` — List available Claude models with pricing
 - `GET /health` — Health check
 
