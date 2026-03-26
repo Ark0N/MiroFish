@@ -114,6 +114,11 @@ class TimeSimulationConfig:
     work_hours: List[int] = field(default_factory=lambda: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18])
     work_activity_multiplier: float = 0.7
 
+    @property
+    def max_rounds(self) -> int:
+        """Compute total rounds from simulation hours and minutes per round."""
+        return max(1, (self.total_simulation_hours * 60) // self.minutes_per_round)
+
 
 @dataclass
 class EventConfig:
