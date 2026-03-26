@@ -808,6 +808,17 @@ def get_prediction_health(report_id: str):
         version_probs = [p.get("probability", 0.5) for p in pred_dicts]
         stability = tester.compute_stability_index(version_probs) if len(version_probs) >= 2 else {"stability_index": "insufficient_data"}
 
+        # Version history sparklines per prediction
+        version_histories = []
+        try:
+            from ..services.prediction_versioning import PredictionVersionManager
+            vmgr = PredictionVersionManager()
+            for i in range(len(pred_dicts)):
+                history = vmgr.get_history(report_id, i)
+                version_histories.append([v.probability for v in history] if history else [pred_dicts[i].get("probability", 0.5)])
+        except Exception:
+            version_histories = [[p.get("probability", 0.5)] for p in pred_dicts]
+
         return jsonify({
             "success": True,
             "data": {
@@ -815,6 +826,7 @@ def get_prediction_health(report_id: str):
                 "contradictions": contradictions,
                 "uncertainties": uncertainties,
                 "stability": stability,
+                "version_histories": version_histories,
                 "num_predictions": len(pred_dicts),
             }
         })

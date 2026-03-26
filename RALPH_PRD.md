@@ -306,6 +306,10 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **40.1 Update all counts and close session** — Final CLAUDE.md sync with accurate counts: 648 tests, 40+ services, 8 frontend components, 24+ API endpoints. Update RALPH_PRD session summary. This is the capstone item.
 
+## Phase 41: Prediction Trend Sparklines
+
+- [x] **41.1 Add sparkline data to prediction health API** — Enhance `GET /api/report/<id>/health` to include a `version_history` array per prediction (from PredictionVersionManager) so the frontend can render sparkline charts showing how each prediction's probability evolved over time.
+
 ## Ralph Loop Session Summary
 
 **Session completed**: 40 phases, 109 items, 648 tests, 91 commits.
