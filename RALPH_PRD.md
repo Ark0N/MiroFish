@@ -176,6 +176,26 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **17.4 Adversarial agent injection** — Beyond contrarians (who challenge consensus), add adversarial agents that deliberately spread misinformation. Test whether the prediction system is resilient to bad-faith actors.
 
+## Phase 18: Prediction Composition & Reasoning
+
+- [ ] **18.1 Prediction chaining engine** — Given a set of predictions with dependency edges, compute joint probabilities for compound events (e.g., P(A AND B), P(A OR B), P(A THEN B)). Uses the dependency graph from 10.2 and conditional probability rules.
+
+- [ ] **18.2 Scenario tree builder** — Build a tree of mutually exclusive future scenarios from predictions. Each branch is a combination of prediction outcomes weighted by joint probability. Enables "best case / worst case / most likely" framing.
+
+- [ ] **18.3 Prediction contradiction detector** — Identify pairs of predictions that are logically contradictory (e.g., "prices rise" and "deflation occurs"). Flag contradictions with severity levels and suggest which prediction has stronger evidence.
+
+- [ ] **18.4 Impact magnitude estimator** — For each prediction, estimate the magnitude of impact (not just probability) using agent engagement intensity, post length, and emotional language markers. Produces a 1-10 impact score.
+
+## Phase 19: System Integration Tests
+
+- [ ] **19.1 Service integration smoke tests** — Add integration tests that verify all 35+ services can be imported, instantiated, and their primary methods called without errors. Catches import cycles and missing dependencies.
+
+- [ ] **19.2 Data flow integration test** — Test the full data flow: create predictions → calibrate → update via Bayesian → check decay → compute ensemble → generate narrative. Verify data integrity at each step.
+
+- [ ] **19.3 Analytics pipeline test** — Test the full analytics path: create simulation metrics → extract fingerprint → detect factions → compute influence → detect echo chambers → score quality. All with synthetic data.
+
+- [ ] **19.4 Prediction lifecycle test** — Test a complete prediction lifecycle: create → version → calibrate → add evidence → decay → resolve → backtest → compute stability. Verify state consistency throughout.
+
 ---
 
 ## Ralph Loop Instructions
