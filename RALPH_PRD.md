@@ -282,6 +282,10 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **34.1 Emit change events from prediction pipeline** — Integrate ChangeNotifier into `_run_prediction_pipeline` in report_agent.py. After calibration and bootstrap steps modify probabilities, compare old vs new and emit change events for any significant shifts. Also wire into the Bayesian updater path.
 
+## Phase 35: Wire Graph Bridge Into Pipeline
+
+- [x] **35.1 Auto-enrich graph after report generation** — After the prediction pipeline completes and predictions are saved, call PredictionGraphBridge.enrich_graph_with_predictions to feed predictions back into the knowledge graph. Makes predictions discoverable via graph search in future sessions.
+
 ## Ralph Loop Session Summary
 
 **Session completed**: 31 phases, 100 items, 634 tests, 81 commits.

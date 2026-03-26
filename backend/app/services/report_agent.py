@@ -2230,6 +2230,20 @@ Format your response as a markdown section that can be appended to the report:
             atomic_write_text(full_report_path, report.markdown_content)
             logger.info("Executive summary with risk matrix prepended to report")
 
+        # --- Enrich knowledge graph with predictions ---
+        try:
+            from .prediction_graph_bridge import PredictionGraphBridge
+            bridge = PredictionGraphBridge()
+            bridge.enrich_graph_with_predictions(
+                graph_id=report.graph_id,
+                predictions=[p.to_dict() for p in prediction_set.predictions],
+                simulation_id=self.simulation_id,
+                report_id=report_id,
+            )
+            logger.info("Predictions fed back into knowledge graph")
+        except Exception as e:
+            logger.warning(f"Graph enrichment skipped: {e}")
+
     def _extract_agent_sentiments(self, simulation_dir: str) -> dict:
         """Extract agent sentiments from simulation action logs."""
         import os as _os
