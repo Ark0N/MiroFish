@@ -57,6 +57,58 @@ export const getPredictions = (reportId) => {
 }
 
 /**
+ * Get prediction health dashboard
+ * @param {string} reportId
+ */
+export const getPredictionHealth = (reportId) => {
+  return service.get(`/api/report/${reportId}/health`)
+}
+
+/**
+ * Compare predictions across reports
+ * @param {string[]} reportIds
+ */
+export const comparePredictions = (reportIds) => {
+  return service.post('/api/report/compare-predictions', { report_ids: reportIds })
+}
+
+/**
+ * Get ensemble predictions for a project
+ * @param {string} projectId
+ */
+export const getEnsemblePredictions = (projectId) => {
+  return service.get(`/api/report/ensemble/${projectId}`)
+}
+
+/**
+ * Rate a prediction
+ * @param {string} reportId
+ * @param {number} predictionIdx
+ * @param {number} rating - 1-5
+ * @param {string} feedback
+ */
+export const ratePrediction = (reportId, predictionIdx, rating, feedback = '') => {
+  return service.post(`/api/report/${reportId}/predictions/${predictionIdx}/rate`, { rating, feedback })
+}
+
+/**
+ * Add analyst note to a prediction
+ * @param {string} reportId
+ * @param {number} predictionIdx
+ * @param {string} note
+ */
+export const addPredictionNote = (reportId, predictionIdx, note) => {
+  return service.post(`/api/report/${reportId}/predictions/${predictionIdx}/note`, { note })
+}
+
+/**
+ * Get prediction service catalog
+ */
+export const getPredictionCatalog = () => {
+  return service.get('/api/report/catalog')
+}
+
+/**
  * 与 Report Agent 对话
  * @param {Object} data - { simulation_id, message, chat_history? }
  */

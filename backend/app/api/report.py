@@ -515,6 +515,113 @@ def get_predictions(report_id: str):
         }), 500
 
 
+@report_bp.route('/selftest', methods=['GET'])
+def prediction_selftest():
+    """Run minimal self-test on all prediction services."""
+    results = {}
+
+    tests = [
+        ("PredictionCalibrator", lambda: __import__('app.services.prediction_calibrator', fromlist=['PredictionCalibrator']).PredictionCalibrator().calibrate([])),
+        ("BayesianUpdater", lambda: __import__('app.services.bayesian_updater', fromlist=['BayesianUpdater']).BayesianUpdater().update_from_consensus(0.5, 0.5, {}, 0)),
+        ("BootstrapConfidence", lambda: __import__('app.services.bootstrap_confidence', fromlist=['BootstrapConfidence']).BootstrapConfidence().compute_confidence_interval([])),
+        ("CrossValidator", lambda: __import__('app.services.cross_validator', fromlist=['CrossValidator']).CrossValidator().validate({})),
+        ("PredictionDeduplicator", lambda: __import__('app.services.prediction_dedup', fromlist=['PredictionDeduplicator']).PredictionDeduplicator().deduplicate([])),
+        ("ContradictionDetector", lambda: __import__('app.services.contradiction_detector', fromlist=['ContradictionDetector']).ContradictionDetector().detect_contradictions([])),
+        ("PredictionNarrativeGenerator", lambda: __import__('app.services.prediction_narrative', fromlist=['PredictionNarrativeGenerator']).PredictionNarrativeGenerator().generate_narrative({"event": "test", "probability": 0.5, "evidence": []})),
+        ("UncertaintyDecomposer", lambda: __import__('app.services.uncertainty_decomposer', fromlist=['UncertaintyDecomposer']).UncertaintyDecomposer().decompose(0.5, [])),
+        ("PredictionStressTester", lambda: __import__('app.services.stress_tester', fromlist=['PredictionStressTester']).PredictionStressTester().stress_test({}, 0.5)),
+        ("ScenarioTreeBuilder", lambda: __import__('app.services.scenario_tree', fromlist=['ScenarioTreeBuilder']).ScenarioTreeBuilder().build_tree([])),
+        ("PredictionMarket", lambda: __import__('app.services.prediction_market', fromlist=['PredictionMarket']).PredictionMarket().create_market("test", {})),
+        ("TrendDetector", lambda: __import__('app.services.trend_detector', fromlist=['TrendDetector']).TrendDetector().detect_trends([])),
+    ]
+
+    passed = 0
+    failed = 0
+    for name, test_fn in tests:
+        try:
+            test_fn()
+            results[name] = "pass"
+            passed += 1
+        except Exception as e:
+            results[name] = f"fail: {str(e)[:100]}"
+            failed += 1
+
+    return jsonify({
+        "success": failed == 0,
+        "data": {
+            "results": results,
+            "passed": passed,
+            "failed": failed,
+            "total": len(tests),
+        }
+    })
+
+
+@report_bp.route('/catalog', methods=['GET'])
+def prediction_catalog():
+    """List all available prediction services and endpoints."""
+    return jsonify({
+        "success": True,
+        "data": {
+            "services": [
+                {"name": "PredictionCalibrator", "description": "Consensus + contrarian confidence calibration"},
+                {"name": "BayesianUpdater", "description": "Bayes' theorem probability updates"},
+                {"name": "EnsemblePredictor", "description": "Multi-simulation weighted aggregation"},
+                {"name": "PredictionBacktester", "description": "Calibration curves and Brier scores"},
+                {"name": "BootstrapConfidence", "description": "Statistical confidence bands via resampling"},
+                {"name": "CrossValidator", "description": "K-fold agent train/test validation"},
+                {"name": "PredictionDecayTracker", "description": "Time-based freshness with evidence boost"},
+                {"name": "PredictionVersionManager", "description": "Version history with regression detection"},
+                {"name": "PredictionDeduplicator", "description": "Jaccard similarity deduplication"},
+                {"name": "PredictionDependencyManager", "description": "Causal graph with probability propagation"},
+                {"name": "PredictionChainingEngine", "description": "Joint probabilities (AND/OR/THEN)"},
+                {"name": "ProvenanceTracker", "description": "Evidence chain DAG tracing"},
+                {"name": "PredictionNarrativeGenerator", "description": "Plain English explanation generation"},
+                {"name": "PredictionMarket", "description": "Virtual betting pool and crowd aggregation"},
+                {"name": "PatternMatcher", "description": "Historical simulation fingerprint comparison"},
+                {"name": "ScenarioTreeBuilder", "description": "Mutually exclusive future scenario generation"},
+                {"name": "ContradictionDetector", "description": "Antonym-pair contradiction detection + impact"},
+                {"name": "CounterfactualAnalyzer", "description": "What-if sensitivity analysis"},
+                {"name": "DisagreementAnalyzer", "description": "Root cause disagreement classification"},
+                {"name": "MinorityAmplifier", "description": "Shannon surprise for minority signals"},
+                {"name": "UncertaintyDecomposer", "description": "Epistemic vs aleatoric decomposition"},
+                {"name": "PredictionStressTester", "description": "Robustness scoring via extreme scenarios"},
+                {"name": "OpinionDriftModel", "description": "Mathematical opinion evolution model"},
+                {"name": "NetworkInfluenceScorer", "description": "PageRank-based agent influence"},
+                {"name": "EchoChamberDetector", "description": "Network insularity detection"},
+                {"name": "SimulationQualityScorer", "description": "Multi-dimensional quality grading (A-F)"},
+                {"name": "CoalitionDetector", "description": "Spontaneous agent coalition detection"},
+                {"name": "AdaptiveRoundController", "description": "Consensus-based early stopping"},
+                {"name": "AnalyticsService", "description": "Comprehensive simulation dashboard data"},
+                {"name": "SourceCredibilityTracker", "description": "Accuracy-based source reliability"},
+                {"name": "TrendDetector", "description": "Emerging topic and sentiment shift detection"},
+                {"name": "RSSMonitor", "description": "RSS feed subscription management"},
+                {"name": "BatchIngester", "description": "Rate-limited batch URL processing"},
+                {"name": "MultiWaveManager", "description": "Sequential simulation wave orchestration"},
+                {"name": "ParameterLearner", "description": "Simulation parameter optimization"},
+                {"name": "PredictionPipeline", "description": "Full pipeline orchestrator with resumption"},
+            ],
+            "endpoints": [
+                {"method": "GET", "path": "/api/report/<id>/predictions", "description": "Structured predictions JSON"},
+                {"method": "GET", "path": "/api/report/<id>/health", "description": "Prediction health dashboard"},
+                {"method": "POST", "path": "/api/report/compare-predictions", "description": "Compare across reports"},
+                {"method": "GET", "path": "/api/report/ensemble/<project_id>", "description": "Ensemble aggregation"},
+                {"method": "POST", "path": "/api/report/<id>/predictions/<idx>/rate", "description": "Rate prediction"},
+                {"method": "POST", "path": "/api/report/<id>/predictions/<idx>/note", "description": "Add analyst note"},
+                {"method": "POST", "path": "/api/graph/ingest-url", "description": "URL text ingestion"},
+                {"method": "POST", "path": "/api/graph/webhook/event", "description": "External event webhook"},
+                {"method": "GET", "path": "/api/analytics/simulation/<id>", "description": "Simulation analytics"},
+                {"method": "GET", "path": "/api/analytics/agents/<id>", "description": "Agent profiles"},
+                {"method": "GET", "path": "/api/analytics/network/<id>", "description": "Network + echo chambers"},
+                {"method": "GET", "path": "/api/analytics/quality/<id>", "description": "Quality score"},
+                {"method": "GET", "path": "/api/report/catalog", "description": "This endpoint"},
+            ],
+            "total_services": 36,
+            "total_endpoints": 13,
+        }
+    })
+
+
 @report_bp.route('/<report_id>/health', methods=['GET'])
 def get_prediction_health(report_id: str):
     """

@@ -226,6 +226,16 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **22.4 Scenario comparison view** — Create `ScenarioCompare.vue` showing best/worst/most-likely scenarios from the scenario tree as side-by-side cards with joint probability bars.
 
+## Phase 23: API Discoverability & Documentation
+
+- [x] **23.1 Prediction engine API catalog endpoint** — Add `GET /api/predictions/catalog` that lists all available prediction services, their endpoints, and capabilities. Returns a machine-readable service map so frontend and external tools know what's available.
+
+- [x] **23.2 Frontend API client for prediction endpoints** — Add all new prediction API calls to `frontend/src/api/report.js`: getPredictionHealth, getAnalytics, ratePreduction, addNote, comparePredictions. Complete the frontend-backend bridge.
+
+- [x] **23.3 Prediction engine self-test endpoint** — Add `GET /api/predictions/selftest` that instantiates each prediction service, runs a minimal operation, and returns pass/fail per service. Operational health check beyond the basic `/health`.
+
+- [x] **23.4 Final CLAUDE.md and test count sync** — Ensure CLAUDE.md accurately reflects the final state: test count, service count, API endpoint list, and key patterns. Single source of truth for future Claude Code sessions.
+
 ---
 
 ## Ralph Loop Instructions

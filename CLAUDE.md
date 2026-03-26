@@ -33,7 +33,7 @@ npm run frontend   # Vite on port 3000
 # Build frontend
 npm run build
 
-# Run all tests (620 tests)
+# Run all tests (620+ tests)
 cd backend && uv run pytest
 
 # Run specific test file
@@ -115,7 +115,7 @@ docker compose up --build
 - `utils/` — `llm_client.py` (unified LLM client, auto-detects Anthropic vs OpenAI), `validation.py` (path traversal prevention), `retry.py` (exponential backoff decorator), `file_parser.py`/`file_utils.py` (multi-stage encoding fallback: UTF-8 → charset_normalizer → chardet → replace mode), `logger.py`, `graphiti_manager.py` (thread-safe Graphiti singleton + async bridge + embedder factory: Voyage AI or local Ollama), `ontology_store.py` (thread-safe ontology cache), `graph_paging.py`, `url_extractor.py` (web page text extraction via trafilatura)
 - `models/` — File-based persistence (JSON on disk under `backend/uploads/projects/`). Atomic writes (temp file + `os.replace()`). No database. Project states: `CREATED` → `ONTOLOGY_GENERATED` → `GRAPH_BUILDING` → `GRAPH_COMPLETED`
 - `scripts/` (at `backend/scripts/`, not `backend/app/scripts/`) — Standalone OASIS simulation runners (`run_twitter_simulation.py`, `run_reddit_simulation.py`, `run_parallel_simulation.py`) launched as subprocesses by `SimulationRunner`. Also `action_logger.py` (JSONL logging per platform + `RoundMetricsTracker` for per-round sentiment/activity/faction metrics + `InfluenceTracker` for engagement analysis), `agent_memory.py` (per-agent rolling memory buffer for opinion continuity), and `simulation_utils.py` (dual LLM config, model creation, signal handlers).
-- `tests/` — 620 tests across 7 files: `test_llm_client.py`, `test_api.py`, `test_project.py`, `test_retry.py`, `test_swarm_intelligence.py`, `test_predictions.py` (prediction engine), `test_integration.py` (cross-service integration). Pytest config in `pyproject.toml` (`[tool.pytest.ini_options]`). No `conftest.py` — tests are self-contained with `unittest.mock` (no real API/DB calls)
+- `tests/` — 620+ tests across 7 files: `test_llm_client.py`, `test_api.py`, `test_project.py`, `test_retry.py`, `test_swarm_intelligence.py`, `test_predictions.py` (prediction engine), `test_integration.py` (cross-service integration). Pytest config in `pyproject.toml` (`[tool.pytest.ini_options]`). No `conftest.py` — tests are self-contained with `unittest.mock` (no real API/DB calls)
 
 ### Frontend (`frontend/src/`)
 
@@ -225,6 +225,12 @@ Embeddings for Graphiti semantic search use a configurable backend via `_create_
 - `POST /api/report/{report_id}/predictions/{idx}/note` — Add analyst note
 - `POST /api/graph/ingest-url` — Ingest text from URLs (news/RSS)
 - `POST /api/graph/webhook/event` — External event webhook with optional simulation injection
+- `GET /api/report/catalog` — List all prediction services and endpoints
+- `GET /api/report/selftest` — Run self-test on all prediction services
+- `GET /api/analytics/simulation/{simulation_id}` — Simulation analytics dashboard
+- `GET /api/analytics/agents/{simulation_id}` — Agent behavior profiles
+- `GET /api/analytics/network/{simulation_id}` — Network influence + echo chambers
+- `GET /api/analytics/quality/{simulation_id}` — Simulation quality score (A-F)
 - `GET /api/settings/models` — List available Claude models with pricing
 - `GET /health` — Health check
 
