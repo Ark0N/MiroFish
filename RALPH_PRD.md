@@ -314,6 +314,10 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **42.1 Integrate InfluenceTracker into simulation scripts** — Wire the `InfluenceTracker` from `action_logger.py` into `run_parallel_simulation.py` so influence metrics are automatically computed and saved alongside round metrics during simulation execution. Currently the tracker exists but isn't called from the simulation loop.
 
+## Phase 43: Integrate AgentMemory Into Simulation
+
+- [x] **43.1 Wire AgentMemory into parallel simulation** — Import `AgentMemoryManager` from `agent_memory.py` into `run_parallel_simulation.py`. Record each agent's posts to memory during the simulation loop. Before each round, inject memory context into agent personas via the existing profile system. This gives agents continuity across rounds.
+
 ## Ralph Loop Session Summary
 
 **Session completed**: 40 phases, 109 items, 648 tests, 91 commits.

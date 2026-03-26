@@ -152,6 +152,7 @@ def init_logging_for_simulation(simulation_dir: str):
 
 
 from action_logger import SimulationLogManager, PlatformActionLogger, RoundMetricsTracker, InfluenceTracker
+from agent_memory import AgentMemoryManager
 
 try:
     import oasis
@@ -993,7 +994,8 @@ async def run_twitter_simulation(
     main_logger: Optional[SimulationLogManager] = None,
     max_rounds: Optional[int] = None,
     metrics_tracker: Optional[RoundMetricsTracker] = None,
-    influence_tracker: Optional[InfluenceTracker] = None
+    influence_tracker: Optional[InfluenceTracker] = None,
+    agent_memory: Optional[AgentMemoryManager] = None
 ) -> PlatformSimulation:
     """运行Twitter模拟
 
@@ -1005,6 +1007,7 @@ async def run_twitter_simulation(
         max_rounds: 最大模拟轮数（可选，用于截断过长的模拟）
         metrics_tracker: 每轮指标追踪器
         influence_tracker: 影响力追踪器
+        agent_memory: Agent记忆管理器
 
     Returns:
         PlatformSimulation: 包含env和agent_graph的结果对象
@@ -1215,6 +1218,12 @@ async def run_twitter_simulation(
                     "content": action_data["action_args"].get("content", ""),
                     "round": round_num + 1,
                 })
+            if agent_memory:
+                agent_memory.record_action(action_data.get("agent_name", ""), {
+                    "action_type": action_data["action_type"],
+                    "content": action_data["action_args"].get("content", ""),
+                    "round": round_num + 1,
+                })
 
         if action_logger:
             action_logger.log_round_end(round_num + 1, round_action_count, simulated_hours=current_simulated_hours)
@@ -1247,7 +1256,8 @@ async def run_reddit_simulation(
     main_logger: Optional[SimulationLogManager] = None,
     max_rounds: Optional[int] = None,
     metrics_tracker: Optional[RoundMetricsTracker] = None,
-    influence_tracker: Optional[InfluenceTracker] = None
+    influence_tracker: Optional[InfluenceTracker] = None,
+    agent_memory: Optional[AgentMemoryManager] = None
 ) -> PlatformSimulation:
     """运行Reddit模拟
 
@@ -1259,6 +1269,7 @@ async def run_reddit_simulation(
         max_rounds: 最大模拟轮数（可选，用于截断过长的模拟）
         metrics_tracker: 每轮指标追踪器
         influence_tracker: 影响力追踪器
+        agent_memory: Agent记忆管理器
 
     Returns:
         PlatformSimulation: 包含env和agent_graph的结果对象
@@ -1476,6 +1487,12 @@ async def run_reddit_simulation(
                     "content": action_data["action_args"].get("content", ""),
                     "round": round_num + 1,
                 })
+            if agent_memory:
+                agent_memory.record_action(action_data.get("agent_name", ""), {
+                    "action_type": action_data["action_type"],
+                    "content": action_data["action_args"].get("content", ""),
+                    "round": round_num + 1,
+                })
 
         if action_logger:
             action_logger.log_round_end(round_num + 1, round_action_count, simulated_hours=current_simulated_hours)
@@ -1559,6 +1576,7 @@ async def main():
     reddit_metrics = RoundMetricsTracker(os.path.join(simulation_dir, "reddit"))
     twitter_influence = InfluenceTracker(os.path.join(simulation_dir, "twitter"))
     reddit_influence = InfluenceTracker(os.path.join(simulation_dir, "reddit"))
+    agent_memory = AgentMemoryManager(max_history=5)
     
     log_manager.info("=" * 60)
     log_manager.info("OASIS 双平台Parallel simulation")
@@ -1595,20 +1613,29 @@ async def main():
     reddit_result: Optional[PlatformSimulation] = None
     
     if args.twitter_only:
-        twitter_result = await run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds, twitter_metrics, twitter_influence)
+        twitter_result = await run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds, twitter_metrics, twitter_influence, agent_memory)
     elif args.reddit_only:
-        reddit_result = await run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds, reddit_metrics, reddit_influence)
+        reddit_result = await run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds, reddit_metrics, reddit_influence, agent_memory)
     else:
         # 并行运行（每个平台使用独立的日志记录器）
         results = await asyncio.gather(
-            run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds, twitter_metrics, twitter_influence),
-            run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds, reddit_metrics, reddit_influence),
+            run_twitter_simulation(config, simulation_dir, twitter_logger, log_manager, args.max_rounds, twitter_metrics, twitter_influence, agent_memory),
+            run_reddit_simulation(config, simulation_dir, reddit_logger, log_manager, args.max_rounds, reddit_metrics, reddit_influence, agent_memory),
         )
         twitter_result, reddit_result = results
     
     total_elapsed = (datetime.now() - start_time).total_seconds()
     log_manager.info("=" * 60)
     log_manager.info(f"模拟循环complete! 总耗时: {total_elapsed:.1f}秒")
+
+    # Save agent memory state for multi-wave and post-simulation analysis
+    try:
+        memory_path = os.path.join(simulation_dir, "agent_memory.json")
+        with open(memory_path, 'w', encoding='utf-8') as f:
+            json.dump(agent_memory.to_dict(), f, ensure_ascii=False, indent=2)
+        log_manager.info(f"Agent memory saved: {len(agent_memory.get_all_agents())} agents, {memory_path}")
+    except Exception as e:
+        log_manager.warning(f"Failed to save agent memory: {e}")
     
     # 是否Entering wait-for-commands mode
     if wait_for_commands:
