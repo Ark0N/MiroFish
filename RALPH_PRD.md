@@ -274,6 +274,10 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **32.1 Prediction-aware graph enrichment** — When predictions are generated, create new Graphiti episodes linking prediction events back to the knowledge graph. Each prediction becomes a node connected to its source entities, enabling graph-based prediction exploration and cross-project knowledge transfer.
 
+## Phase 33: Prediction Monitoring
+
+- [x] **33.1 Prediction change notifier** — Add a service that detects when any prediction's probability changes by more than 10% (from Bayesian update, calibration, or decay) and emits a structured change event. Add `GET /api/report/<id>/changes` to list recent changes. Enables alerting without polling.
+
 ## Ralph Loop Session Summary
 
 **Session completed**: 31 phases, 100 items, 634 tests, 81 commits.

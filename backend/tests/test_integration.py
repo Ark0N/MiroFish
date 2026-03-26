@@ -986,3 +986,82 @@ class TestPredictionGraphBridge:
             result = bridge.enrich_graph_with_predictions("g1", preds)
             assert result["added_count"] == 1
             assert len(result["errors"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# Change notifier tests
+# ---------------------------------------------------------------------------
+
+
+class TestChangeNotifier:
+    """Tests for prediction change detection and notification."""
+
+    def _make_notifier(self, tmp_path):
+        from app.services.change_notifier import ChangeNotifier
+        from unittest.mock import patch
+        n = ChangeNotifier()
+        # Patch the path to use tmp_path
+        folder = str(tmp_path / "reports" / "test_report")
+        os.makedirs(folder, exist_ok=True)
+        return n, folder
+
+    def test_small_change_ignored(self):
+        from app.services.change_notifier import ChangeNotifier
+        n = ChangeNotifier()
+        # Mock _store_change to avoid file system
+        from unittest.mock import patch
+        with patch.object(n, '_store_change'):
+            result = n.check_and_record("r1", 0, "Event", 0.50, 0.52, "bayesian")
+        assert result is None  # 2% change is below threshold
+
+    def test_significant_change_recorded(self):
+        from app.services.change_notifier import ChangeNotifier
+        n = ChangeNotifier()
+        from unittest.mock import patch
+        with patch.object(n, '_store_change') as mock_store:
+            result = n.check_and_record("r1", 0, "Event", 0.50, 0.65, "bayesian")
+        assert result is not None
+        assert result.severity == "significant"
+        assert abs(result.delta - 0.15) < 0.001
+        assert mock_store.called
+
+    def test_major_change_severity(self):
+        from app.services.change_notifier import ChangeNotifier
+        n = ChangeNotifier()
+        from unittest.mock import patch
+        with patch.object(n, '_store_change'):
+            result = n.check_and_record("r1", 0, "Event", 0.30, 0.70, "calibration")
+        assert result.severity == "major"
+
+    def test_change_to_dict(self):
+        from app.services.change_notifier import PredictionChange
+        c = PredictionChange(prediction_idx=0, event="Test", old_probability=0.5,
+                             new_probability=0.7, delta=0.2, source="bayesian", severity="significant")
+        d = c.to_dict()
+        assert d["direction"] == "up"
+        assert d["abs_delta_pct"] == 20.0
+
+    def test_get_changes_empty(self):
+        from app.services.change_notifier import ChangeNotifier
+        n = ChangeNotifier()
+        from unittest.mock import patch
+        with patch.object(n, '_load_changes', return_value=[]):
+            changes = n.get_changes("r1")
+        assert changes == []
+
+    def test_severity_filter(self):
+        from app.services.change_notifier import ChangeNotifier
+        n = ChangeNotifier()
+        mock_changes = [
+            {"severity": "minor", "timestamp": "2026-01-01"},
+            {"severity": "significant", "timestamp": "2026-01-02"},
+            {"severity": "major", "timestamp": "2026-01-03"},
+        ]
+        from unittest.mock import patch
+        with patch.object(n, '_load_changes', return_value=mock_changes):
+            all_changes = n.get_changes("r1", min_severity="minor")
+            assert len(all_changes) == 3
+            sig_changes = n.get_changes("r1", min_severity="significant")
+            assert len(sig_changes) == 2
+            major_changes = n.get_changes("r1", min_severity="major")
+            assert len(major_changes) == 1

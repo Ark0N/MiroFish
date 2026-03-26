@@ -515,6 +515,23 @@ def get_predictions(report_id: str):
         }), 500
 
 
+@report_bp.route('/<report_id>/changes', methods=['GET'])
+def get_prediction_changes(report_id: str):
+    """Get recent prediction changes for a report."""
+    err = validate_id_param(report_id, "report_id")
+    if err:
+        return err
+    try:
+        from ..services.change_notifier import ChangeNotifier
+        severity = request.args.get("severity", "minor")
+        notifier = ChangeNotifier()
+        changes = notifier.get_changes(report_id, min_severity=severity)
+        return jsonify({"success": True, "data": {"changes": changes, "count": len(changes)}})
+    except Exception as e:
+        logger.error(f"Failed to get changes: {e}")
+        return jsonify({"success": False, "error": "Failed to get changes"}), 500
+
+
 @report_bp.route('/<report_id>/digest', methods=['GET'])
 def get_digest(report_id: str):
     """Get a compact one-paragraph prediction digest."""
