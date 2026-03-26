@@ -1169,12 +1169,43 @@ Return the sub-question list in JSON format."""
         )
         optimized_prompt = f"{INTERVIEW_PROMPT_PREFIX}{combined_prompt}"
 
+        # Load agent memory for context enrichment
+        agent_memory_ctx = {}
+        try:
+            import os as _os
+            from .simulation_manager import SimulationManager
+            sim_dir = SimulationManager()._get_simulation_dir(simulation_id)
+            memory_path = _os.path.join(sim_dir, "agent_memory.json")
+            if _os.path.exists(memory_path):
+                import json as _json
+                with open(memory_path, 'r', encoding='utf-8') as f:
+                    memory_data = _json.load(f)
+                # Build name → context lookup from memory
+                sys_path = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))), "scripts")
+                import sys
+                if sys_path not in sys.path:
+                    sys.path.insert(0, sys_path)
+                from agent_memory import AgentMemoryManager
+                mem = AgentMemoryManager.from_dict(memory_data)
+                for profile in profiles:
+                    name = profile.get("name", profile.get("realname", ""))
+                    ctx = mem.get_context(name)
+                    if ctx:
+                        agent_memory_ctx[name] = ctx
+                logger.info(f"Loaded memory context for {len(agent_memory_ctx)} agents")
+        except Exception as e:
+            logger.debug(f"Agent memory not available for interviews: {e}")
+
         try:
             interviews_request = []
             for agent_idx in selected_indices:
+                # Enrich prompt with agent memory if available
+                agent_name = selected_agents[selected_indices.index(agent_idx)] if agent_idx in selected_indices else ""
+                memory_context = agent_memory_ctx.get(agent_name, "")
+                enriched_prompt = (memory_context + "\n\n" + optimized_prompt) if memory_context else optimized_prompt
                 interviews_request.append({
                     "agent_id": agent_idx,
-                    "prompt": optimized_prompt
+                    "prompt": enriched_prompt
                 })
 
             logger.info(f"Calling batch interview API: {len(interviews_request)} agents")

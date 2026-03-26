@@ -318,6 +318,10 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **43.1 Wire AgentMemory into parallel simulation** — Import `AgentMemoryManager` from `agent_memory.py` into `run_parallel_simulation.py`. Record each agent's posts to memory during the simulation loop. Before each round, inject memory context into agent personas via the existing profile system. This gives agents continuity across rounds.
 
+## Phase 44: Agent Memory in Post-Simulation Interviews
+
+- [x] **44.1 Use agent memory context in interviews** — When the report agent interviews agents via IPC, prepend each agent's memory context (from `agent_memory.json`) to the interview prompt. This gives interviewed agents awareness of what they posted during the simulation, producing more coherent and informative interview responses.
+
 ## Ralph Loop Session Summary
 
 **Session completed**: 40 phases, 109 items, 648 tests, 91 commits.
