@@ -188,13 +188,13 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 ## Phase 19: System Integration Tests
 
-- [ ] **19.1 Service integration smoke tests** — Add integration tests that verify all 35+ services can be imported, instantiated, and their primary methods called without errors. Catches import cycles and missing dependencies.
+- [x] **19.1 Service integration smoke tests** — Add integration tests that verify all 35+ services can be imported, instantiated, and their primary methods called without errors. Catches import cycles and missing dependencies.
 
-- [ ] **19.2 Data flow integration test** — Test the full data flow: create predictions → calibrate → update via Bayesian → check decay → compute ensemble → generate narrative. Verify data integrity at each step.
+- [x] **19.2 Data flow integration test** — Test the full data flow: create predictions → calibrate → update via Bayesian → check decay → compute ensemble → generate narrative. Verify data integrity at each step.
 
-- [ ] **19.3 Analytics pipeline test** — Test the full analytics path: create simulation metrics → extract fingerprint → detect factions → compute influence → detect echo chambers → score quality. All with synthetic data.
+- [x] **19.3 Analytics pipeline test** — Test the full analytics path: create simulation metrics → extract fingerprint → detect factions → compute influence → detect echo chambers → score quality. All with synthetic data.
 
-- [ ] **19.4 Prediction lifecycle test** — Test a complete prediction lifecycle: create → version → calibrate → add evidence → decay → resolve → backtest → compute stability. Verify state consistency throughout.
+- [x] **19.4 Prediction lifecycle test** — Test a complete prediction lifecycle: create → version → calibrate → add evidence → decay → resolve → backtest → compute stability. Verify state consistency throughout.
 
 ---
 
