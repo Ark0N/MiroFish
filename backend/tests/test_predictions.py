@@ -2732,3 +2732,60 @@ class TestPredictionMarket:
         d = state.to_dict()
         assert "market_probability" in d
         assert "num_bettors" in d
+
+
+# ---------------------------------------------------------------------------
+# Stress tester tests
+# ---------------------------------------------------------------------------
+
+
+class TestStressTester:
+    """Tests for prediction stress testing."""
+
+    def _make_tester(self):
+        from app.services.stress_tester import PredictionStressTester
+        return PredictionStressTester()
+
+    def test_empty_input(self):
+        t = self._make_tester()
+        result = t.stress_test({}, 0.5)
+        assert result["robustness_score"] == 0.0
+
+    def test_unanimous_agents_robust(self):
+        t = self._make_tester()
+        sentiments = {f"a{i}": 0.8 for i in range(20)}
+        result = t.stress_test(sentiments, 0.7)
+        assert result["robustness_score"] > 0.3
+        assert len(result["scenarios"]) >= 3
+
+    def test_split_agents_fragile(self):
+        t = self._make_tester()
+        sentiments = {f"pos_{i}": 0.9 for i in range(5)}
+        sentiments.update({f"neg_{i}": -0.9 for i in range(5)})
+        result = t.stress_test(sentiments, 0.5)
+        # Removing half could swing consensus significantly
+        assert any(s["impact"] in ("high", "medium") for s in result["scenarios"])
+
+    def test_stability_index_rock_solid(self):
+        t = self._make_tester()
+        probs = [0.7, 0.71, 0.72, 0.71, 0.7]
+        result = t.compute_stability_index(probs)
+        assert result["stability_index"] == "rock-solid"
+
+    def test_stability_index_volatile(self):
+        t = self._make_tester()
+        probs = [0.2, 0.8, 0.3, 0.9, 0.1]
+        result = t.compute_stability_index(probs)
+        assert result["stability_index"] == "volatile"
+        assert result["direction_changes"] >= 2
+
+    def test_stability_insufficient_data(self):
+        t = self._make_tester()
+        result = t.compute_stability_index([0.5])
+        assert result["stability_index"] == "insufficient_data"
+
+    def test_has_recommendation(self):
+        t = self._make_tester()
+        sentiments = {f"a{i}": 0.5 for i in range(10)}
+        result = t.stress_test(sentiments, 0.6)
+        assert "recommendation" in result

@@ -168,13 +168,13 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 ## Phase 17: Robustness Testing
 
-- [ ] **17.1 Prediction stress tester** — Systematically test how predictions respond to extreme inputs: all agents flipping stance, removing 50% of agents, injecting contradictory events. Reports a robustness score for each prediction.
+- [x] **17.1 Prediction stress tester** — Systematically test how predictions respond to extreme inputs: all agents flipping stance, removing 50% of agents, injecting contradictory events. Reports a robustness score for each prediction.
 
-- [ ] **17.2 Simulation reproducibility checker** — Run the same simulation twice with different random seeds and compare outcomes. High divergence suggests the prediction is sensitive to randomness, not robust.
+- [x] **17.2 Simulation reproducibility checker** — Run the same simulation twice with different random seeds and compare outcomes. High divergence suggests the prediction is sensitive to randomness, not robust.
 
-- [ ] **17.3 Prediction stability index** — Compute a stability index for each prediction based on how much it changed across: Bayesian updates, calibration, decay, and cross-validation. Stable predictions get a "rock-solid" badge; volatile ones get a warning.
+- [x] **17.3 Prediction stability index** — Compute a stability index for each prediction based on how much it changed across: Bayesian updates, calibration, decay, and cross-validation. Stable predictions get a "rock-solid" badge; volatile ones get a warning.
 
-- [ ] **17.4 Adversarial agent injection** — Beyond contrarians (who challenge consensus), add adversarial agents that deliberately spread misinformation. Test whether the prediction system is resilient to bad-faith actors.
+- [x] **17.4 Adversarial agent injection** — Beyond contrarians (who challenge consensus), add adversarial agents that deliberately spread misinformation. Test whether the prediction system is resilient to bad-faith actors.
 
 ---
 
