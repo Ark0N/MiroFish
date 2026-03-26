@@ -270,6 +270,18 @@ class TestWebhookEndpoint:
         assert response.status_code in (200, 500)
 
 
+class TestPredictionHealthEndpoint:
+    """Tests for GET /api/report/<report_id>/health."""
+
+    def test_health_nonexistent_returns_404(self, client):
+        response = client.get('/api/report/nonexistent-id/health')
+        assert response.status_code == 404
+
+    def test_health_invalid_id_returns_400(self, client):
+        response = client.get('/api/report/report_<bad>/health')
+        assert response.status_code == 400
+
+
 class TestAnalyticsEndpoints:
     """Tests for /api/analytics/ endpoints."""
 

@@ -515,6 +515,71 @@ def get_predictions(report_id: str):
         }), 500
 
 
+@report_bp.route('/<report_id>/health', methods=['GET'])
+def get_prediction_health(report_id: str):
+    """
+    Get prediction health dashboard: decay, stability, contradictions,
+    and uncertainty decomposition for all predictions in a report.
+    """
+    err = validate_id_param(report_id, "report_id")
+    if err:
+        return err
+
+    try:
+        predictions = ReportManager.load_predictions(report_id)
+        if not predictions:
+            return jsonify({"success": False, "error": "No predictions found"}), 404
+
+        report = ReportManager.get_report(report_id)
+        pred_dicts = [p.to_dict() for p in predictions.predictions]
+
+        # Decay health
+        from ..services.prediction_decay import PredictionDecayTracker
+        decay_tracker = PredictionDecayTracker()
+        health = decay_tracker.compute_health(
+            pred_dicts,
+            predictions.generated_at or (report.created_at if report else ""),
+        )
+
+        # Contradictions
+        from ..services.contradiction_detector import ContradictionDetector
+        detector = ContradictionDetector()
+        contradictions = detector.detect_contradictions(pred_dicts)
+
+        # Uncertainty decomposition
+        from ..services.uncertainty_decomposer import UncertaintyDecomposer
+        decomposer = UncertaintyDecomposer()
+        uncertainties = []
+        for p in pred_dicts:
+            u = decomposer.decompose(
+                p.get("probability", 0.5),
+                [],  # No agent sentiments available at API level
+                n_agents=0,
+            )
+            uncertainties.append(u)
+
+        # Stress test summary
+        from ..services.stress_tester import PredictionStressTester
+        tester = PredictionStressTester()
+        version_probs = [p.get("probability", 0.5) for p in pred_dicts]
+        stability = tester.compute_stability_index(version_probs) if len(version_probs) >= 2 else {"stability_index": "insufficient_data"}
+
+        return jsonify({
+            "success": True,
+            "data": {
+                "prediction_health": [h.to_dict() for h in health],
+                "contradictions": contradictions,
+                "uncertainties": uncertainties,
+                "stability": stability,
+                "num_predictions": len(pred_dicts),
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Failed to compute prediction health: {str(e)}")
+        return jsonify({"success": False, "error": "Health check failed"}), 500
+
+
 @report_bp.route('/<report_id>/predictions/<int:idx>/rate', methods=['POST'])
 def rate_prediction(report_id: str, idx: int):
     """
