@@ -64,6 +64,11 @@
             </div>
           </div>
 
+          <!-- Prediction Digest -->
+          <div v-if="digestText" class="prediction-digest">
+            <p>{{ digestText }}</p>
+          </div>
+
           <!-- Structured Predictions -->
           <PredictionTable
             v-if="predictions.length > 0"
@@ -102,6 +107,18 @@
             v-if="scenarioData"
             :scenarios="scenarioData"
           />
+
+          <!-- Recent Changes -->
+          <div v-if="recentChanges.length > 0" class="changes-feed">
+            <h3 class="changes-title">Recent Prediction Changes</h3>
+            <div v-for="(ch, idx) in recentChanges.slice(0, 5)" :key="idx" class="change-item" :class="'change-' + ch.severity">
+              <span class="change-arrow" :class="ch.direction === 'up' ? 'arrow-up' : 'arrow-down'">
+                {{ ch.direction === 'up' ? '+' : '' }}{{ ch.abs_delta_pct }}%
+              </span>
+              <span class="change-event">{{ ch.event }}</span>
+              <span class="change-source">{{ ch.source }}</span>
+            </div>
+          </div>
         </div>
 
         <!-- Waiting State -->
@@ -431,7 +448,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick, h, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { getAgentLog, getConsoleLog, getPredictions, getPredictionHealth, getScenarios } from '../api/report'
+import { getAgentLog, getConsoleLog, getPredictions, getPredictionHealth, getScenarios, getDigest, getChanges } from '../api/report'
 import { renderMarkdown } from '../utils/markdown'
 import PredictionTable from './PredictionTable.vue'
 import PredictionHealthBadge from './PredictionHealthBadge.vue'
@@ -472,6 +489,8 @@ const predictions = ref([])
 const predictionsOverallConfidence = ref('')
 const predictionHealth = ref(null)
 const scenarioData = ref(null)
+const digestText = ref('')
+const recentChanges = ref([])
 const startTime = ref(null)
 const leftPanel = ref(null)
 const rightPanel = ref(null)
@@ -2098,6 +2117,18 @@ const fetchPredictions = async () => {
   } catch (e) {
     // Scenarios are optional
   }
+  try {
+    const digestRes = await getDigest(props.reportId)
+    if (digestRes.data?.success && digestRes.data?.data) {
+      digestText.value = digestRes.data.data.digest || ''
+    }
+  } catch (e) {}
+  try {
+    const changesRes = await getChanges(props.reportId, 'minor')
+    if (changesRes.data?.success && changesRes.data?.data) {
+      recentChanges.value = changesRes.data.data.changes || []
+    }
+  } catch (e) {}
 }
 
 const fetchConsoleLog = async () => {
@@ -2331,6 +2362,52 @@ watch(() => props.reportId, (newId) => {
   margin: 0 auto;
   width: 100%;
 }
+
+.prediction-digest {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(139, 92, 246, 0.08));
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: #ccc;
+  line-height: 1.5;
+}
+.prediction-digest p { margin: 0; }
+
+.changes-feed {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #2a2a3e;
+}
+.changes-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.9rem;
+  color: #e0e0e0;
+  margin-bottom: 0.5rem;
+}
+.change-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  font-size: 0.72rem;
+  border-left: 2px solid #444;
+  padding-left: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.change-major { border-color: #ef4444; }
+.change-significant { border-color: #f59e0b; }
+.change-minor { border-color: #6b7280; }
+.change-arrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  min-width: 45px;
+}
+.arrow-up { color: #4ade80; }
+.arrow-down { color: #f87171; }
+.change-event { color: #bbb; flex: 1; }
+.change-source { color: #666; font-size: 0.65rem; }
 
 .prediction-health-section {
   margin-top: 2rem;

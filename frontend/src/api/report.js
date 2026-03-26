@@ -57,6 +57,23 @@ export const getPredictions = (reportId) => {
 }
 
 /**
+ * Get prediction digest (one-paragraph summary)
+ * @param {string} reportId
+ */
+export const getDigest = (reportId) => {
+  return service.get(`/api/report/${reportId}/digest`)
+}
+
+/**
+ * Get recent prediction changes
+ * @param {string} reportId
+ * @param {string} severity - "minor", "significant", or "major"
+ */
+export const getChanges = (reportId, severity = 'minor') => {
+  return service.get(`/api/report/${reportId}/changes`, { params: { severity } })
+}
+
+/**
  * Get prediction health dashboard
  * @param {string} reportId
  */

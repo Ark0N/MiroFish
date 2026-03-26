@@ -290,6 +290,10 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **36.1 Test full pipeline wiring end-to-end** — Add an integration test that mocks the LLM and simulation manager, then calls `_run_prediction_pipeline` directly with synthetic predictions. Verify: calibration runs, bootstrap runs, dedup runs, change events emitted, provenance saved, graph bridge called, executive summary generated. Tests the actual wiring, not individual services.
 
+## Phase 37: Digest Frontend + Changes API Client
+
+- [x] **37.1 Add digest and changes to frontend API client and Step4Report** — Add `getDigest` and `getChanges` to `report.js`. In Step4Report, fetch digest when predictions load and show it as a one-line summary above the PredictionTable. Show recent changes as a small activity feed if any exist.
+
 ## Ralph Loop Session Summary
 
 **Session completed**: 36 phases, 105 items, 648 tests, 86 commits.
