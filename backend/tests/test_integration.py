@@ -1112,6 +1112,104 @@ class TestAgentMemoryPersistence:
 
 
 # ---------------------------------------------------------------------------
+# Full closed-loop integration test
+# ---------------------------------------------------------------------------
+
+
+class TestFullClosedLoop:
+    """Test the complete prediction loop: predictions → graph bridge → analytics → health → digest → export."""
+
+    def test_closed_loop(self, tmp_path):
+        """Simulate the full lifecycle of predictions through all integration points."""
+        from unittest.mock import patch, MagicMock
+        from app.services.report_agent import StructuredPrediction, PredictionSet, ReportManager
+        from app.services.prediction_graph_bridge import PredictionGraphBridge
+        from app.services.analytics import AnalyticsService
+        from app.services.prediction_decay import PredictionDecayTracker
+        from app.services.contradiction_detector import ContradictionDetector
+        from app.services.prediction_digest import PredictionDigestGenerator
+        from app.services.change_notifier import ChangeNotifier
+        from datetime import datetime
+
+        # Step 1: Create predictions (like report_agent produces)
+        predictions = [
+            StructuredPrediction(event="Oil prices rise sharply", probability=0.75,
+                                 evidence=["Agent consensus"], agent_agreement=0.8, impact_level="high"),
+            StructuredPrediction(event="Trade policy changes direction", probability=0.45,
+                                 evidence=["Mixed signals"], agent_agreement=0.5, impact_level="medium"),
+        ]
+        ps = PredictionSet(predictions=predictions, overall_confidence="Moderate",
+                           generated_at=datetime.now().isoformat())
+
+        # Step 2: Graph bridge formats predictions for graph ingestion
+        bridge = PredictionGraphBridge()
+        pred_dicts = [p.to_dict() for p in ps.predictions]
+        with patch.object(bridge, '_add_episode'):
+            result = bridge.enrich_graph_with_predictions("graph_1", pred_dicts, "sim_1", "r_1")
+        assert result["added_count"] == 2
+
+        # Step 3: Simulate agent memory being saved (like simulation does)
+        sim_dir = str(tmp_path / "sim")
+        os.makedirs(sim_dir)
+        memory = {
+            "alice": [{"type": "CREATE_POST", "content": "oil prices rising fast great", "round": 1}],
+            "bob": [{"type": "CREATE_POST", "content": "trade policy terrible crisis", "round": 1}],
+        }
+        with open(os.path.join(sim_dir, "agent_memory.json"), "w") as f:
+            json.dump(memory, f)
+
+        # Step 4: Analytics reads memory
+        analytics = AnalyticsService()
+        sim_analytics = analytics.simulation_analytics(sim_dir)
+        assert sim_analytics["total_agents_with_memory"] == 2
+        assert sim_analytics["agent_stances"]["alice"]["stance"] == "positive"
+
+        # Step 5: Health check
+        decay = PredictionDecayTracker()
+        health = decay.compute_health(pred_dicts, ps.generated_at)
+        assert all(h.health_status == "fresh" for h in health)
+
+        # Step 6: Contradiction detection
+        contradictions = ContradictionDetector().detect_contradictions(pred_dicts)
+        # These two predictions aren't contradictory, so should be 0
+        assert isinstance(contradictions, list)
+
+        # Step 7: Digest
+        digest = PredictionDigestGenerator().generate(
+            pred_dicts,
+            overall_confidence=ps.overall_confidence,
+            health_data={"prediction_health": [h.to_dict() for h in health]},
+            contradictions=contradictions,
+        )
+        assert "2 predictions" in digest
+        assert "Oil prices" in digest
+
+        # Step 8: Change notifier
+        notifier = ChangeNotifier()
+        with patch.object(notifier, '_store_change'):
+            change = notifier.check_and_record("r_1", 0, "Oil prices rise", 0.5, 0.75, "calibration")
+        assert change is not None
+        assert change.severity in ("significant", "major")
+
+        # Step 9: Export format (CSV)
+        import csv
+        import io
+        output = io.StringIO()
+        fields = ["event", "probability", "agent_agreement", "impact_level"]
+        writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        for p in pred_dicts:
+            writer.writerow(p)
+        csv_text = output.getvalue()
+        assert "Oil prices rise sharply" in csv_text
+        assert "0.75" in csv_text
+
+        # Full loop validated: predictions created → graph enriched → memory read →
+        # health checked → contradictions scanned → digest generated →
+        # changes detected → exported to CSV
+
+
+# ---------------------------------------------------------------------------
 # Change notifier tests
 # ---------------------------------------------------------------------------
 

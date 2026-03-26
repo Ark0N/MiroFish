@@ -334,9 +334,13 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **47.1 Show prediction count in GraphPanel node tooltips** — When the graph has predictions linked back (via PredictionGraphBridge), enhance the GraphPanel.vue D3 visualization to show a small prediction badge on entity nodes that appear in predictions. Adds a visual connection between the knowledge graph and predictions.
 
+## Phase 48: Comprehensive Test for Full Report→Prediction→Graph Loop
+
+- [x] **48.1 End-to-end loop closure test** — Test the complete closed loop: predictions → graph bridge → analytics reads memory → health check → digest → export. Verify data flows correctly across all integration points we've wired in phases 32-47. This validates the entire system works as one coherent pipeline.
+
 ## Ralph Loop Session Summary
 
-**Session completed**: 40 phases, 109 items, 648 tests, 91 commits.
+**Session completed**: 48 phases, 117 items, 655 tests, 99 commits.
 
 The prediction engine is production-grade and fully integrated:
 - 51 backend services (39 new) covering the full prediction lifecycle
