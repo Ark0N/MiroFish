@@ -989,6 +989,110 @@ class TestPredictionGraphBridge:
 
 
 # ---------------------------------------------------------------------------
+# Agent memory persistence and interview enrichment tests
+# ---------------------------------------------------------------------------
+
+
+class TestAgentMemoryPersistence:
+    """Test agent memory save/load for simulation integration."""
+
+    def test_save_and_load_memory_json(self, tmp_path):
+        """Memory state survives JSON roundtrip like the simulation does."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from agent_memory import AgentMemoryManager
+
+        mem = AgentMemoryManager(max_history=5)
+        mem.record_action("alice", {"action_type": "CREATE_POST", "content": "Great progress!", "round": 1})
+        mem.record_action("alice", {"action_type": "CREATE_POST", "content": "More good news", "round": 2})
+        mem.record_action("bob", {"action_type": "CREATE_POST", "content": "Terrible crisis", "round": 1})
+
+        # Save like simulation does
+        memory_path = tmp_path / "agent_memory.json"
+        with open(memory_path, 'w') as f:
+            json.dump(mem.to_dict(), f)
+
+        # Load like interview system does
+        with open(memory_path, 'r') as f:
+            loaded_data = json.load(f)
+        loaded = AgentMemoryManager.from_dict(loaded_data)
+
+        assert loaded.get_memory_size("alice") == 2
+        assert loaded.get_memory_size("bob") == 1
+        assert "Great progress" in loaded.get_context("alice")
+        assert loaded.get_agent_stance("alice") == "positive"
+        assert loaded.get_agent_stance("bob") == "negative"
+
+    def test_memory_context_format_for_interviews(self):
+        """Context string is suitable for prepending to interview prompts."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from agent_memory import AgentMemoryManager
+
+        mem = AgentMemoryManager(max_history=3)
+        mem.record_action("agent_1", {"action_type": "CREATE_POST", "content": "I support the new policy", "round": 1})
+        mem.record_action("agent_1", {"action_type": "LIKE_POST", "target_content": "Good analysis", "round": 2})
+
+        ctx = mem.get_context("agent_1")
+        assert "[Your recent activity" in ctx
+        assert "I support the new policy" in ctx
+        assert "maintain consistency" in ctx.lower()
+
+        # Verify it works as interview prompt prefix
+        interview_prompt = "Answer the following questions..."
+        enriched = ctx + "\n\n" + interview_prompt
+        assert enriched.startswith("\n[Your recent activity")
+        assert enriched.endswith("Answer the following questions...")
+
+    def test_empty_memory_produces_no_context(self):
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from agent_memory import AgentMemoryManager
+
+        mem = AgentMemoryManager()
+        assert mem.get_context("unknown_agent") == ""
+
+    def test_influence_tracker_produces_metrics_file(self, tmp_path):
+        """InfluenceTracker writes influence_metrics.jsonl when flushed."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from action_logger import InfluenceTracker
+
+        tracker = InfluenceTracker(str(tmp_path))
+        tracker.track_action({"action_type": "CREATE_POST", "agent_name": "alice",
+                              "content": "hello world", "round": 1, "post_id": "p1"})
+        tracker.track_action({"action_type": "LIKE_POST", "agent_name": "bob",
+                              "target_post_id": "p1", "round": 1})
+        metrics = tracker.flush_round(1, "twitter")
+
+        assert metrics["total_posts_this_round"] == 1
+        assert metrics["total_engagements_this_round"] == 1
+        assert len(metrics["top_influencers"]) == 1
+        assert metrics["top_influencers"][0]["agent"] == "alice"
+
+        # Verify file written
+        assert os.path.exists(os.path.join(str(tmp_path), "influence_metrics.jsonl"))
+
+    def test_faction_metrics_file_produced(self, tmp_path):
+        """RoundMetricsTracker writes faction_metrics.jsonl."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from action_logger import RoundMetricsTracker
+
+        tracker = RoundMetricsTracker(str(tmp_path))
+        tracker.add_action({"action_type": "CREATE_POST", "agent_name": "a1", "content": "great love"})
+        tracker.add_action({"action_type": "CREATE_POST", "agent_name": "a2", "content": "terrible hate"})
+        tracker.flush_round(1, "twitter", 10, 2)
+
+        faction_file = os.path.join(str(tmp_path), "faction_metrics.jsonl")
+        assert os.path.exists(faction_file)
+        with open(faction_file) as f:
+            data = json.loads(f.readline())
+        assert "factions" in data
+        assert data["total_content_agents"] == 2
+
+
+# ---------------------------------------------------------------------------
 # Change notifier tests
 # ---------------------------------------------------------------------------
 

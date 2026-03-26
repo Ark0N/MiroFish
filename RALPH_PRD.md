@@ -322,6 +322,10 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **44.1 Use agent memory context in interviews** — When the report agent interviews agents via IPC, prepend each agent's memory context (from `agent_memory.json`) to the interview prompt. This gives interviewed agents awareness of what they posted during the simulation, producing more coherent and informative interview responses.
 
+## Phase 45: Test Coverage for Simulation Integrations
+
+- [x] **45.1 Test agent memory persistence and interview enrichment** — Add tests verifying: AgentMemoryManager.to_dict() saves to JSON, from_dict() loads back, interview enrichment logic prepends context correctly when memory exists, and gracefully skips when it doesn't.
+
 ## Ralph Loop Session Summary
 
 **Session completed**: 40 phases, 109 items, 648 tests, 91 commits.
