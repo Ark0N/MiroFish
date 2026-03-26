@@ -114,12 +114,40 @@ class AnalyticsService:
                 except Exception:
                     pass
 
+        # Agent memory stance summary
+        agent_stances = {}
+        memory_path = os.path.join(simulation_dir, "agent_memory.json")
+        if os.path.exists(memory_path):
+            try:
+                with open(memory_path, "r", encoding="utf-8") as f:
+                    memory_data = json.load(f)
+                # Compute stance from memory entries
+                positive_kw = {"good", "great", "support", "agree", "love", "excellent", "hope", "progress"}
+                negative_kw = {"bad", "terrible", "oppose", "disagree", "hate", "awful", "crisis", "fail"}
+                for agent, entries in memory_data.items():
+                    scores = []
+                    for entry in entries:
+                        if entry.get("type") in ("CREATE_POST", "CREATE_COMMENT", "QUOTE_POST"):
+                            lower = entry.get("content", "").lower()
+                            pos = sum(1 for w in positive_kw if w in lower)
+                            neg = sum(1 for w in negative_kw if w in lower)
+                            total = pos + neg
+                            scores.append((pos - neg) / total if total > 0 else 0.0)
+                    if scores:
+                        avg = sum(scores) / len(scores)
+                        stance = "positive" if avg > 0.15 else ("negative" if avg < -0.15 else "neutral")
+                        agent_stances[agent] = {"avg_sentiment": round(avg, 3), "stance": stance, "posts": len(scores)}
+            except Exception:
+                pass
+
         return {
             "sentiment_curve": sentiment_curve,
             "faction_evolution": faction_evolution,
             "momentum_indicators": momentum_data,
             "influence_rankings": influence_data,
+            "agent_stances": agent_stances,
             "total_rounds": len(sentiment_curve),
+            "total_agents_with_memory": len(agent_stances),
         }
 
     def agent_profiles(self, simulation_dir: str) -> List[Dict[str, Any]]:

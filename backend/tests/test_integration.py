@@ -1091,6 +1091,25 @@ class TestAgentMemoryPersistence:
         assert "factions" in data
         assert data["total_content_agents"] == 2
 
+    def test_analytics_reads_agent_memory(self, tmp_path):
+        """AnalyticsService.simulation_analytics includes agent stances from memory."""
+        from app.services.analytics import AnalyticsService
+
+        sim_dir = str(tmp_path)
+        # Create agent_memory.json
+        memory = {
+            "alice": [{"type": "CREATE_POST", "content": "great progress love", "round": 1}],
+            "bob": [{"type": "CREATE_POST", "content": "terrible crisis fail", "round": 1}],
+        }
+        with open(os.path.join(sim_dir, "agent_memory.json"), "w") as f:
+            json.dump(memory, f)
+
+        svc = AnalyticsService()
+        result = svc.simulation_analytics(sim_dir)
+        assert result["total_agents_with_memory"] == 2
+        assert result["agent_stances"]["alice"]["stance"] == "positive"
+        assert result["agent_stances"]["bob"]["stance"] == "negative"
+
 
 # ---------------------------------------------------------------------------
 # Change notifier tests

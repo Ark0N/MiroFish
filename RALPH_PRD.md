@@ -326,6 +326,10 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **45.1 Test agent memory persistence and interview enrichment** — Add tests verifying: AgentMemoryManager.to_dict() saves to JSON, from_dict() loads back, interview enrichment logic prepends context correctly when memory exists, and gracefully skips when it doesn't.
 
+## Phase 46: Analytics Service Reads All Metric Files
+
+- [x] **46.1 Add influence and memory data to analytics** — Enhance AnalyticsService.simulation_analytics() to also read `influence_metrics.jsonl` and `agent_memory.json`, returning influence rankings and agent stance summaries alongside the existing sentiment/faction/momentum data. Complete the analytics data pipeline.
+
 ## Ralph Loop Session Summary
 
 **Session completed**: 40 phases, 109 items, 648 tests, 91 commits.
