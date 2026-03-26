@@ -216,6 +216,16 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **21.4 Service boundary tests** — Test each service with extreme inputs: empty dicts, None values, very large lists (1000+ items), negative numbers, NaN probabilities. Ensures no crashes at system boundaries.
 
+## Phase 22: Frontend Prediction Dashboard
+
+- [ ] **22.1 Prediction health indicator component** — Create a `PredictionHealthBadge.vue` component that displays health status (fresh/aging/stale/boosted) with appropriate colors and icons. Shows decay factor and days since last evidence.
+
+- [ ] **22.2 Uncertainty visualization component** — Create `UncertaintyBar.vue` showing epistemic (reducible) vs aleatoric (irreducible) uncertainty as a stacked bar. Include tooltip explaining what each type means and actionable recommendation.
+
+- [ ] **22.3 Contradiction warning component** — Create `ContradictionAlert.vue` that displays detected contradictions between predictions with severity badges and links to the conflicting predictions.
+
+- [ ] **22.4 Scenario comparison view** — Create `ScenarioCompare.vue` showing best/worst/most-likely scenarios from the scenario tree as side-by-side cards with joint probability bars.
+
 ---
 
 ## Ralph Loop Instructions
