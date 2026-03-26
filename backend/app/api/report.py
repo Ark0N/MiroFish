@@ -515,6 +515,47 @@ def get_predictions(report_id: str):
         }), 500
 
 
+@report_bp.route('/<report_id>/digest', methods=['GET'])
+def get_digest(report_id: str):
+    """Get a compact one-paragraph prediction digest."""
+    err = validate_id_param(report_id, "report_id")
+    if err:
+        return err
+    try:
+        predictions = ReportManager.load_predictions(report_id)
+        if not predictions or not predictions.predictions:
+            return jsonify({"success": False, "error": "No predictions found"}), 404
+
+        pred_dicts = [p.to_dict() for p in predictions.predictions]
+
+        # Get health and contradictions if available
+        health_data = None
+        contradictions = None
+        try:
+            from ..services.prediction_decay import PredictionDecayTracker
+            from ..services.contradiction_detector import ContradictionDetector
+            tracker = PredictionDecayTracker()
+            report = ReportManager.get_report(report_id)
+            health_list = tracker.compute_health(pred_dicts, predictions.generated_at or (report.created_at if report else ""))
+            health_data = {"prediction_health": [h.to_dict() for h in health_list]}
+            contradictions = ContradictionDetector().detect_contradictions(pred_dicts)
+        except Exception:
+            pass
+
+        from ..services.prediction_digest import PredictionDigestGenerator
+        digest = PredictionDigestGenerator().generate(
+            pred_dicts,
+            overall_confidence=predictions.overall_confidence,
+            health_data=health_data,
+            contradictions=contradictions,
+        )
+        return jsonify({"success": True, "data": {"digest": digest, "num_predictions": len(pred_dicts)}})
+
+    except Exception as e:
+        logger.error(f"Digest failed: {e}")
+        return jsonify({"success": False, "error": "Digest generation failed"}), 500
+
+
 @report_bp.route('/<report_id>/predictions/export', methods=['GET'])
 def export_predictions(report_id: str):
     """Export predictions as CSV or JSONL.

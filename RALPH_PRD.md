@@ -258,6 +258,10 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **28.1 CSV/JSONL prediction export endpoint** — Add `GET /api/report/<id>/predictions/export?format=csv|jsonl` that exports predictions in tabular formats for external tools. CSV includes event, probability, confidence_interval, agent_agreement, impact_level, health_status.
 
+## Phase 29: Prediction Summary & Digest
+
+- [x] **29.1 Prediction digest generator** — Add a service that produces a one-paragraph executive digest from all prediction data: top 3 predictions ranked by impact, overall confidence, key contradictions, and health warnings. Expose via `GET /api/report/<id>/digest`. Useful for Slack/email integrations.
+
 ## Ralph Loop Session Summary
 
 **Session completed**: 23 phases, 92 items, 621 tests, 72 commits.

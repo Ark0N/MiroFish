@@ -323,6 +323,30 @@ class TestCatalogEndpoint:
         assert any('/analytics' in p for p in paths)
 
 
+class TestDigestEndpoint:
+    """Tests for GET /api/report/<id>/digest."""
+
+    def test_digest_nonexistent_returns_404(self, client):
+        response = client.get('/api/report/nonexistent/digest')
+        assert response.status_code == 404
+
+    @patch.object(ReportManager, 'load_predictions')
+    @patch.object(ReportManager, 'get_report', return_value=None)
+    def test_digest_returns_text(self, mock_report, mock_load, client):
+        from app.services.report_agent import PredictionSet, StructuredPrediction
+        ps = PredictionSet(predictions=[
+            StructuredPrediction(event="Market downturn expected", probability=0.8),
+            StructuredPrediction(event="Policy change likely", probability=0.6),
+        ], overall_confidence="Moderate", generated_at="2026-03-26")
+        mock_load.return_value = ps
+        response = client.get('/api/report/valid-id/digest')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['success'] is True
+        assert "2 predictions" in data['data']['digest']
+        assert "Market downturn" in data['data']['digest']
+
+
 class TestPredictionExportEndpoint:
     """Tests for GET /api/report/<id>/predictions/export."""
 
