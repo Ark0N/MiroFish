@@ -178,9 +178,9 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 ## Phase 18: Prediction Composition & Reasoning
 
-- [~] **18.1 Prediction chaining engine** — Given a set of predictions with dependency edges, compute joint probabilities for compound events (e.g., P(A AND B), P(A OR B), P(A THEN B)). Uses the dependency graph from 10.2 and conditional probability rules.
+- [x] **18.1 Prediction chaining engine** — Given a set of predictions with dependency edges, compute joint probabilities for compound events (e.g., P(A AND B), P(A OR B), P(A THEN B)). Uses the dependency graph from 10.2 and conditional probability rules.
 
-- [ ] **18.2 Scenario tree builder** — Build a tree of mutually exclusive future scenarios from predictions. Each branch is a combination of prediction outcomes weighted by joint probability. Enables "best case / worst case / most likely" framing.
+- [~] **18.2 Scenario tree builder** — Build a tree of mutually exclusive future scenarios from predictions. Each branch is a combination of prediction outcomes weighted by joint probability. Enables "best case / worst case / most likely" framing.
 
 - [ ] **18.3 Prediction contradiction detector** — Identify pairs of predictions that are logically contradictory (e.g., "prices rise" and "deflation occurs"). Flag contradictions with severity levels and suggest which prediction has stronger evidence.
 

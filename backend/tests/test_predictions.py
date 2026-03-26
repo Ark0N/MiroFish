@@ -2855,3 +2855,61 @@ class TestPredictionChaining:
         assert e.chain_predictions([], []) == []
         result = e.best_worst_most_likely([])
         assert result["best_case"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Scenario tree tests
+# ---------------------------------------------------------------------------
+
+
+class TestScenarioTree:
+    """Tests for scenario tree builder."""
+
+    def _make_builder(self):
+        from app.services.scenario_tree import ScenarioTreeBuilder
+        return ScenarioTreeBuilder()
+
+    def test_empty_predictions(self):
+        b = self._make_builder()
+        result = b.build_tree([])
+        assert result["scenarios"] == []
+
+    def test_single_prediction(self):
+        b = self._make_builder()
+        result = b.build_tree([{"event": "Rain", "probability": 0.7}])
+        assert result["total_scenarios"] == 2
+        assert result["most_likely"] is not None
+
+    def test_two_predictions(self):
+        b = self._make_builder()
+        preds = [
+            {"event": "A happens", "probability": 0.8},
+            {"event": "B happens", "probability": 0.6},
+        ]
+        result = b.build_tree(preds)
+        assert result["total_scenarios"] == 4
+        assert result["best_case"] is not None
+        assert result["worst_case"] is not None
+
+    def test_most_likely_has_highest_prob(self):
+        b = self._make_builder()
+        preds = [
+            {"event": "High prob event", "probability": 0.9},
+            {"event": "Low prob event", "probability": 0.2},
+        ]
+        result = b.build_tree(preds)
+        # Most likely: A happens (0.9), B doesn't (0.8) → 0.72
+        ml = result["most_likely"]
+        assert ml["joint_probability"] >= result["scenarios"][0]["joint_probability"]
+
+    def test_max_predictions_cap(self):
+        b = self._make_builder()
+        preds = [{"event": f"E{i}", "probability": 0.5} for i in range(10)]
+        result = b.build_tree(preds, max_predictions=4)
+        assert result["total_scenarios"] == 16  # 2^4
+
+    def test_scenario_has_description(self):
+        b = self._make_builder()
+        result = b.build_tree([{"event": "Test event", "probability": 0.7}])
+        for s in result["scenarios"]:
+            assert "description" in s
