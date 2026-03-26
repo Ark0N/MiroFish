@@ -63,6 +63,11 @@
               </div>
             </div>
           </div>
+
+          <!-- Prediction Comparison -->
+          <div v-if="comparisonDiffs.length > 0" class="comparison-section">
+            <PredictionDiffTable :diffs="comparisonDiffs" />
+          </div>
         </div>
 
         <!-- Waiting State -->
@@ -412,7 +417,8 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
-import { chatWithReport, getReport, getAgentLog } from '../api/report'
+import { chatWithReport, getReport, getAgentLog, comparePredictions } from '../api/report'
+import PredictionDiffTable from './PredictionDiffTable.vue'
 import { interviewAgents, getSimulationProfilesRealtime } from '../api/simulation'
 import { renderMarkdown } from '../utils/markdown'
 import { loadChatHistory, saveChatHistory as persistChatHistory } from '../store/chatHistory'
@@ -430,6 +436,7 @@ const chatTarget = ref('report_agent')
 const showAgentDropdown = ref(false)
 const selectedAgent = ref(null)
 const selectedAgentIndex = ref(null)
+const comparisonDiffs = ref([])
 const showFullProfile = ref(true)
 const showToolsDetail = ref(true)
 

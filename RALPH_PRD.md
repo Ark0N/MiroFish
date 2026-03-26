@@ -262,6 +262,10 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **29.1 Prediction digest generator** — Add a service that produces a one-paragraph executive digest from all prediction data: top 3 predictions ranked by impact, overall confidence, key contradictions, and health warnings. Expose via `GET /api/report/<id>/digest`. Useful for Slack/email integrations.
 
+## Phase 30: Prediction Comparison Frontend
+
+- [x] **30.1 Wire prediction diff view into Step5Interaction** — In the interaction/chat view, add a "Compare Predictions" panel that lets users select 2+ reports and see how predictions shifted. Use comparePredictions API + a new ComparisonTable component.
+
 ## Ralph Loop Session Summary
 
 **Session completed**: 23 phases, 92 items, 621 tests, 72 commits.
