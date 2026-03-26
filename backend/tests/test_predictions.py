@@ -2663,3 +2663,72 @@ class TestCoalitionDetector:
         sentiments = {"a": 0.5, "b": 0.5}
         coalitions = det.detect_coalitions(sentiments, [], min_coalition_size=3)
         assert len(coalitions) == 0
+
+
+# ---------------------------------------------------------------------------
+# Prediction market tests
+# ---------------------------------------------------------------------------
+
+
+class TestPredictionMarket:
+    """Tests for virtual prediction market."""
+
+    def _make_market(self):
+        from app.services.prediction_market import PredictionMarket
+        return PredictionMarket()
+
+    def test_empty_market(self):
+        m = self._make_market()
+        state = m.create_market("Test", {})
+        assert state.market_probability == 0.5
+        assert state.num_bettors == 0
+
+    def test_positive_consensus_market(self):
+        m = self._make_market()
+        sentiments = {f"a{i}": 0.8 for i in range(10)}
+        state = m.create_market("Event A", sentiments)
+        assert state.market_probability > 0.8
+        assert state.num_bettors == 10
+        assert state.total_for_stake > state.total_against_stake
+
+    def test_mixed_market(self):
+        m = self._make_market()
+        sentiments = {"bull": 0.9, "bear": -0.7, "neutral": 0.0}
+        state = m.create_market("Test", sentiments)
+        assert state.num_bettors == 2  # neutral doesn't bet
+        assert 0.0 < state.market_probability < 1.0
+
+    def test_arbitrage_detection(self):
+        m = self._make_market()
+        result = m.detect_arbitrage(market_probability=0.8, sentiment_probability=0.5)
+        assert result["has_arbitrage"] is True
+        assert result["divergence"] > 0
+
+    def test_no_arbitrage(self):
+        m = self._make_market()
+        result = m.detect_arbitrage(market_probability=0.6, sentiment_probability=0.55)
+        assert result["has_arbitrage"] is False
+
+    def test_aggregation_methods(self):
+        m = self._make_market()
+        probs = [0.8, 0.7, 0.9, 0.6]
+        agg = m.aggregate_methods(probs)
+        assert "mean" in agg
+        assert "median" in agg
+        assert "geometric_mean" in agg
+        assert "extremized_mean" in agg
+        assert 0.5 < agg["mean"] < 1.0
+
+    def test_extremized_pushes_away_from_half(self):
+        m = self._make_market()
+        probs = [0.7, 0.75, 0.8]
+        agg = m.aggregate_methods(probs)
+        # Extremized should be further from 0.5 than mean
+        assert agg["extremized_mean"] >= agg["mean"]
+
+    def test_market_state_to_dict(self):
+        m = self._make_market()
+        state = m.create_market("Test", {"a": 0.5})
+        d = state.to_dict()
+        assert "market_probability" in d
+        assert "num_bettors" in d

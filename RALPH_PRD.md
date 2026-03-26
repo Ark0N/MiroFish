@@ -158,13 +158,13 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 ## Phase 16: Prediction Market Mechanics
 
-- [ ] **16.1 Agent betting pool** — Add a virtual prediction market where agents can "bet" on outcomes using karma points. Agents who are more confident in their stance commit more karma. The distribution of bets provides a market-based probability estimate that complements the sentiment-based one.
+- [x] **16.1 Agent betting pool** — Add a virtual prediction market where agents can "bet" on outcomes using karma points. Agents who are more confident in their stance commit more karma. The distribution of bets provides a market-based probability estimate that complements the sentiment-based one.
 
-- [ ] **16.2 Prediction arbitrage detector** — When the market-based probability diverges significantly from the sentiment-based probability, flag it as an arbitrage signal. This divergence often reveals that agents' actions (bets) don't match their words (posts), which is a strong predictor of actual behavior.
+- [x] **16.2 Prediction arbitrage detector** — When the market-based probability diverges significantly from the sentiment-based probability, flag it as an arbitrage signal. This divergence often reveals that agents' actions (bets) don't match their words (posts), which is a strong predictor of actual behavior.
 
-- [ ] **16.3 Information elicitation scoring** — Score agents by how much new information their posts reveal (measured by entropy reduction in the prediction distribution after their post). Agents who consistently provide novel information get higher credibility weights.
+- [x] **16.3 Information elicitation scoring** — Score agents by how much new information their posts reveal (measured by entropy reduction in the prediction distribution after their post). Agents who consistently provide novel information get higher credibility weights.
 
-- [ ] **16.4 Crowd wisdom aggregation** — Implement multiple aggregation methods (mean, median, geometric mean, extremized mean) and compare their accuracy across historical predictions. Auto-select the best method per project based on backtesting data.
+- [x] **16.4 Crowd wisdom aggregation** — Implement multiple aggregation methods (mean, median, geometric mean, extremized mean) and compare their accuracy across historical predictions. Auto-select the best method per project based on backtesting data.
 
 ## Phase 17: Robustness Testing
 
