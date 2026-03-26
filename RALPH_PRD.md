@@ -250,6 +250,10 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **26.1 Wire ScenarioCompare into Step4Report** — After predictions load, call the backend scenario tree builder via a new API endpoint, then render ScenarioCompare below the health dashboard showing best/worst/most-likely scenarios.
 
+## Phase 27: API Test Coverage for New Endpoints
+
+- [x] **27.1 Test new report endpoints with mock data** — Add tests for `/scenarios`, `/selftest`, `/catalog` endpoints. Verify selftest returns pass for all services. Verify catalog lists correct count. Verify scenarios returns tree structure with mock predictions.
+
 ## Ralph Loop Session Summary
 
 **Session completed**: 23 phases, 92 items, 621 tests, 72 commits.

@@ -3,7 +3,9 @@ Integration tests for MiroFish API endpoints using Flask's test client.
 """
 
 import pytest
+from unittest.mock import patch
 from app import create_app
+from app.services.report_agent import ReportManager
 
 
 @pytest.fixture
@@ -280,6 +282,73 @@ class TestPredictionHealthEndpoint:
     def test_health_invalid_id_returns_400(self, client):
         response = client.get('/api/report/report_<bad>/health')
         assert response.status_code == 400
+
+
+class TestSelftestEndpoint:
+    """Tests for GET /api/report/selftest."""
+
+    def test_selftest_returns_200(self, client):
+        response = client.get('/api/report/selftest')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['success'] is True
+        assert data['data']['passed'] > 0
+        assert data['data']['failed'] == 0
+
+    def test_selftest_has_all_services(self, client):
+        response = client.get('/api/report/selftest')
+        data = response.get_json()
+        assert data['data']['total'] >= 10
+
+
+class TestCatalogEndpoint:
+    """Tests for GET /api/report/catalog."""
+
+    def test_catalog_returns_200(self, client):
+        response = client.get('/api/report/catalog')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['success'] is True
+        assert data['data']['total_services'] >= 30
+        assert data['data']['total_endpoints'] >= 10
+        assert len(data['data']['services']) >= 30
+
+    def test_catalog_has_endpoint_list(self, client):
+        response = client.get('/api/report/catalog')
+        data = response.get_json()
+        endpoints = data['data']['endpoints']
+        paths = [e['path'] for e in endpoints]
+        assert any('/predictions' in p for p in paths)
+        assert any('/health' in p for p in paths)
+        assert any('/analytics' in p for p in paths)
+
+
+class TestScenariosEndpoint:
+    """Tests for GET /api/report/<report_id>/scenarios."""
+
+    def test_scenarios_nonexistent_returns_404(self, client):
+        response = client.get('/api/report/nonexistent-id/scenarios')
+        assert response.status_code == 404
+
+    def test_scenarios_invalid_id_returns_400(self, client):
+        response = client.get('/api/report/report_<bad>/scenarios')
+        assert response.status_code == 400
+
+    @patch.object(ReportManager, 'load_predictions')
+    def test_scenarios_returns_tree(self, mock_load, client):
+        from app.services.report_agent import PredictionSet, StructuredPrediction
+        ps = PredictionSet(predictions=[
+            StructuredPrediction(event="Event A", probability=0.8),
+            StructuredPrediction(event="Event B", probability=0.4),
+        ], overall_confidence="Test", generated_at="2026-01-01")
+        mock_load.return_value = ps
+        response = client.get('/api/report/valid-report/scenarios')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['success'] is True
+        assert data['data']['total_scenarios'] == 4  # 2^2
+        assert data['data']['best_case'] is not None
+        assert data['data']['worst_case'] is not None
 
 
 class TestAnalyticsEndpoints:
