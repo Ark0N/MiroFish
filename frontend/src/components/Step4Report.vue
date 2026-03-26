@@ -63,6 +63,13 @@
               </div>
             </div>
           </div>
+
+          <!-- Structured Predictions -->
+          <PredictionTable
+            v-if="predictions.length > 0"
+            :predictions="predictions"
+            :overallConfidence="predictionsOverallConfidence"
+          />
         </div>
 
         <!-- Waiting State -->
@@ -392,8 +399,9 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick, h, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { getAgentLog, getConsoleLog } from '../api/report'
+import { getAgentLog, getConsoleLog, getPredictions } from '../api/report'
 import { renderMarkdown } from '../utils/markdown'
+import PredictionTable from './PredictionTable.vue'
 
 const router = useRouter()
 
@@ -424,6 +432,8 @@ const expandedContent = ref(new Set())
 const expandedLogs = ref(new Set())
 const collapsedSections = ref(new Set())
 const isComplete = ref(false)
+const predictions = ref([])
+const predictionsOverallConfidence = ref('')
 const startTime = ref(null)
 const leftPanel = ref(null)
 const rightPanel = ref(null)
@@ -1948,6 +1958,8 @@ const fetchAgentLog = async () => {
             currentSectionIndex.value = null  // 确保清除 loading 状态
             emit('update-status', 'completed')
             stopPolling()
+            // Fetch structured predictions
+            fetchPredictions()
             // 滚动逻辑统一在循环结束后的 nextTick 中处理
           }
           
@@ -2018,6 +2030,19 @@ const extractFinalContent = (response) => {
   }
   
   return null
+}
+
+const fetchPredictions = async () => {
+  if (!props.reportId) return
+  try {
+    const res = await getPredictions(props.reportId)
+    if (res.data?.success && res.data?.data) {
+      predictions.value = res.data.data.predictions || []
+      predictionsOverallConfidence.value = res.data.data.overall_confidence || ''
+    }
+  } catch (e) {
+    // Predictions are optional — don't break the report view
+  }
 }
 
 const fetchConsoleLog = async () => {
