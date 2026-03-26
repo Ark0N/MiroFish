@@ -270,6 +270,10 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **31.1 Final session summary and CLAUDE.md sync** — Update CLAUDE.md with final test count (634), list all 7 frontend components, update API endpoint count (21+), and ensure the prediction engine section is accurate. Add PredictionDiffTable and PredictionDigest to the documented services.
 
+## Phase 32: Graph-Prediction Integration
+
+- [x] **32.1 Prediction-aware graph enrichment** — When predictions are generated, create new Graphiti episodes linking prediction events back to the knowledge graph. Each prediction becomes a node connected to its source entities, enabling graph-based prediction exploration and cross-project knowledge transfer.
+
 ## Ralph Loop Session Summary
 
 **Session completed**: 31 phases, 100 items, 634 tests, 81 commits.

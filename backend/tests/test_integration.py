@@ -905,3 +905,84 @@ class TestPredictionPipelineE2E:
 
         # All services passed — the full prediction engine works end-to-end
         assert True, "Full E2E pipeline completed successfully"
+
+
+# ---------------------------------------------------------------------------
+# Prediction graph bridge tests
+# ---------------------------------------------------------------------------
+
+
+class TestPredictionGraphBridge:
+    """Tests for prediction-to-graph enrichment."""
+
+    def _make_bridge(self):
+        from app.services.prediction_graph_bridge import PredictionGraphBridge
+        return PredictionGraphBridge()
+
+    def test_format_prediction_episode(self):
+        bridge = self._make_bridge()
+        pred = {
+            "event": "Oil prices rise", "probability": 0.7,
+            "evidence": ["Supply cut"], "risk_factors": ["Policy reversal"],
+            "agent_agreement": 0.8, "impact_level": "high", "timeframe": "short-term",
+        }
+        text = bridge._format_prediction_episode(pred, 0, "sim_1", "r_1")
+        assert "PREDICTION: Oil prices rise" in text
+        assert "70%" in text
+        assert "Supply cut" in text
+        assert "sim_1" in text
+
+    def test_format_predictions_as_text(self):
+        bridge = self._make_bridge()
+        preds = [
+            {"event": "A happens", "probability": 0.8},
+            {"event": "B happens", "probability": 0.3},
+        ]
+        text = bridge.format_predictions_as_text(preds)
+        assert "A happens" in text
+        assert "80%" in text
+        assert "PREDICTIONS" in text
+
+    def test_empty_predictions(self):
+        bridge = self._make_bridge()
+        result = bridge.enrich_graph_with_predictions("g1", [])
+        assert result["added_count"] == 0
+
+    def test_empty_graph_id(self):
+        bridge = self._make_bridge()
+        result = bridge.enrich_graph_with_predictions("", [{"event": "test"}])
+        assert result["added_count"] == 0
+
+    def test_format_empty_list(self):
+        bridge = self._make_bridge()
+        assert bridge.format_predictions_as_text([]) == ""
+
+    def test_enrich_with_mock_graphiti(self):
+        """Test enrichment with mocked Graphiti to avoid real DB calls."""
+        from unittest.mock import patch, MagicMock
+        bridge = self._make_bridge()
+        preds = [
+            {"event": "Test prediction", "probability": 0.6, "evidence": [], "risk_factors": [],
+             "agent_agreement": 0.5, "impact_level": "medium"},
+        ]
+        with patch.object(bridge, '_add_episode') as mock_add:
+            result = bridge.enrich_graph_with_predictions("graph_1", preds, "sim_1", "r_1")
+            assert result["added_count"] == 1
+            assert mock_add.call_count == 1
+
+    def test_enrich_handles_errors_gracefully(self):
+        from unittest.mock import patch
+        bridge = self._make_bridge()
+        preds = [
+            {"event": "Good prediction", "probability": 0.7},
+            {"event": "Bad prediction", "probability": 0.3},
+        ]
+        call_count = [0]
+        def side_effect(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 2:
+                raise RuntimeError("Graph error")
+        with patch.object(bridge, '_add_episode', side_effect=side_effect):
+            result = bridge.enrich_graph_with_predictions("g1", preds)
+            assert result["added_count"] == 1
+            assert len(result["errors"]) == 1
