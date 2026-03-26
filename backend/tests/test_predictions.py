@@ -2913,3 +2913,70 @@ class TestScenarioTree:
         result = b.build_tree([{"event": "Test event", "probability": 0.7}])
         for s in result["scenarios"]:
             assert "description" in s
+
+
+# ---------------------------------------------------------------------------
+# Contradiction detector and impact estimator tests
+# ---------------------------------------------------------------------------
+
+
+class TestContradictionDetector:
+    """Tests for prediction contradiction detection and impact estimation."""
+
+    def _make_detector(self):
+        from app.services.contradiction_detector import ContradictionDetector
+        return ContradictionDetector()
+
+    def test_detects_antonym_contradiction(self):
+        d = self._make_detector()
+        preds = [
+            {"event": "Oil prices will rise sharply", "probability": 0.7},
+            {"event": "Oil prices will fall dramatically", "probability": 0.6},
+        ]
+        contradictions = d.detect_contradictions(preds)
+        assert len(contradictions) >= 1
+        assert contradictions[0]["severity"] in ("high", "medium", "low")
+
+    def test_no_contradiction_for_different_topics(self):
+        d = self._make_detector()
+        preds = [
+            {"event": "Technology sector boom expected", "probability": 0.8},
+            {"event": "New education policy announced", "probability": 0.5},
+        ]
+        contradictions = d.detect_contradictions(preds)
+        assert len(contradictions) == 0
+
+    def test_stronger_prediction_identified(self):
+        d = self._make_detector()
+        preds = [
+            {"event": "Market will strengthen significantly", "probability": 0.9},
+            {"event": "Market will weaken substantially", "probability": 0.3},
+        ]
+        contradictions = d.detect_contradictions(preds)
+        if contradictions:
+            assert contradictions[0]["stronger_prediction"] == 0
+
+    def test_impact_estimation_high(self):
+        d = self._make_detector()
+        pred = {"event": "Unprecedented catastrophic crisis devastates economy", "probability": 0.9}
+        impact = d.estimate_impact(pred)
+        assert impact["impact_score"] >= 6
+        assert impact["level"] in ("high", "critical")
+
+    def test_impact_estimation_low(self):
+        d = self._make_detector()
+        pred = {"event": "Minor policy adjustment expected", "probability": 0.2}
+        impact = d.estimate_impact(pred)
+        assert impact["impact_score"] <= 4
+        assert impact["level"] in ("low", "medium")
+
+    def test_impact_with_agent_engagement(self):
+        d = self._make_detector()
+        pred = {"event": "Economy growth expected", "probability": 0.6}
+        posts = {f"a{i}": [f"economy growth is happening"] for i in range(10)}
+        impact = d.estimate_impact(pred, agent_posts=posts)
+        assert impact["components"]["engagement_impact"] > 0
+
+    def test_empty_predictions_no_contradictions(self):
+        d = self._make_detector()
+        assert d.detect_contradictions([]) == []
