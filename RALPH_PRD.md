@@ -142,9 +142,9 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **14.2 Counterfactual analysis** — Add a service that asks "what if?" — given a prediction, compute how the probability would change if key factors were different (e.g., remove the most influential agent, flip a faction's stance). Report sensitivity to each factor.
 
-- [~] **14.3 Prediction narrative generator** — Auto-generate a natural language narrative for each prediction explaining the causal chain in plain English: "This prediction is based on X agents who observed Y, supported by graph entity Z, and calibrated by consensus strength W."
+- [x] **14.3 Prediction narrative generator** — Auto-generate a natural language narrative for each prediction explaining the causal chain in plain English: "This prediction is based on X agents who observed Y, supported by graph entity Z, and calibrated by consensus strength W."
 
-- [ ] **14.4 Disagreement analysis** — When agents disagree, identify the root cause: different information access, different persona biases, or genuine ambiguity. Classify disagreements to help users understand prediction uncertainty.
+- [x] **14.4 Disagreement analysis** — When agents disagree, identify the root cause: different information access, different persona biases, or genuine ambiguity. Classify disagreements to help users understand prediction uncertainty.
 
 ## Phase 15: Advanced Simulation Dynamics
 

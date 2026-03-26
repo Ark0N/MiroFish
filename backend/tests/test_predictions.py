@@ -2487,3 +2487,61 @@ class TestPredictionNarrative:
         assert len(narratives) == 2
         assert "A" in narratives[0]
         assert "B" in narratives[1]
+
+
+# ---------------------------------------------------------------------------
+# Disagreement analysis tests
+# ---------------------------------------------------------------------------
+
+
+class TestDisagreementAnalyzer:
+    """Tests for disagreement root cause analysis."""
+
+    def _make_analyzer(self):
+        from app.services.disagreement_analyzer import DisagreementAnalyzer
+        return DisagreementAnalyzer()
+
+    def test_no_disagreement(self):
+        a = self._make_analyzer()
+        sentiments = {f"a{i}": 0.5 for i in range(10)}
+        result = a.analyze(sentiments, {}, {})
+        assert result["has_disagreement"] is False
+
+    def test_persona_bias_detected(self):
+        a = self._make_analyzer()
+        sentiments = {"off_1": 0.8, "off_2": 0.7, "stu_1": -0.6, "stu_2": -0.5}
+        types = {"off_1": "Official", "off_2": "Official", "stu_1": "Student", "stu_2": "Student"}
+        result = a.analyze(sentiments, types, {})
+        assert result["has_disagreement"] is True
+        assert result["type_patterns"]["type_correlated"] is True
+
+    def test_genuine_ambiguity(self):
+        a = self._make_analyzer()
+        sentiments = {"a": 0.5, "b": -0.5, "c": 0.3, "d": -0.4}
+        types = {a: "Person" for a in sentiments}
+        result = a.analyze(sentiments, types, {})
+        assert result["has_disagreement"] is True
+        assert result["cause"] == "genuine_ambiguity"
+
+    def test_insufficient_agents(self):
+        a = self._make_analyzer()
+        result = a.analyze({"a": 0.5}, {}, {})
+        assert result["has_disagreement"] is False
+
+    def test_has_recommendations(self):
+        a = self._make_analyzer()
+        sentiments = {"a": 0.8, "b": -0.8}
+        types = {"a": "Person", "b": "Person"}
+        result = a.analyze(sentiments, types, {})
+        if result["has_disagreement"]:
+            assert "recommendations" in result
+            assert len(result["recommendations"]) >= 1
+
+    def test_network_correlation(self):
+        a = self._make_analyzer()
+        sentiments = {"hub": 0.8, "connected": 0.7, "isolated": -0.6}
+        types = {a: "Person" for a in sentiments}
+        graph = {"hub": ["connected"], "connected": ["hub"], "isolated": []}
+        result = a.analyze(sentiments, types, {}, follow_graph=graph)
+        assert result["has_disagreement"] is True
+        assert "network_patterns" in result
