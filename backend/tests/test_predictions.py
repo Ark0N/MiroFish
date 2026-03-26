@@ -2435,3 +2435,55 @@ class TestCounterfactualAnalyzer:
         result = a.analyze(sentiments, 0.95)
         for s in result["scenarios"]:
             assert 0.05 <= s["new_probability"] <= 0.99
+
+
+# ---------------------------------------------------------------------------
+# Prediction narrative tests
+# ---------------------------------------------------------------------------
+
+
+class TestPredictionNarrative:
+    """Tests for prediction narrative generation."""
+
+    def _make_generator(self):
+        from app.services.prediction_narrative import PredictionNarrativeGenerator
+        return PredictionNarrativeGenerator()
+
+    def test_basic_narrative(self):
+        gen = self._make_generator()
+        pred = {"event": "Oil prices rise", "probability": 0.8, "evidence": ["Supply cut"], "agent_agreement": 0.9}
+        narrative = gen.generate_narrative(pred)
+        assert "Oil prices rise" in narrative
+        assert "high" in narrative.lower()
+        assert "Supply cut" in narrative
+
+    def test_low_confidence_narrative(self):
+        gen = self._make_generator()
+        pred = {"event": "Unlikely event", "probability": 0.2, "evidence": [], "agent_agreement": 0.3}
+        narrative = gen.generate_narrative(pred)
+        assert "low" in narrative.lower()
+        assert "disagreement" in narrative.lower()
+
+    def test_with_calibration(self):
+        gen = self._make_generator()
+        pred = {"event": "Test", "probability": 0.7, "evidence": [], "agent_agreement": 0.7}
+        cal = {"adjustment": 1.15}
+        narrative = gen.generate_narrative(pred, calibration_data=cal)
+        assert "boosted" in narrative.lower()
+
+    def test_with_risk_factors(self):
+        gen = self._make_generator()
+        pred = {"event": "Test", "probability": 0.6, "evidence": [], "risk_factors": ["Policy change", "External shock"]}
+        narrative = gen.generate_narrative(pred)
+        assert "Policy change" in narrative
+
+    def test_batch_narratives(self):
+        gen = self._make_generator()
+        preds = [
+            {"event": "A", "probability": 0.8, "evidence": [], "agent_agreement": 0.7},
+            {"event": "B", "probability": 0.3, "evidence": [], "agent_agreement": 0.4},
+        ]
+        narratives = gen.generate_batch_narratives(preds)
+        assert len(narratives) == 2
+        assert "A" in narratives[0]
+        assert "B" in narratives[1]
