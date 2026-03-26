@@ -90,8 +90,15 @@
         </div>
       </div>
 
+      <!-- Simulation Quality Grade -->
+      <QualityGradeBadge
+        v-if="qualityGrade"
+        :grade="qualityGrade"
+        :components="qualityComponents"
+      />
+
       <div class="action-controls">
-        <button 
+        <button
           class="action-btn primary"
           :disabled="phase !== 2 || isGeneratingReport"
           @click="handleNextStep"
@@ -295,6 +302,8 @@ import {
   getRunStatusDetail
 } from '../api/simulation'
 import { generateReport } from '../api/report'
+import { getQualityScore } from '../api/analytics'
+import QualityGradeBadge from './QualityGradeBadge.vue'
 
 const props = defineProps({
   simulationId: String,
@@ -315,6 +324,8 @@ const router = useRouter()
 // State
 const isGeneratingReport = ref(false)
 const phase = ref(0) // 0: 未开始, 1: 运行中, 2: 已完成
+const qualityGrade = ref('')
+const qualityComponents = ref({})
 const isStarting = ref(false)
 const isStopping = ref(false)
 const startError = ref(null)
@@ -523,6 +534,8 @@ const fetchRunStatus = async () => {
         phase.value = 2
         stopPolling()
         emit('update-status', 'completed')
+        // Fetch simulation quality score
+        fetchQualityScore()
       }
     }
   } catch (err) {
@@ -531,6 +544,19 @@ const fetchRunStatus = async () => {
 }
 
 // 检查所有启用的平台是否已完成
+const fetchQualityScore = async () => {
+  if (!props.simulationId) return
+  try {
+    const res = await getQualityScore(props.simulationId)
+    if (res.data?.success && res.data?.data) {
+      qualityGrade.value = res.data.data.grade || ''
+      qualityComponents.value = res.data.data.components || {}
+    }
+  } catch (e) {
+    // Quality score is optional
+  }
+}
+
 const checkPlatformsCompleted = (data) => {
   // 如果没有任何平台数据，返回 false
   if (!data) return false

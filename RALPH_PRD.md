@@ -294,6 +294,10 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **37.1 Add digest and changes to frontend API client and Step4Report** — Add `getDigest` and `getChanges` to `report.js`. In Step4Report, fetch digest when predictions load and show it as a one-line summary above the PredictionTable. Show recent changes as a small activity feed if any exist.
 
+## Phase 38: Simulation Quality Badge in Step3
+
+- [x] **38.1 Show simulation quality grade in Step3Simulation** — After a simulation completes, fetch `/api/analytics/quality/<id>` and display the grade (A-F) with component scores as a compact badge in the simulation run view. Gives immediate feedback on simulation reliability.
+
 ## Ralph Loop Session Summary
 
 **Session completed**: 36 phases, 105 items, 648 tests, 86 commits.
