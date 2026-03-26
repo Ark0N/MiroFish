@@ -148,7 +148,7 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 ## Phase 15: Advanced Simulation Dynamics
 
-- [ ] **15.1 Adaptive round count** — Instead of fixed round counts, detect when consensus has stabilized (sentiment velocity < threshold for 3+ rounds) and auto-stop the simulation. Saves compute without losing prediction quality.
+- [~] **15.1 Adaptive round count** — Instead of fixed round counts, detect when consensus has stabilized (sentiment velocity < threshold for 3+ rounds) and auto-stop the simulation. Saves compute without losing prediction quality.
 
 - [ ] **15.2 Agent coalition formation** — Detect when agents spontaneously form coalitions (coordinated posting, mutual amplification). Track coalition stability and influence on predictions.
 

@@ -2545,3 +2545,66 @@ class TestDisagreementAnalyzer:
         result = a.analyze(sentiments, types, {}, follow_graph=graph)
         assert result["has_disagreement"] is True
         assert "network_patterns" in result
+
+
+# ---------------------------------------------------------------------------
+# Adaptive round controller tests
+# ---------------------------------------------------------------------------
+
+
+class TestAdaptiveRoundController:
+    """Tests for adaptive round count control."""
+
+    def _make_controller(self, **kwargs):
+        from app.services.adaptive_rounds import AdaptiveRoundController
+        return AdaptiveRoundController(**kwargs)
+
+    def test_does_not_stop_below_min_rounds(self):
+        ctrl = self._make_controller(min_rounds=5, required_stable_rounds=2)
+        result = ctrl.check_round(2, sentiment_velocity=0.0)
+        assert result.should_stop is False
+
+    def test_stops_after_stable_rounds(self):
+        ctrl = self._make_controller(min_rounds=3, required_stable_rounds=3)
+        ctrl.check_round(3, 0.02)  # stable
+        ctrl.check_round(4, 0.01)  # stable
+        result = ctrl.check_round(5, 0.01)  # 3rd stable round
+        assert result.should_stop is True
+        assert "stabilized" in result.reason
+
+    def test_resets_on_instability(self):
+        ctrl = self._make_controller(min_rounds=3, required_stable_rounds=3)
+        ctrl.check_round(3, 0.01)  # stable
+        ctrl.check_round(4, 0.01)  # stable
+        ctrl.check_round(5, 0.2)   # unstable! resets counter
+        result = ctrl.check_round(6, 0.01)  # only 1 stable
+        assert result.should_stop is False
+        assert result.consecutive_stable_rounds == 1
+
+    def test_stops_at_max_rounds(self):
+        ctrl = self._make_controller(max_rounds=10)
+        result = ctrl.check_round(10, sentiment_velocity=0.5)
+        assert result.should_stop is True
+        assert "Maximum" in result.reason
+
+    def test_stops_on_low_participation(self):
+        ctrl = self._make_controller(min_rounds=3)
+        result = ctrl.check_round(5, sentiment_velocity=0.1, participation_rate=0.05)
+        assert result.should_stop is True
+
+    def test_reset(self):
+        ctrl = self._make_controller()
+        ctrl.check_round(1, 0.01)
+        ctrl.check_round(2, 0.01)
+        ctrl.reset()
+        status = ctrl.get_status()
+        assert status["rounds_completed"] == 0
+        assert status["consecutive_stable_rounds"] == 0
+
+    def test_stability_check_to_dict(self):
+        ctrl = self._make_controller(min_rounds=3)
+        result = ctrl.check_round(5, 0.01)
+        d = result.to_dict()
+        assert "is_stable" in d
+        assert "should_stop" in d
+        assert "reason" in d
