@@ -2046,6 +2046,234 @@ Format your response as a markdown section that can be appended to the report:
             logger.warning(f"Failed to parse prediction JSON: {e}")
             return None
 
+    def _run_prediction_pipeline(self, report: 'Report', report_id: str, prediction_set: 'PredictionSet') -> None:
+        """Run the full prediction enhancement pipeline.
+
+        Steps:
+        1. Calibrate via consensus + contrarian signals
+        2. Bootstrap confidence bands
+        3. Cross-validate agent agreement
+        4. Deduplicate predictions
+        5. Detect dependencies and contradictions
+        6. Generate provenance, narrative, and impact scores
+        7. Save predictions + executive summary
+        """
+        from ..utils.file_utils import atomic_write_text
+
+        consensus_data = None
+        sim_dir = None
+
+        # --- Step 1: Calibrate ---
+        try:
+            from .prediction_calibrator import PredictionCalibrator
+            from .simulation_manager import SimulationManager
+            calibrator = PredictionCalibrator()
+            sim_dir = SimulationManager()._get_simulation_dir(self.simulation_id)
+            consensus = self.graph_tools.consensus_analysis(
+                query=self.simulation_requirement,
+                simulation_dir=sim_dir
+            )
+            consensus_data = consensus.to_dict()
+            calibrated = calibrator.calibrate(
+                predictions=[p.to_dict() for p in prediction_set.predictions],
+                consensus_data=consensus_data,
+                simulation_dir=sim_dir,
+            )
+            for i, cp in enumerate(calibrated):
+                if i < len(prediction_set.predictions):
+                    prediction_set.predictions[i].probability = cp["probability"]
+                    prediction_set.predictions[i].confidence_interval = cp["confidence_interval"]
+            logger.info("Step 1: Predictions calibrated")
+        except Exception as e:
+            logger.warning(f"Pipeline step 1 (calibration) skipped: {e}")
+
+        # --- Step 2: Bootstrap confidence ---
+        try:
+            from .bootstrap_confidence import BootstrapConfidence
+            if sim_dir:
+                # Extract agent sentiments from action logs
+                agent_sents = self._extract_agent_sentiments(sim_dir)
+                if agent_sents:
+                    bc = BootstrapConfidence()
+                    for pred in prediction_set.predictions:
+                        bands = bc.compute_prediction_bands(agent_sents, pred.probability)
+                        pred.confidence_interval = [bands["ci_low"], bands["ci_high"]]
+                    logger.info("Step 2: Bootstrap confidence bands computed")
+        except Exception as e:
+            logger.warning(f"Pipeline step 2 (bootstrap) skipped: {e}")
+
+        # --- Step 3: Cross-validate ---
+        try:
+            from .cross_validator import CrossValidator
+            if sim_dir:
+                agent_posts = self._extract_agent_posts(sim_dir)
+                if agent_posts and len(agent_posts) >= 4:
+                    cv = CrossValidator()
+                    cv_result = cv.validate(agent_posts, n_folds=5)
+                    prediction_set.overall_confidence = (
+                        f"{prediction_set.overall_confidence} "
+                        f"[CV: {cv_result.get('interpretation', 'N/A')}]"
+                    )
+                    logger.info(f"Step 3: Cross-validation complete (agreement={cv_result.get('agreement_rate', 0):.2f})")
+        except Exception as e:
+            logger.warning(f"Pipeline step 3 (cross-validation) skipped: {e}")
+
+        # --- Step 4: Deduplicate ---
+        try:
+            from .prediction_dedup import PredictionDeduplicator
+            dedup = PredictionDeduplicator(similarity_threshold=0.5)
+            pred_dicts = [p.to_dict() for p in prediction_set.predictions]
+            deduped = dedup.deduplicate(pred_dicts)
+            if len(deduped) < len(pred_dicts):
+                # Rebuild prediction set from deduped list
+                new_preds = []
+                for d in deduped:
+                    new_preds.append(StructuredPrediction(
+                        event=d["event"],
+                        probability=d["probability"],
+                        confidence_interval=d.get("confidence_interval", [0.0, 1.0]),
+                        timeframe=d.get("timeframe", ""),
+                        reasoning=d.get("reasoning", ""),
+                        evidence=d.get("evidence", []),
+                        risk_factors=d.get("risk_factors", []),
+                        agent_agreement=d.get("agent_agreement", 0.0),
+                        citation_ids=d.get("citation_ids", []),
+                        impact_level=d.get("impact_level", "medium"),
+                    ))
+                prediction_set.predictions = new_preds
+                logger.info(f"Step 4: Dedup reduced {len(pred_dicts)} → {len(deduped)} predictions")
+        except Exception as e:
+            logger.warning(f"Pipeline step 4 (dedup) skipped: {e}")
+
+        # --- Step 5: Detect contradictions ---
+        try:
+            from .contradiction_detector import ContradictionDetector
+            detector = ContradictionDetector()
+            contradictions = detector.detect_contradictions(
+                [p.to_dict() for p in prediction_set.predictions]
+            )
+            if contradictions:
+                prediction_set.overall_confidence += f" [{len(contradictions)} contradiction(s) detected]"
+                logger.info(f"Step 5: {len(contradictions)} contradictions detected")
+
+            # Also estimate impact for each prediction
+            for pred in prediction_set.predictions:
+                impact = detector.estimate_impact(pred.to_dict())
+                pred.impact_level = impact.get("level", "medium")
+        except Exception as e:
+            logger.warning(f"Pipeline step 5 (contradictions/impact) skipped: {e}")
+
+        # --- Step 6: Generate provenance ---
+        try:
+            from .prediction_provenance import ProvenanceTracker
+            provenance_tracker = ProvenanceTracker()
+            provenances = []
+            for i, pred in enumerate(prediction_set.predictions):
+                prov = provenance_tracker.build_provenance(
+                    prediction=pred.to_dict(),
+                    prediction_idx=i,
+                    consensus_data=consensus_data,
+                )
+                provenances.append(prov)
+            provenance_tracker.save_provenance(report_id, provenances)
+            logger.info(f"Step 6: Provenance saved for {len(provenances)} predictions")
+        except Exception as e:
+            logger.warning(f"Pipeline step 6 (provenance) skipped: {e}")
+
+        # --- Step 7: Generate narratives ---
+        try:
+            from .prediction_narrative import PredictionNarrativeGenerator
+            narrator = PredictionNarrativeGenerator()
+            for pred in prediction_set.predictions:
+                narrative = narrator.generate_narrative(
+                    pred.to_dict(),
+                    consensus_data=consensus_data,
+                )
+                # Append narrative to reasoning
+                if narrative and not pred.reasoning:
+                    pred.reasoning = narrative[:500]
+            logger.info("Step 7: Narratives generated")
+        except Exception as e:
+            logger.warning(f"Pipeline step 7 (narratives) skipped: {e}")
+
+        # --- Save predictions ---
+        report.predictions = prediction_set
+        ReportManager.save_predictions(report_id, prediction_set)
+        logger.info(f"Predictions JSON saved: {report_id}/predictions.json")
+
+        # --- Generate executive summary ---
+        exec_summary = self._generate_executive_summary(prediction_set)
+        if exec_summary:
+            report.markdown_content = exec_summary + report.markdown_content
+            full_report_path = ReportManager._get_report_markdown_path(report_id)
+            atomic_write_text(full_report_path, report.markdown_content)
+            logger.info("Executive summary with risk matrix prepended to report")
+
+    def _extract_agent_sentiments(self, simulation_dir: str) -> dict:
+        """Extract agent sentiments from simulation action logs."""
+        import os as _os
+        sentiments = {}
+        positive_kw = {"good", "great", "support", "agree", "happy", "love", "excellent", "hope", "progress"}
+        negative_kw = {"bad", "terrible", "oppose", "disagree", "angry", "hate", "awful", "crisis", "fail"}
+        for platform in ["twitter", "reddit"]:
+            path = _os.path.join(simulation_dir, platform, "actions.jsonl")
+            if not _os.path.exists(path):
+                continue
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            a = json.loads(line)
+                            if a.get("action_type") not in ("CREATE_POST", "CREATE_COMMENT", "QUOTE_POST"):
+                                continue
+                            agent = a.get("agent_name", "")
+                            content = str(a.get("content", "")).lower()
+                            pos = sum(1 for w in positive_kw if w in content)
+                            neg = sum(1 for w in negative_kw if w in content)
+                            total = pos + neg
+                            score = (pos - neg) / total if total > 0 else 0.0
+                            if agent not in sentiments:
+                                sentiments[agent] = []
+                            sentiments[agent].append(score)
+                        except (json.JSONDecodeError, KeyError):
+                            continue
+            except Exception:
+                continue
+        return {a: sum(s)/len(s) for a, s in sentiments.items() if s}
+
+    def _extract_agent_posts(self, simulation_dir: str) -> dict:
+        """Extract agent posts from simulation action logs."""
+        import os as _os
+        posts = {}
+        for platform in ["twitter", "reddit"]:
+            path = _os.path.join(simulation_dir, platform, "actions.jsonl")
+            if not _os.path.exists(path):
+                continue
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            a = json.loads(line)
+                            if a.get("action_type") not in ("CREATE_POST", "CREATE_COMMENT", "QUOTE_POST"):
+                                continue
+                            agent = a.get("agent_name", "")
+                            content = a.get("content", "")
+                            if agent and content:
+                                if agent not in posts:
+                                    posts[agent] = []
+                                posts[agent].append(str(content))
+                        except (json.JSONDecodeError, KeyError):
+                            continue
+            except Exception:
+                continue
+        return posts
+
     def _generate_executive_summary(self, prediction_set: 'PredictionSet') -> str:
         """Generate an executive summary with a risk matrix from predictions.
 
@@ -2300,43 +2528,7 @@ Format your response as a markdown section that can be appended to the report:
                 atomic_write_text(full_report_path, report.markdown_content)
                 logger.info(f"Structured predictions appended to report: {report_id}")
             if prediction_set:
-                # Calibrate predictions using consensus and contrarian signals
-                try:
-                    from .prediction_calibrator import PredictionCalibrator
-                    from .simulation_manager import SimulationManager
-                    calibrator = PredictionCalibrator()
-                    sim_dir = SimulationManager()._get_simulation_dir(self.simulation_id)
-                    # Run consensus analysis for calibration context
-                    consensus = self.graph_tools.consensus_analysis(
-                        query=self.simulation_requirement,
-                        simulation_dir=sim_dir
-                    )
-                    calibrated_preds = calibrator.calibrate(
-                        predictions=[p.to_dict() for p in prediction_set.predictions],
-                        consensus_data=consensus.to_dict(),
-                        simulation_dir=sim_dir,
-                    )
-                    # Update prediction set with calibrated values
-                    for i, cp in enumerate(calibrated_preds):
-                        if i < len(prediction_set.predictions):
-                            prediction_set.predictions[i].probability = cp["probability"]
-                            prediction_set.predictions[i].confidence_interval = cp["confidence_interval"]
-                    logger.info("Prediction confidence calibrated with consensus/contrarian data")
-                except Exception as e:
-                    logger.warning(f"Prediction calibration skipped: {e}")
-
-                report.predictions = prediction_set
-                ReportManager.save_predictions(report_id, prediction_set)
-                logger.info(f"Predictions JSON saved: {report_id}/predictions.json")
-
-                # Generate and prepend executive summary with risk matrix
-                exec_summary = self._generate_executive_summary(prediction_set)
-                if exec_summary:
-                    report.markdown_content = exec_summary + report.markdown_content
-                    from ..utils.file_utils import atomic_write_text
-                    full_report_path = ReportManager._get_report_markdown_path(report_id)
-                    atomic_write_text(full_report_path, report.markdown_content)
-                    logger.info("Executive summary with risk matrix prepended to report")
+                self._run_prediction_pipeline(report, report_id, prediction_set)
 
             report.status = ReportStatus.COMPLETED
             report.completed_at = datetime.now().isoformat()
