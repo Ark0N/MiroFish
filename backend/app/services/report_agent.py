@@ -2063,6 +2063,9 @@ Format your response as a markdown section that can be appended to the report:
         consensus_data = None
         sim_dir = None
 
+        # Capture initial probabilities for change detection
+        initial_probs = {i: p.probability for i, p in enumerate(prediction_set.predictions)}
+
         # --- Step 1: Calibrate ---
         try:
             from .prediction_calibrator import PredictionCalibrator
@@ -2195,6 +2198,24 @@ Format your response as a markdown section that can be appended to the report:
             logger.info("Step 7: Narratives generated")
         except Exception as e:
             logger.warning(f"Pipeline step 7 (narratives) skipped: {e}")
+
+        # --- Emit change events for significant probability shifts ---
+        try:
+            from .change_notifier import ChangeNotifier
+            notifier = ChangeNotifier()
+            for i, pred in enumerate(prediction_set.predictions):
+                old_prob = initial_probs.get(i, pred.probability)
+                if old_prob != pred.probability:
+                    notifier.check_and_record(
+                        report_id=report_id,
+                        prediction_idx=i,
+                        event=pred.event,
+                        old_probability=old_prob,
+                        new_probability=pred.probability,
+                        source="calibration_pipeline",
+                    )
+        except Exception as e:
+            logger.warning(f"Change notification skipped: {e}")
 
         # --- Save predictions ---
         report.predictions = prediction_set

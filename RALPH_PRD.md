@@ -278,6 +278,10 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **33.1 Prediction change notifier** — Add a service that detects when any prediction's probability changes by more than 10% (from Bayesian update, calibration, or decay) and emits a structured change event. Add `GET /api/report/<id>/changes` to list recent changes. Enables alerting without polling.
 
+## Phase 34: Wire Change Notifier Into Pipeline
+
+- [x] **34.1 Emit change events from prediction pipeline** — Integrate ChangeNotifier into `_run_prediction_pipeline` in report_agent.py. After calibration and bootstrap steps modify probabilities, compare old vs new and emit change events for any significant shifts. Also wire into the Bayesian updater path.
+
 ## Ralph Loop Session Summary
 
 **Session completed**: 31 phases, 100 items, 634 tests, 81 commits.
