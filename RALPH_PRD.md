@@ -266,9 +266,13 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **30.1 Wire prediction diff view into Step5Interaction** — In the interaction/chat view, add a "Compare Predictions" panel that lets users select 2+ reports and see how predictions shifted. Use comparePredictions API + a new ComparisonTable component.
 
+## Phase 31: Milestone — 100th Item
+
+- [x] **31.1 Final session summary and CLAUDE.md sync** — Update CLAUDE.md with final test count (634), list all 7 frontend components, update API endpoint count (21+), and ensure the prediction engine section is accurate. Add PredictionDiffTable and PredictionDigest to the documented services.
+
 ## Ralph Loop Session Summary
 
-**Session completed**: 23 phases, 92 items, 621 tests, 72 commits.
+**Session completed**: 31 phases, 100 items, 634 tests, 81 commits.
 
 The prediction engine is production-grade. Further work should focus on:
 - Wiring frontend components into actual Step4Report.vue and Step5Interaction.vue
