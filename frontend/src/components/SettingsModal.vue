@@ -116,6 +116,34 @@
               </div>
             </div>
           </div>
+
+          <!-- Prediction Engine -->
+          <div class="setting-section">
+            <div class="section-label">Prediction Engine</div>
+            <div class="section-desc">
+              {{ catalogServices.length }} services and {{ catalogEndpoints.length }} endpoints available.
+              <button class="toggle-catalog-btn" @click="showCatalog = !showCatalog">
+                {{ showCatalog ? 'Hide' : 'Show' }} API Catalog
+              </button>
+            </div>
+            <div v-if="showCatalog" class="catalog-list">
+              <div class="catalog-group">
+                <div class="catalog-group-title">Services</div>
+                <div v-for="svc in catalogServices" :key="svc.name" class="catalog-item">
+                  <span class="catalog-name">{{ svc.name }}</span>
+                  <span class="catalog-desc">{{ svc.description }}</span>
+                </div>
+              </div>
+              <div class="catalog-group">
+                <div class="catalog-group-title">Endpoints</div>
+                <div v-for="ep in catalogEndpoints" :key="ep.path" class="catalog-item">
+                  <span class="catalog-method">{{ ep.method }}</span>
+                  <span class="catalog-path">{{ ep.path }}</span>
+                  <span class="catalog-desc">{{ ep.description }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="modal-footer">
@@ -129,6 +157,7 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import { getAvailableModels } from '../api/settings'
+import { getPredictionCatalog } from '../api/report'
 import {
   getSelectedModel, setSelectedModel,
   getMaxAgents, setMaxAgents,
@@ -143,6 +172,9 @@ const emit = defineEmits(['close'])
 
 const models = ref([])
 const loading = ref(false)
+const showCatalog = ref(false)
+const catalogServices = ref([])
+const catalogEndpoints = ref([])
 const fetchError = ref('')
 const selectedModel = ref(getSelectedModel())
 const serverDefault = ref('')
@@ -206,8 +238,15 @@ watch(() => props.visible, (val) => {
   }
 })
 
-onMounted(() => {
+onMounted(async () => {
   if (props.visible) fetchModels()
+  try {
+    const res = await getPredictionCatalog()
+    if (res.data?.success && res.data?.data) {
+      catalogServices.value = res.data.data.services || []
+      catalogEndpoints.value = res.data.data.endpoints || []
+    }
+  } catch (e) {}
 })
 </script>
 
@@ -551,4 +590,58 @@ onMounted(() => {
 .save-btn:hover {
   opacity: 0.85;
 }
+
+.toggle-catalog-btn {
+  background: transparent;
+  border: 1px solid #444;
+  color: #aaa;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.7rem;
+  margin-left: 0.5rem;
+}
+.toggle-catalog-btn:hover { color: #fff; border-color: #666; }
+
+.catalog-list {
+  margin-top: 0.75rem;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.catalog-group { margin-bottom: 0.75rem; }
+.catalog-group-title {
+  font-size: 0.7rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.3rem;
+  border-bottom: 1px solid #2a2a3e;
+  padding-bottom: 0.2rem;
+}
+.catalog-item {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.15rem 0;
+  font-size: 0.68rem;
+  align-items: baseline;
+}
+.catalog-name {
+  color: #60a5fa;
+  font-family: 'JetBrains Mono', monospace;
+  min-width: 180px;
+  flex-shrink: 0;
+}
+.catalog-method {
+  color: #4ade80;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.6rem;
+  min-width: 30px;
+}
+.catalog-path {
+  color: #ddd;
+  font-family: 'JetBrains Mono', monospace;
+  min-width: 200px;
+  flex-shrink: 0;
+}
+.catalog-desc { color: #888; }
 </style>

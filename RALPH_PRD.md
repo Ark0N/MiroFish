@@ -298,6 +298,10 @@ Each item uses: `[ ]` = pending, `[~]` = in progress, `[x]` = done
 
 - [x] **38.1 Show simulation quality grade in Step3Simulation** — After a simulation completes, fetch `/api/analytics/quality/<id>` and display the grade (A-F) with component scores as a compact badge in the simulation run view. Gives immediate feedback on simulation reliability.
 
+## Phase 39: Frontend API Index Page
+
+- [x] **39.1 Add prediction API explorer to SettingsModal** — Add a "Prediction Engine" tab to SettingsModal.vue that fetches `/api/report/catalog` and displays the full list of available services and endpoints. Gives users visibility into what the engine can do, and lets developers discover APIs without reading code.
+
 ## Ralph Loop Session Summary
 
 **Session completed**: 36 phases, 105 items, 648 tests, 86 commits.
