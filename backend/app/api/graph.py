@@ -729,12 +729,8 @@ def build_graph():
                     message="Building communities...",
                     progress=60
                 )
-                try:
-                    from ..utils.graphiti_manager import GraphitiManager, run_async
-                    graphiti = GraphitiManager.get_instance()
-                    run_async(graphiti.build_communities(group_ids=[graph_id]))
-                except Exception as community_err:
-                    build_logger.warning(f"[{task_id}] Community building failed (non-fatal): {community_err}")
+                # Skip community building — it's non-fatal and can hang on large graphs
+                build_logger.info(f"[{task_id}] Skipping community building (non-fatal, avoids potential hangs)")
 
                 # Get graph data
                 task_manager.update_task(

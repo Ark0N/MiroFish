@@ -50,7 +50,7 @@ def _create_embedder() -> EmbedderClient:
     dim = Config.EMBEDDER_DIM
 
     logger.info(f"Using local embedder: model={model}, dim={dim}, base_url={base_url}")
-    return OpenAIEmbedder(
+    return SafeOllamaEmbedder(
         config=OpenAIEmbedderConfig(
             embedding_model=model,
             embedding_dim=dim,
@@ -58,6 +58,57 @@ def _create_embedder() -> EmbedderClient:
             base_url=base_url,
         )
     )
+
+
+class SafeOllamaEmbedder(EmbedderClient):
+    """OpenAI-compatible embedder that sanitizes empty strings.
+
+    Ollama rejects empty strings with 400 'invalid input'. Graphiti can produce
+    entity nodes with empty names during extraction, so we replace blanks with
+    a placeholder before sending.
+    """
+
+    def __init__(self, config):
+        from graphiti_core.embedder.openai import OpenAIEmbedder
+        self._inner = OpenAIEmbedder(config=config)
+        self.config = config
+
+    @staticmethod
+    def _sanitize(text: str) -> str:
+        return text if text and text.strip() else "(empty)"
+
+    async def create(self, input_data):
+        if isinstance(input_data, str):
+            input_data = self._sanitize(input_data)
+        elif isinstance(input_data, list):
+            if not input_data:
+                return []
+            if isinstance(input_data[0], str):
+                input_data = [self._sanitize(s) for s in input_data]
+        try:
+            return await self._inner.create(input_data)
+        except Exception as e:
+            logger.warning(f"Embedding failed for {repr(str(input_data)[:80])}: {e}. Using zeros.")
+            return [0.0] * self.config.embedding_dim
+
+    async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
+        if not input_data_list:
+            return []
+        sanitized = [self._sanitize(s) for s in input_data_list]
+        try:
+            return await self._inner.create_batch(sanitized)
+        except Exception as e:
+            logger.warning(f"Batch embedding failed ({len(sanitized)} items): {e}. "
+                           f"Items: {[repr(s[:50]) for s in sanitized]}. Falling back to one-by-one.")
+            results = []
+            for item in sanitized:
+                try:
+                    emb = await self._inner.create(item)
+                    results.append(emb)
+                except Exception as inner_e:
+                    logger.error(f"Single embedding failed for {repr(item[:50])}: {inner_e}. Using zeros.")
+                    results.append([0.0] * self.config.embedding_dim)
+            return results
 
 
 class VoyageAIEmbedder(EmbedderClient):
@@ -182,3 +233,10 @@ class GraphitiManager:
 def run_async(coro):
     """Run an async coroutine via the persistent event loop bridge."""
     return _bridge.run(coro)
+
+
+def run_async_with_timeout(coro, timeout=120):
+    """Run an async coroutine with a timeout (seconds)."""
+    _bridge._ensure_running()
+    future = asyncio.run_coroutine_threadsafe(coro, _bridge._loop)
+    return future.result(timeout=timeout)

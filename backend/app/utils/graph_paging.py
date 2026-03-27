@@ -13,7 +13,7 @@ from typing import Any
 from graphiti_core.nodes import EntityNode
 from graphiti_core.edges import EntityEdge
 
-from .graphiti_manager import GraphitiManager, run_async
+from .graphiti_manager import GraphitiManager, run_async_with_timeout
 from .logger import get_logger
 
 logger = get_logger('mirofish.graph_paging')
@@ -59,8 +59,8 @@ def fetch_all_nodes(
     driver = graphiti.driver
 
     nodes = _with_retry(
-        lambda: run_async(
-            EntityNode.get_by_group_ids(driver, [group_id], limit=max_items)
+        lambda: run_async_with_timeout(
+            EntityNode.get_by_group_ids(driver, [group_id], limit=max_items), timeout=60
         ),
         max_retries=max_retries,
         retry_delay=retry_delay,
@@ -83,8 +83,8 @@ def fetch_all_edges(
     driver = graphiti.driver
 
     edges = _with_retry(
-        lambda: run_async(
-            EntityEdge.get_by_group_ids(driver, [group_id])
+        lambda: run_async_with_timeout(
+            EntityEdge.get_by_group_ids(driver, [group_id]), timeout=60
         ),
         max_retries=max_retries,
         retry_delay=retry_delay,
